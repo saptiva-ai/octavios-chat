@@ -12,8 +12,13 @@ echo "=========================================="
 echo ""
 
 # Helper function for docker compose
-DC() { 
-  docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml "$@"
+COMPOSE_ARGS=(-f infra/docker-compose.yml)
+if [ "${VERIFY_INCLUDE_DEV:-true}" != "false" ] && [ -f infra/docker-compose.dev.yml ]; then
+  COMPOSE_ARGS+=(-f infra/docker-compose.dev.yml)
+fi
+
+DC() {
+  docker compose "${COMPOSE_ARGS[@]}" "$@"
 }
 
 # 1. Check services are running
