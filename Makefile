@@ -20,6 +20,7 @@ PROJECT_NAME := copilotos
 COMPOSE_FILE_BASE := infra/docker-compose.yml
 COMPOSE_FILE_DEV := infra/docker-compose.dev.yml
 
+
 # Environment
 DEV_ENV_FILE := envs/.env
 DEV_ENV_FALLBACK := envs/.env.local

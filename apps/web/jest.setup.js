@@ -94,3 +94,72 @@ global.EventSource = class EventSource {
 // Mock performance.now for timing tests
 global.performance = global.performance || {}
 global.performance.now = jest.fn(() => Date.now())
+
+// Polyfill Response and Headers for fetch tests
+if (typeof global.Response === 'undefined') {
+  global.Response = class Response {
+    constructor(body, init = {}) {
+      this._body = body
+      this.status = init.status || 200
+      this.statusText = init.statusText || 'OK'
+      this.headers = new Headers(init.headers || {})
+      this.ok = this.status >= 200 && this.status < 300
+      this._bodyUsed = false
+    }
+
+    get body() {
+      return this._body
+    }
+
+    get bodyUsed() {
+      return this._bodyUsed
+    }
+
+    async json() {
+      this._bodyUsed = true
+      return typeof this._body === 'string' ? JSON.parse(this._body) : this._body
+    }
+
+    async text() {
+      this._bodyUsed = true
+      return typeof this._body === 'string' ? this._body : JSON.stringify(this._body)
+    }
+
+    clone() {
+      return new Response(this._body, {
+        status: this.status,
+        statusText: this.statusText,
+        headers: Object.fromEntries(this.headers.entries()),
+      })
+    }
+  }
+}
+
+if (typeof global.Headers === 'undefined') {
+  global.Headers = class Headers {
+    constructor(init = {}) {
+      this._headers = {}
+      if (init) {
+        Object.entries(init).forEach(([key, value]) => {
+          this._headers[key.toLowerCase()] = value
+        })
+      }
+    }
+
+    get(name) {
+      return this._headers[name.toLowerCase()] || null
+    }
+
+    set(name, value) {
+      this._headers[name.toLowerCase()] = value
+    }
+
+    has(name) {
+      return name.toLowerCase() in this._headers
+    }
+
+    entries() {
+      return Object.entries(this._headers)
+    }
+  }
+}

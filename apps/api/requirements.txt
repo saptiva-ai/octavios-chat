@@ -13,6 +13,7 @@ redis>=5.0.1
 # HTTP client
 httpx[http2]>=0.25.2
 aiohttp>=3.9.5
+urllib3>=2.5.0  # Force secure version (fixes CVE-2025-50182, CVE-2025-50181)
 
 # Authentication
 python-jose[cryptography]>=3.3.0
