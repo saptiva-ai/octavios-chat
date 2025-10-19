@@ -76,8 +76,11 @@ jest.mock("../../../config/modelCatalog", () => ({
 
 jest.mock("../../tool-mapping", () => ({
   createDefaultToolsState: jest.fn((extraKeys = []) => {
-    const base = { web_search: false, code_execution: false };
-    extraKeys.forEach((key) => {
+    const base: Record<string, boolean> = {
+      web_search: false,
+      code_execution: false,
+    };
+    extraKeys.forEach((key: string) => {
       base[key] = false;
     });
     return base;
@@ -618,6 +621,7 @@ describe("chat-store", () => {
           docId: "doc-123",
           filename: "test.pdf",
           status: "processing" as const,
+          stages: [],
         },
       };
 
@@ -642,6 +646,7 @@ describe("chat-store", () => {
           docId: "doc-456",
           filename: "update.pdf",
           status: "processing" as const,
+          stages: [],
         },
       };
 
@@ -652,13 +657,13 @@ describe("chat-store", () => {
       act(() => {
         result.current.updateFileReviewMessage("review-update", {
           status: "completed",
-          summary: "Review complete",
+          stages: [],
         });
       });
 
       const updatedMsg = result.current.messages[0];
       expect(updatedMsg.review?.status).toBe("completed");
-      expect(updatedMsg.review?.summary).toBe("Review complete");
+      expect(updatedMsg.review?.stages).toEqual([]);
     });
 
     it("finds file review message by docId", () => {
@@ -675,6 +680,7 @@ describe("chat-store", () => {
             docId: "doc-search",
             filename: "search.pdf",
             status: "processing" as const,
+            stages: [],
           },
         });
       });
