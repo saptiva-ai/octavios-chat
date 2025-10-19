@@ -45,7 +45,7 @@ global.fetch = jest.fn();
 
 describe("useFiles", () => {
   let mockApiClient: any;
-  let filesStore: ReturnType<typeof useFilesStore>;
+  let filesStore: ReturnType<typeof useFilesStore.getState>;
 
   beforeEach(() => {
     // Reset all mocks
