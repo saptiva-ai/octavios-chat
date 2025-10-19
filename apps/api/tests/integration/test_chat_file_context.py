@@ -11,76 +11,104 @@ from jose import jwt
 from httpx import AsyncClient, ASGITransport
 from fastapi import status
 from unittest.mock import patch, AsyncMock
+from typing import Dict
 
-from apps.api.src.main import app
-from apps.api.src.models.chat import ChatSession as ChatSessionModel, ChatMessage as ChatMessageModel
-from apps.api.src.models.document import Document, DocumentStatus
-from apps.api.src.core.config import get_settings
-from apps.api.src.core.database import Database
-from apps.api.src.services.auth_service import register_user
-from apps.api.src.core.exceptions import ConflictError
-from apps.api.src.schemas.user import UserCreate
-
-
-@pytest_asyncio.fixture(scope="session", autouse=True)
-async def app_lifespan():
-    """Initialize app for integration tests"""
-    await app.router.startup()
-    yield
-    await app.router.shutdown()
+from src.main import app
+from src.models.chat import ChatSession as ChatSessionModel, ChatMessage as ChatMessageModel
+from src.models.document import Document, DocumentStatus
+from src.models.user import User
+from src.core.config import get_settings
+from src.services.auth_service import register_user
+from src.core.exceptions import ConflictError
+from src.schemas.user import UserCreate
 
 
 @pytest_asyncio.fixture
-async def auth_token() -> str:
-    """Create auth token for test user"""
-    get_settings.cache_clear()
-    settings = get_settings()
-    if Database.database is None:
-        await Database.connect_to_mongo()
+async def test_user_chat(clean_db) -> Dict[str, str]:
+    """Create a test user for chat tests and return credentials."""
+    username = "test-file-context"
+    email = "test-file-context@example.com"
+    password = "Demo1234"
 
-    try:
-        await register_user(UserCreate(
-            username="test-file-context",
-            email="test-file-context@example.com",
-            password="Demo1234"
-        ))
-    except ConflictError:
-        pass
+    # Register user
+    auth_response = await register_user(
+        UserCreate(
+            username=username,
+            email=email,
+            password=password
+        )
+    )
+
+    return {
+        "username": username,
+        "email": email,
+        "password": password,
+        "user_id": auth_response.user.id
+    }
+
+
+@pytest_asyncio.fixture
+async def auth_token(test_user_chat: Dict[str, str]) -> str:
+    """Create auth token for test user"""
+    settings = get_settings()
 
     now = datetime.utcnow()
     payload = {
-        "sub": "test-file-context",
+        "sub": test_user_chat["user_id"],
         "type": "access",
         "iat": now,
         "exp": now + timedelta(hours=1),
-        "username": "test-file-context",
-        "email": "test-file-context@example.com",
+        "username": test_user_chat["username"],
+        "email": test_user_chat["email"],
     }
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
 @pytest_asyncio.fixture
-async def test_document(auth_token):
+async def test_document(test_user_chat: Dict[str, str]):
     """Create a test document for file context tests"""
+    from src.services.cache_service import get_redis_client
+
+    document_text = "# Test Document\n\nThis is a test PDF document for context persistence testing."
+
     document = Document(
-        id="test-doc-context-persist",
         filename="test.pdf",
         content_type="application/pdf",
         size_bytes=1024,
         minio_key="test-key",
         minio_bucket="test",
         status=DocumentStatus.READY,
-        user_id="test-file-context",
+        user_id=test_user_chat["user_id"],
         pages=[{
             "page": 1,
-            "text_md": "# Test Document\n\nThis is a test PDF document for context persistence testing.",
+            "text_md": document_text,
             "has_table": False
         }]
     )
     await document.insert()
+
+    # Cache document text in Redis
+    try:
+        redis_client = await get_redis_client()
+        if redis_client:
+            redis_key = f"doc:text:{str(document.id)}"
+            await redis_client.set(redis_key, document_text, ex=3600)  # 1 hour TTL
+    except Exception as e:
+        print(f"Warning: Could not cache document in Redis: {e}")
+
     yield document
+
     # Cleanup
-    await Document.find_one(Document.id == document.id).delete()
+    try:
+        doc_to_delete = await Document.find_one(Document.id == document.id)
+        if doc_to_delete:
+            await doc_to_delete.delete()
+        # Clean Redis cache
+        redis_client = await get_redis_client()
+        if redis_client:
+            await redis_client.delete(f"doc:text:{str(document.id)}")
+    except Exception:
+        pass
 
 
 @pytest.mark.asyncio
@@ -95,7 +123,7 @@ async def test_first_message_stores_file_ids_in_session(auth_token, test_documen
     }
 
     # Mock LLM call
-    with patch('apps.api.src.services.saptiva_client.SaptivaClient.chat_completion', new_callable=AsyncMock) as mock_llm:
+    with patch('src.services.saptiva_client.SaptivaClient.chat_completion', new_callable=AsyncMock) as mock_llm:
         mock_llm.return_value = "This is a test document about context persistence."
 
         transport = ASGITransport(app=app)
@@ -142,7 +170,7 @@ async def test_second_message_includes_session_file_ids(auth_token, test_documen
         "Content-Type": "application/json"
     }
 
-    with patch('apps.api.src.services.saptiva_client.SaptivaClient.chat_completion', new_callable=AsyncMock) as mock_llm:
+    with patch('src.services.saptiva_client.SaptivaClient.chat_completion', new_callable=AsyncMock) as mock_llm:
         mock_llm.return_value = "Based on the document, here is my answer."
 
         transport = ASGITransport(app=app)
@@ -208,7 +236,7 @@ async def test_multi_turn_conversation_maintains_file_context(auth_token, test_d
         "Content-Type": "application/json"
     }
 
-    with patch('apps.api.src.services.saptiva_client.SaptivaClient.chat_completion', new_callable=AsyncMock) as mock_llm:
+    with patch('src.services.saptiva_client.SaptivaClient.chat_completion', new_callable=AsyncMock) as mock_llm:
         mock_llm.return_value = "Response based on document context."
 
         transport = ASGITransport(app=app)
@@ -261,27 +289,38 @@ async def test_multi_turn_conversation_maintains_file_context(auth_token, test_d
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_adding_second_file_merges_with_existing(auth_token, test_document):
+async def test_adding_second_file_merges_with_existing(auth_token, test_document, test_user_chat):
     """
     Integration Test: Adding a second file mid-conversation merges with existing files
     """
+    from src.services.cache_service import get_redis_client
+
     # Create second document
+    document2_text = "# Second Document\n\nThis is the second document."
     document2 = Document(
-        id="test-doc-context-second",
         filename="second.pdf",
         content_type="application/pdf",
         size_bytes=2048,
         minio_key="test-key-2",
         minio_bucket="test",
         status=DocumentStatus.READY,
-        user_id="test-file-context",
+        user_id=test_user_chat["user_id"],
         pages=[{
             "page": 1,
-            "text_md": "# Second Document\n\nThis is the second document.",
+            "text_md": document2_text,
             "has_table": False
         }]
     )
     await document2.insert()
+
+    # Cache document text in Redis
+    try:
+        redis_client = await get_redis_client()
+        if redis_client:
+            redis_key = f"doc:text:{str(document2.id)}"
+            await redis_client.set(redis_key, document2_text, ex=3600)
+    except Exception as e:
+        print(f"Warning: Could not cache document2 in Redis: {e}")
 
     headers = {
         "Authorization": f"Bearer {auth_token}",
@@ -289,7 +328,7 @@ async def test_adding_second_file_merges_with_existing(auth_token, test_document
     }
 
     try:
-        with patch('apps.api.src.services.saptiva_client.SaptivaClient.chat_completion', new_callable=AsyncMock) as mock_llm:
+        with patch('src.services.saptiva_client.SaptivaClient.chat_completion', new_callable=AsyncMock) as mock_llm:
             mock_llm.return_value = "Analysis based on documents."
 
             transport = ASGITransport(app=app)
@@ -353,7 +392,17 @@ async def test_adding_second_file_merges_with_existing(auth_token, test_document
                 await ChatMessageModel.find(ChatMessageModel.chat_id == chat_id).delete()
                 await session.delete()
     finally:
-        await Document.find_one(Document.id == document2.id).delete()
+        try:
+            from src.services.cache_service import get_redis_client
+            doc2_to_delete = await Document.find_one(Document.id == document2.id)
+            if doc2_to_delete:
+                await doc2_to_delete.delete()
+            # Clean Redis cache
+            redis_client = await get_redis_client()
+            if redis_client:
+                await redis_client.delete(f"doc:text:{str(document2.id)}")
+        except Exception:
+            pass
 
 
 @pytest.mark.asyncio
@@ -367,7 +416,7 @@ async def test_new_conversation_has_empty_attached_files(auth_token):
         "Content-Type": "application/json"
     }
 
-    with patch('apps.api.src.services.saptiva_client.SaptivaClient.chat_completion', new_callable=AsyncMock) as mock_llm:
+    with patch('src.services.saptiva_client.SaptivaClient.chat_completion', new_callable=AsyncMock) as mock_llm:
         mock_llm.return_value = "Hello! How can I help?"
 
         transport = ASGITransport(app=app)

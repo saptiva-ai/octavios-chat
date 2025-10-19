@@ -59,6 +59,9 @@ async def get_current_user(
 
         return user
 
+    except HTTPException:
+        # Re-raise HTTPException with original status code
+        raise
     except JWTError as e:
         logger.warning("JWT validation failed", error=str(e))
         raise HTTPException(

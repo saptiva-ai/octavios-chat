@@ -259,7 +259,7 @@ docker logs copilotos-web --tail 50
 
 ## 📚 Related Documentation
 
-- [DEPLOYMENT.md](../docs/DEPLOYMENT.md) - Complete deployment guide
+- [Deployment Playbook](../operations/deployment.md) - Complete deployment guide
 - [docker-compose.yml](../infra/docker-compose.yml) - Service configuration
 - [GitHub Packages](https://github.com/jazielflo/copilotos-bridge/pkgs/container/copilotos-bridge%2Fapi) - View published images
 

@@ -1,14 +1,15 @@
 # Copilotos Bridge Makefile
 # Development-optimized workflow with auto .venv management
 .PHONY: help dev test test-all clean build lint security security-audit install-hooks shell-api shell-web \
-        push-registry push-registry-fast deploy-registry deploy-prod deploy deploy-tar deploy-fast deploy-clean \
+        push-registry push-registry-fast deploy-registry deploy-prod deploy deploy-clean deploy-quick deploy-tar \
+        deploy-fast deploy-tar-fast logs-prod logs-api-prod logs-web-prod logs-mongo-prod logs-redis-prod ssh-prod status-prod \
         db-migrate db-backup db-restore db-stats db-collections db-fix-drafts \
         backup-mongodb-prod restore-mongodb-prod backup-volumes monitor-backups \
         redis-stats redis-monitor generate-credentials rotate-mongo-password rotate-redis-password reset \
         debug-containers debug-api debug-models \
         debug-file-sync debug-endpoints debug-logs-errors debug-network debug-full \
-        diag troubleshoot resources resources-monitor docker-cleanup docker-cleanup-aggressive \
-        build-optimized deploy-optimized test-sh lint-sh fix-sh audit-tests \
+        troubleshoot resources resources-monitor docker-cleanup docker-cleanup-aggressive \
+        test-sh lint-sh fix-sh audit-tests \
         obs-up obs-down obs-logs obs-restart obs-status obs-clean
 
 # ============================================================================
@@ -152,14 +153,14 @@ help:
 	@echo "  make rotate-mongo-password  Safe MongoDB rotation"
 	@echo "  make rotate-redis-password  Safe Redis rotation"
 	@echo "  make reset                Complete reset with new credentials (▲ deletes data)"
-	@echo "  See docs/CREDENTIAL_MANAGEMENT.md for full procedures"
+	@echo "  See docs/operations/credentials.md for full procedures"
 	@echo ""
 	@echo "▸ Backup & Disaster Recovery"
 	@echo "  make backup-mongodb-prod  Advanced MongoDB backup with retention"
 	@echo "  make restore-mongodb-prod Restore from production backup"
 	@echo "  make backup-volumes       Backup MongoDB & Redis volumes"
 	@echo "  make monitor-backups      Check backup freshness"
-	@echo "  See docs/DISASTER-RECOVERY.md for details"
+	@echo "  See docs/operations/disaster-recovery.md for details"
 	@echo ""
 	@echo "▸ Debugging & Diagnostics"
 	@echo "  make troubleshoot         Troubleshooting menu"
@@ -186,11 +187,12 @@ help:
 	@echo "$(GREEN) ▸ Build:$(NC)"
 	@echo "  $(YELLOW)make build$(NC)                Build all images"
 	@echo ""
-	@echo "$(GREEN) ▸ Production Deployment (Versioned with Rollback):$(NC)"
-	@echo "  $(YELLOW)make deploy$(NC)               ▸ Deploy with auto-versioning + rollback (~8-12 min)"
-	@echo "  $(YELLOW)make deploy-fast$(NC)          Fast deploy (skip build, use existing images)"
-	@echo "  $(YELLOW)make deploy-registry$(NC)      Deploy from Docker registry (~3-5 min)"
-	@echo "  $(YELLOW)make deploy-status$(NC)        Check production server status"
+	@echo "$(GREEN) ▸ Production Deployment (versionado con rollback):$(NC)"
+	@echo "  $(YELLOW)make deploy-tar$(NC)           Tar deployment (build y transferencia)"
+	@echo "  $(YELLOW)make deploy-fast$(NC)          Tar deployment sin rebuild (usa imagenes existentes)"
+	@echo "  $(YELLOW)make deploy-registry$(NC)      Despliegue desde el registry configurado"
+	@echo "  $(YELLOW)make deploy-prod$(NC)          Build + push al registry y despliegue remoto"
+	@echo "  $(YELLOW)make deploy-status$(NC)        Revisar estado del servidor"
 	@echo ""
 	@echo "$(GREEN) ▸ Rollback & Recovery:$(NC)"
 	@echo "  $(YELLOW)make rollback$(NC)             ▸ Rollback to previous version (automatic)"
@@ -813,7 +815,7 @@ redis-monitor:
 #
 #    FIX: Update .env, then docker compose down <service> && up -d <service>
 #
-# See: docs/CREDENTIAL_MANAGEMENT.md for complete procedures
+# See: docs/operations/credentials.md para instrucciones completas
 # ============================================================================
 
 ## Generate secure credentials for .env file
@@ -1235,17 +1237,17 @@ test-sh:
 ## Run API unit tests
 test-api:
 	@echo "$(YELLOW)Running API tests...$(NC)"
-	@$(DOCKER_COMPOSE_DEV) exec api pytest tests/ -v --cov=src || true
+	@$(DOCKER_COMPOSE_DEV) exec api pytest tests/ -v --cov=src
 
 ## Run web unit tests
 test-web:
 	@echo "$(YELLOW)Running web tests...$(NC)"
-	@$(DOCKER_COMPOSE_DEV) exec web pnpm test || true
+	@$(DOCKER_COMPOSE_DEV) exec web pnpm test
 
 ## Run E2E tests
 test-e2e: venv-install
 	@echo "$(YELLOW)Running E2E tests...$(NC)"
-	@pnpm exec playwright test || true
+	@pnpm exec playwright test
 
 ## Run API tests with coverage report
 test-api-coverage:
@@ -1334,7 +1336,7 @@ security-audit:
 	@echo ""
 	@echo "$(GREEN) Security audit completed$(NC)"
 	@echo ""
-	@echo "$(YELLOW)For detailed findings, see: $(NC)$(BLUE)docs/SECURITY_AUDIT_REPORT.md$(NC)"
+	@echo "$(YELLOW)For detailed findings, see: $(NC)$(BLUE)docs/security/security-audit-report.md$(NC)"
 	@echo ""
 
 ## Install git hooks for security checks
@@ -1409,25 +1411,15 @@ build:
 #
 # WHEN TO USE THESE COMMANDS:
 #
-# Regular deployments (recommended):
-#   make deploy-quick  - Fastest (~3-5 min), incremental build with cache
-#                        Use for: Bug fixes, small features, daily deploys
+# Despliegues regulares (workflow TAR por defecto):
+#   make deploy-tar    - Build + empaquetado + despliegue (~8-12 min)
+#   make deploy-fast   - Reutiliza imágenes existentes (2-3 min)
 #
-# Production releases (when quality matters):
-#   make deploy-clean  - Slowest (~12-15 min), guaranteed fresh build
-#                        Use for: Major releases, dependency updates, monthly deploys
+# Workflow con registry Docker:
+#   make deploy-registry - Obtiene imágenes del registry ya publicadas
+#   make deploy-prod     - Build local, push al registry y despliegue remoto
 #
-# Docker Registry workflow (fastest, requires registry setup):
-#   make deploy-prod   - Build locally, push to registry, deploy on server (~3 min)
-#                        Use for: Teams with Docker Hub/GitHub Packages configured
-#
-# TAR workflow (no registry needed):
-#   make deploy-tar    - Complete automated deployment (~12 min)
-#                        Use for: Simple setups, no registry access
-#
-# After deployment:
-#   make clear-cache   - Clear Redis cache and restart web (important!)
-#                        Use after: Every deployment to ensure new code loads
+# Después de desplegar: ejecuta 'make clear-cache' en el servidor para limpiar Redis
 # ============================================================================
 
 ## Push images to Docker registry (build + tag + push)
@@ -1468,13 +1460,6 @@ deploy-prod: push-registry
 	@./scripts/deploy.sh registry --skip-build
 	@echo ""
 
-## Deploy using tar file transfer (legacy - use package + upload method instead)
-deploy-tar-legacy:
-	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo "$(BLUE)  📦 Deploying with TAR Transfer (Legacy)$(NC)"
-	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@./scripts/deploy.sh tar
-
 ## Deploy via tar transfer (no registry needed, ~8-12 min)
 deploy-tar:
 	@./scripts/deploy.sh tar
@@ -1486,6 +1471,12 @@ deploy-registry:
 ## Fast deployment (skip build, use existing images)
 deploy-fast:
 	@./scripts/deploy.sh tar --skip-build
+
+## Compatibilidad con comandos legacy
+deploy: deploy-tar
+deploy-clean: deploy-tar
+deploy-quick: deploy-fast
+deploy-tar-fast: deploy-fast
 
 ## Rollback to previous version (automatic)
 rollback:
@@ -1523,6 +1514,51 @@ deploy-status:
 	@ssh $(PROD_SERVER_HOST) "curl -sf -o /dev/null -w '  Web: HTTP %{http_code}\n' http://localhost:3000" || echo "  Web: Error"
 	@echo ""
 
+## Production log helpers
+logs-prod:
+	@if [ -z "$(PROD_SERVER_HOST)" ]; then \
+		echo "$(RED)▲ ERROR: Production server not configured!$(NC)"; \
+		exit 1; \
+	fi
+	@ssh $(PROD_SERVER_HOST) "cd $(PROD_DEPLOY_PATH) && docker compose -f infra/docker-compose.yml logs -f"
+
+logs-api-prod:
+	@if [ -z "$(PROD_SERVER_HOST)" ]; then \
+		echo "$(RED)▲ ERROR: Production server not configured!$(NC)"; \
+		exit 1; \
+	fi
+	@ssh $(PROD_SERVER_HOST) "cd $(PROD_DEPLOY_PATH) && docker compose -f infra/docker-compose.yml logs -f api"
+
+logs-web-prod:
+	@if [ -z "$(PROD_SERVER_HOST)" ]; then \
+		echo "$(RED)▲ ERROR: Production server not configured!$(NC)"; \
+		exit 1; \
+	fi
+	@ssh $(PROD_SERVER_HOST) "cd $(PROD_DEPLOY_PATH) && docker compose -f infra/docker-compose.yml logs -f web"
+
+logs-mongo-prod:
+	@if [ -z "$(PROD_SERVER_HOST)" ]; then \
+		echo "$(RED)▲ ERROR: Production server not configured!$(NC)"; \
+		exit 1; \
+	fi
+	@ssh $(PROD_SERVER_HOST) "cd $(PROD_DEPLOY_PATH) && docker compose -f infra/docker-compose.yml logs -f mongodb"
+
+logs-redis-prod:
+	@if [ -z "$(PROD_SERVER_HOST)" ]; then \
+		echo "$(RED)▲ ERROR: Production server not configured!$(NC)"; \
+		exit 1; \
+	fi
+	@ssh $(PROD_SERVER_HOST) "cd $(PROD_DEPLOY_PATH) && docker compose -f infra/docker-compose.yml logs -f redis"
+
+ssh-prod:
+	@if [ -z "$(PROD_SERVER_HOST)" ]; then \
+		echo "$(RED)▲ ERROR: Production server not configured!$(NC)"; \
+		exit 1; \
+	fi
+	@ssh $(PROD_SERVER_HOST)
+
+status-prod: deploy-status
+
 # ============================================================================
 # RESOURCE OPTIMIZATION
 # ============================================================================
@@ -1543,11 +1579,6 @@ deploy-status:
 #                                    Removes: ALL unused images, volumes, build cache
 #                                    Warning: Requires explicit "yes" confirmation
 #                                    Next build will be slower (rebuilds from scratch)
-#
-# Production deployments:
-#   make deploy-optimized       - Clean + optimized build + deploy + cleanup
-#                                 Includes resource limits, multi-stage optimization
-#                                 Takes 15-20 min but guarantees minimal image size
 #
 # Monitoring (continuous):
 #   make resources-monitor      - Live view (updates every 2s, Ctrl+C to exit)
@@ -1615,7 +1646,7 @@ docker-cleanup-aggressive:
 # REMOVED: build-optimized - Default build already uses optimizations (multi-stage, BUILDKIT, caching)
 
 ## Deploy with optimized images (clean build + resource limits)
-# REMOVED: deploy-optimized - Use 'make deploy-clean' instead, already includes optimizations
+# REMOVED: deploy-optimized - Usa 'make deploy-tar' o 'make deploy-fast' según necesidad
 
 # ============================================================================
 # MODEL & CONFIGURATION VALIDATION
@@ -1753,7 +1784,7 @@ check-localstorage:
 	@echo "  • Fresh start, no cached data"
 	@echo ""
 	@echo "$(YELLOW)Permanent Fix:$(NC)"
-	@echo "  See: $(BLUE)docs/COMMON_ISSUES.md$(NC) for migration strategy"
+	@echo "  See: $(BLUE)docs/operations/troubleshooting.md$(NC) for migration strategy"
 	@echo ""
 
 ## Comprehensive model troubleshooting
@@ -1795,7 +1826,7 @@ troubleshoot-models:
 	@echo "  $(GREEN)Fix:$(NC) Run: make rebuild-with-registry"
 	@echo "  $(GREEN)Verify:$(NC) Run: make validate-models"
 	@echo ""
-	@echo "$(YELLOW)Full troubleshooting guide:$(NC) $(BLUE)docs/COMMON_ISSUES.md$(NC)"
+	@echo "$(YELLOW)Full troubleshooting guide:$(NC) $(BLUE)docs/operations/troubleshooting.md$(NC)"
 	@echo ""
 
 ## Quick fix: Rebuild container with latest files
@@ -1804,150 +1835,6 @@ troubleshoot-models:
 ## Instructions for clearing frontend cache
 fix-tools-cache:
 	@$(MAKE) check-localstorage
-
-# ============================================================================
-# DEPLOYMENT & CD (tar-based, no registry)
-# ============================================================================
-
-# Variables for packaging and deployment
-APP_NAME ?= copilotos-bridge
-GIT_SHA  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-BUILD_TS ?= $(shell date -u +%Y%m%d%H%M%S)
-PKG_NAME ?= $(APP_NAME)-$(GIT_SHA)-$(BUILD_TS).tar.gz
-
-# Production server configuration (override via env or CLI)
-PROD_SERVER      ?= deploy@YOUR_SERVER
-PROD_DEPLOY_PATH ?= /opt/copilotos-bridge
-
-## Package application for deployment (no secrets)
-package:
-	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo "$(BLUE)  📦 Packaging Application$(NC)"
-	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo ""
-	@echo "$(YELLOW)Creating package: $(PKG_NAME)$(NC)"
-	@tar --exclude-vcs \
-	     --exclude='node_modules' \
-	     --exclude='**/__pycache__' \
-	     --exclude='**/.pytest_cache' \
-	     --exclude='**/.next' \
-	     --exclude='envs/.env' \
-	     --exclude='envs/.env.*' \
-	     --exclude='.env' \
-	     --exclude='.env.*' \
-	     --exclude='*.tar.gz' \
-	     --exclude='*.tar.gz.sha256' \
-	     -czf $(PKG_NAME) \
-	     apps infra scripts Makefile pnpm-lock.yaml package.json pnpm-workspace.yaml \
-	     .dockerignore .gitignore README.md 2>/dev/null || true
-	@sha256sum $(PKG_NAME) > $(PKG_NAME).sha256
-	@echo ""
-	@echo "$(GREEN)✓ Package created:$(NC)"
-	@ls -lh $(PKG_NAME)
-	@echo ""
-	@echo "$(GREEN)✓ Checksum:$(NC)"
-	@cat $(PKG_NAME).sha256
-	@echo ""
-	@echo "$(YELLOW)Package ready for deployment$(NC)"
-
-## Deploy packaged application to production server
-deploy-tar: package
-	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo "$(BLUE)  🚀 Deploying to Production$(NC)"
-	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo ""
-	@echo "$(YELLOW)Target: $(PROD_SERVER):$(PROD_DEPLOY_PATH)$(NC)"
-	@echo ""
-	@echo "$(YELLOW)1/4 Creating remote directories...$(NC)"
-	@ssh -o StrictHostKeyChecking=no $(PROD_SERVER) "mkdir -p $(PROD_DEPLOY_PATH)/incoming"
-	@echo "$(GREEN)✓ Directories ready$(NC)"
-	@echo ""
-	@echo "$(YELLOW)2/4 Uploading package and checksum...$(NC)"
-	@scp -q $(PKG_NAME) $(PKG_NAME).sha256 $(PROD_SERVER):$(PROD_DEPLOY_PATH)/incoming/
-	@echo "$(GREEN)✓ Upload complete$(NC)"
-	@echo ""
-	@echo "$(YELLOW)3/4 Running remote deployment script...$(NC)"
-	@ssh $(PROD_SERVER) "\
-	  export APP_NAME=$(APP_NAME); \
-	  export PROD_DEPLOY_PATH=$(PROD_DEPLOY_PATH); \
-	  bash $(PROD_DEPLOY_PATH)/scripts/deploy-with-tar.sh $(PKG_NAME)"
-	@echo ""
-	@echo "$(YELLOW)4/4 Verifying deployment...$(NC)"
-	@sleep 5
-	@$(MAKE) --no-print-directory verify-production
-	@echo ""
-	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo "$(GREEN)  ✓ Deployment Complete!$(NC)"
-	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-
-## Verify production deployment health
-verify-production:
-	@echo "$(YELLOW)Checking API health...$(NC)"
-	@ssh $(PROD_SERVER) "curl -fsS http://localhost:8001/api/health" && \
-		echo "$(GREEN)✓ API healthy$(NC)" || \
-		(echo "$(RED)✗ API health check failed$(NC)" && exit 1)
-	@echo "$(YELLOW)Checking Web health...$(NC)"
-	@ssh $(PROD_SERVER) "curl -fsS http://localhost:3000" && \
-		echo "$(GREEN)✓ Web healthy$(NC)" || \
-		(echo "$(RED)✗ Web health check failed$(NC)" && exit 1)
-
-## View production logs (all services)
-logs-prod:
-	@ssh $(PROD_SERVER) "cd $(PROD_DEPLOY_PATH)/current && docker compose -f infra/docker-compose.yml logs -f"
-
-## View production API logs
-logs-api-prod:
-	@ssh $(PROD_SERVER) "cd $(PROD_DEPLOY_PATH)/current && docker compose -f infra/docker-compose.yml logs -f api"
-
-## View production Web logs
-logs-web-prod:
-	@ssh $(PROD_SERVER) "cd $(PROD_DEPLOY_PATH)/current && docker compose -f infra/docker-compose.yml logs -f web"
-
-## View production MongoDB logs
-logs-mongo-prod:
-	@ssh $(PROD_SERVER) "cd $(PROD_DEPLOY_PATH)/current && docker compose -f infra/docker-compose.yml logs -f mongodb"
-
-## View production Redis logs
-logs-redis-prod:
-	@ssh $(PROD_SERVER) "cd $(PROD_DEPLOY_PATH)/current && docker compose -f infra/docker-compose.yml logs -f redis"
-
-## SSH into production server
-ssh-prod:
-	@ssh $(PROD_SERVER)
-
-## Check production system status
-status-prod:
-	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo "$(BLUE)  📊 Production Status$(NC)"
-	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo ""
-	@ssh $(PROD_SERVER) "cd $(PROD_DEPLOY_PATH)/current && docker compose -f infra/docker-compose.yml ps"
-	@echo ""
-	@$(MAKE) --no-print-directory verify-production
-
-## Rollback to previous release
-rollback-prod:
-	@echo "$(YELLOW)⚠️  Rolling back to previous release...$(NC)"
-	@ssh $(PROD_SERVER) "cd $(PROD_DEPLOY_PATH) && \
-	  if [ -L previous ]; then \
-	    cd current && docker compose -f infra/docker-compose.yml down && \
-	    cd $(PROD_DEPLOY_PATH) && \
-	    rm -f current && \
-	    ln -sf \$$(readlink previous) current && \
-	    cd current && docker compose -f infra/docker-compose.yml up -d && \
-	    echo '✓ Rolled back to previous release'; \
-	  else \
-	    echo '✗ No previous release found'; \
-	    exit 1; \
-	  fi"
-	@sleep 5
-	@$(MAKE) --no-print-directory verify-production
-
-## Clean local deployment packages
-clean-packages:
-	@echo "$(YELLOW)Cleaning deployment packages...$(NC)"
-	@rm -f $(APP_NAME)-*.tar.gz $(APP_NAME)-*.tar.gz.sha256
-	@echo "$(GREEN)✓ Packages cleaned$(NC)"
 
 # ============================================================================
 # OBSERVABILITY - Monitoring Stack

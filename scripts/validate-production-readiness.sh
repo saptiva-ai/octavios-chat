@@ -153,9 +153,9 @@ check_documentation() {
     section_header "4. Documentation Validation"
 
     local docs=(
-        "docs/PRODUCTION_CREDENTIAL_ROTATION.md"
-        "docs/CREDENTIAL_MANAGEMENT.md"
-        "docs/DOCKER_ENV_FILE_CONFIGURATION.md"
+        "docs/operations/credentials.md"
+        "docs/operations/docker-env-file-configuration.md"
+        "docs/operations/disaster-recovery.md"
     )
 
     for doc in "${docs[@]}"; do
