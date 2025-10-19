@@ -2,10 +2,10 @@
   "cookies": [
     {
       "name": "sess",
-      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZmJhMzY3My1jZTYwLTQzODgtODVlYi1kMTBiOTFhYjk2YTgiLCJ0eXBlIjoiYWNjZXNzIiwiaWF0IjoxNzYwNTQ0Nzg2LCJleHAiOjE3NjA1NDgzODYsInVzZXJuYW1lIjoiZGVtbyIsImVtYWlsIjoiZGVtb0BleGFtcGxlLmNvbSJ9.oeWoYE3JRjyTXNGChdrfGiwCs1NiFnLSpprkTUUkmpA",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1NzgxODczNy1mZjk1LTQ1ZmEtYTMwNC02OTNkYTgxZDM0MTAiLCJ0eXBlIjoiYWNjZXNzIiwiaWF0IjoxNzYwODYwNzYxLCJleHAiOjE3NjA4NjQzNjEsInVzZXJuYW1lIjoiZGVtbyIsImVtYWlsIjoiZGVtb0BleGFtcGxlLmNvbSJ9.a2Ry-74lpnFkOaM8l56bFXECqL4R6BjUgOk9-_u1zV4",
       "domain": "localhost",
       "path": "/",
-      "expires": 1760548386.860973,
+      "expires": 1760864361.638444,
       "httpOnly": true,
       "secure": false,
       "sameSite": "Lax"
@@ -17,7 +17,7 @@
       "localStorage": [
         {
           "name": "copilotos-auth-state",
-          "value": "{\"state\":{\"user\":{\"id\":\"dfba3673-ce60-4388-85eb-d10b91ab96a8\",\"username\":\"demo\",\"email\":\"demo@example.com\",\"isActive\":true,\"createdAt\":\"2025-10-14T22:19:55.249000\",\"updatedAt\":\"2025-10-15T16:13:06.858000\",\"lastLogin\":\"2025-10-15T16:13:06.858000\",\"preferences\":{\"theme\":\"auto\",\"language\":\"en\",\"defaultModel\":\"SAPTIVA_CORTEX\",\"chatSettings\":{}}},\"accessToken\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZmJhMzY3My1jZTYwLTQzODgtODVlYi1kMTBiOTFhYjk2YTgiLCJ0eXBlIjoiYWNjZXNzIiwiaWF0IjoxNzYwNTQ0Nzg2LCJleHAiOjE3NjA1NDgzODYsInVzZXJuYW1lIjoiZGVtbyIsImVtYWlsIjoiZGVtb0BleGFtcGxlLmNvbSJ9.oeWoYE3JRjyTXNGChdrfGiwCs1NiFnLSpprkTUUkmpA\",\"refreshToken\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZmJhMzY3My1jZTYwLTQzODgtODVlYi1kMTBiOTFhYjk2YTgiLCJ0eXBlIjoicmVmcmVzaCIsImlhdCI6MTc2MDU0NDc4NiwiZXhwIjoxNzYxMTQ5NTg2LCJ1c2VybmFtZSI6ImRlbW8iLCJlbWFpbCI6ImRlbW9AZXhhbXBsZS5jb20ifQ.VTIvbBlgSQmNJ-WI1bU1yNhOJeNufpWTc86cHs8imcI\",\"expiresAt\":1760548386862},\"version\":1}"
+          "value": "{\"state\":{\"user\":{\"id\":\"57818737-ff95-45fa-a304-693da81d3410\",\"username\":\"demo\",\"email\":\"demo@example.com\",\"isActive\":true,\"createdAt\":\"2025-10-19T07:53:24.936000\",\"updatedAt\":\"2025-10-19T07:59:21.631000\",\"lastLogin\":\"2025-10-19T07:59:21.631000\",\"preferences\":{\"theme\":\"auto\",\"language\":\"en\",\"defaultModel\":\"SAPTIVA_CORTEX\",\"chatSettings\":{}}},\"accessToken\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1NzgxODczNy1mZjk1LTQ1ZmEtYTMwNC02OTNkYTgxZDM0MTAiLCJ0eXBlIjoiYWNjZXNzIiwiaWF0IjoxNzYwODYwNzYxLCJleHAiOjE3NjA4NjQzNjEsInVzZXJuYW1lIjoiZGVtbyIsImVtYWlsIjoiZGVtb0BleGFtcGxlLmNvbSJ9.a2Ry-74lpnFkOaM8l56bFXECqL4R6BjUgOk9-_u1zV4\",\"refreshToken\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1NzgxODczNy1mZjk1LTQ1ZmEtYTMwNC02OTNkYTgxZDM0MTAiLCJ0eXBlIjoicmVmcmVzaCIsImlhdCI6MTc2MDg2MDc2MSwiZXhwIjoxNzYxNDY1NTYxLCJ1c2VybmFtZSI6ImRlbW8iLCJlbWFpbCI6ImRlbW9AZXhhbXBsZS5jb20ifQ.GeMvdPn4gC0Y6z_mgJREYyMM04dCHoNdC8g04zyBHdA\",\"expiresAt\":1760864361640},\"version\":1}"
         }
       ]
     }
