@@ -13,9 +13,9 @@ import os
 # Add the src directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..', 'src'))
 
-from services.chat_service import ChatService
-from models.chat import ChatSession, ChatMessage, MessageRole, MessageStatus
-from core.config import Settings
+from src.services.chat_service import ChatService
+from src.models.chat import ChatSession, ChatMessage, MessageRole, MessageStatus
+from src.core.config import Settings
 
 
 @pytest.fixture
@@ -55,7 +55,7 @@ class TestGetOrCreateSession:
     @pytest.mark.asyncio
     async def test_creates_new_session_when_chat_id_is_none(self, chat_service):
         """Should create new session when chat_id is not provided"""
-        with patch('services.chat_service.ChatSessionModel') as MockChatSession:
+        with patch('src.services.chat_service.ChatSessionModel') as MockChatSession:
             mock_instance = AsyncMock()
             mock_instance.id = "new-chat-id"
             mock_instance.insert = AsyncMock()
@@ -78,7 +78,7 @@ class TestGetOrCreateSession:
         """Should truncate title to 50 chars + '...'"""
         long_message = "a" * 100
 
-        with patch('services.chat_service.ChatSessionModel') as MockChatSession:
+        with patch('src.services.chat_service.ChatSessionModel') as MockChatSession:
             mock_instance = AsyncMock()
             mock_instance.insert = AsyncMock()
             MockChatSession.return_value = mock_instance
@@ -98,7 +98,7 @@ class TestGetOrCreateSession:
     @pytest.mark.asyncio
     async def test_retrieves_existing_session(self, chat_service, mock_chat_session):
         """Should retrieve existing session when chat_id is provided"""
-        with patch('services.chat_service.ChatSessionModel') as MockChatSession:
+        with patch('src.services.chat_service.ChatSessionModel') as MockChatSession:
             MockChatSession.get = AsyncMock(return_value=mock_chat_session)
 
             result = await chat_service.get_or_create_session(
@@ -116,7 +116,7 @@ class TestGetOrCreateSession:
         """Should raise HTTPException 404 when session doesn't exist"""
         from fastapi import HTTPException
 
-        with patch('services.chat_service.ChatSessionModel') as MockChatSession:
+        with patch('src.services.chat_service.ChatSessionModel') as MockChatSession:
             MockChatSession.get = AsyncMock(return_value=None)
 
             with pytest.raises(HTTPException) as exc_info:
@@ -137,7 +137,7 @@ class TestGetOrCreateSession:
 
         mock_chat_session.user_id = "other-user"
 
-        with patch('services.chat_service.ChatSessionModel') as MockChatSession:
+        with patch('src.services.chat_service.ChatSessionModel') as MockChatSession:
             MockChatSession.get = AsyncMock(return_value=mock_chat_session)
 
             with pytest.raises(HTTPException) as exc_info:
@@ -157,7 +157,7 @@ class TestGetOrCreateSession:
         mock_chat_session.tools_enabled = {"web_search": False}
         mock_chat_session.update = AsyncMock()
 
-        with patch('services.chat_service.ChatSessionModel') as MockChatSession:
+        with patch('src.services.chat_service.ChatSessionModel') as MockChatSession:
             MockChatSession.get = AsyncMock(return_value=mock_chat_session)
 
             await chat_service.get_or_create_session(
@@ -215,7 +215,7 @@ class TestBuildMessageContext:
             )
         ]
 
-        with patch('services.chat_service.ChatMessageModel') as MockChatMessage:
+        with patch('src.services.chat_service.ChatMessageModel') as MockChatMessage:
             mock_find = AsyncMock()
             mock_find.sort = Mock(return_value=mock_find)
             mock_find.limit = Mock(return_value=mock_find)
@@ -235,7 +235,7 @@ class TestBuildMessageContext:
     @pytest.mark.asyncio
     async def test_limits_to_10_messages(self, chat_service, mock_chat_session):
         """Should limit retrieval to 10 recent messages"""
-        with patch('services.chat_service.ChatMessageModel') as MockChatMessage:
+        with patch('src.services.chat_service.ChatMessageModel') as MockChatMessage:
             mock_find = AsyncMock()
             mock_find.sort = Mock(return_value=mock_find)
             mock_find.limit = Mock(return_value=mock_find)
@@ -259,8 +259,8 @@ class TestProcessWithSaptiva:
     @pytest.mark.asyncio
     async def test_builds_payload_and_calls_saptiva(self, chat_service):
         """Should build payload and call Saptiva client"""
-        with patch('services.chat_service.build_payload') as mock_build_payload, \
-             patch('services.chat_service.trace_span'), \
+        with patch('src.services.chat_service.build_payload') as mock_build_payload, \
+             patch('src.services.chat_service.trace_span'), \
              patch.object(chat_service.saptiva_client, 'chat_completion', new_callable=AsyncMock) as mock_completion:
 
             mock_build_payload.return_value = (
@@ -301,12 +301,18 @@ class TestAddMessages:
 
     @pytest.mark.asyncio
     async def test_add_user_message(self, chat_service, mock_chat_session):
-        """Should add user message and invalidate cache"""
+        """Should add user message with file validation and cache invalidation"""
+        # Mock the ChatMessageModel to avoid Beanie initialization
         mock_message = AsyncMock(spec=ChatMessage)
         mock_message.id = "msg-123"
-        mock_chat_session.add_message = AsyncMock(return_value=mock_message)
+        mock_message.insert = AsyncMock()
+        mock_chat_session.save = AsyncMock()
 
-        with patch('services.chat_service.get_redis_cache') as mock_get_cache:
+        with patch('src.services.chat_service.ChatMessageModel') as MockChatMessage, \
+             patch('src.services.chat_service.get_redis_cache') as mock_get_cache, \
+             patch('fastapi.encoders.jsonable_encoder', return_value={}):
+
+            MockChatMessage.return_value = mock_message
             mock_cache = AsyncMock()
             mock_cache.invalidate_chat_history = AsyncMock()
             mock_get_cache.return_value = mock_cache
@@ -316,12 +322,19 @@ class TestAddMessages:
                 content="User message"
             )
 
-            # Should add message
-            mock_chat_session.add_message.assert_called_once_with(
-                role=MessageRole.USER,
-                content="User message",
-                metadata={"source": "api"}
-            )
+            # Should create message with correct params
+            MockChatMessage.assert_called_once()
+            call_args = MockChatMessage.call_args
+            assert call_args.kwargs["role"] == MessageRole.USER
+            assert call_args.kwargs["content"] == "User message"
+            assert call_args.kwargs["chat_id"] == mock_chat_session.id
+
+            # Should insert message
+            mock_message.insert.assert_called_once()
+
+            # Should update session stats
+            assert mock_chat_session.message_count == 1
+            mock_chat_session.save.assert_called_once()
 
             # Should invalidate cache
             mock_cache.invalidate_chat_history.assert_called_once_with(mock_chat_session.id)
@@ -335,7 +348,7 @@ class TestAddMessages:
         mock_message.id = "msg-456"
         mock_chat_session.add_message = AsyncMock(return_value=mock_message)
 
-        with patch('services.chat_service.get_redis_cache') as mock_get_cache:
+        with patch('src.services.chat_service.get_redis_cache') as mock_get_cache:
             mock_cache = AsyncMock()
             mock_cache.invalidate_chat_history = AsyncMock()
             mock_cache.invalidate_research_tasks = AsyncMock()

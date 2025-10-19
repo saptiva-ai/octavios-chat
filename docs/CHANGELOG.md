@@ -31,7 +31,7 @@ Production incident on 2025-10-01 revealed MongoDB authentication failures were 
   - Simulates authentication failures for validation
 
 **Documentation:**
-- `docs/DEPLOYMENT.md` (+142 lines)
+- `docs/operations/deployment.md` (+142 lines)
   - Common Deployment Pitfalls section
   - Pre-deployment checklist (5 verification steps)
   - Password synchronization guide
@@ -208,7 +208,7 @@ Massive documentation improvements (+1000 lines):
 - `scripts/README-DEPLOY.md` (deployment guide)
 
 **Updated Documents**:
-- `docs/DEPLOYMENT.md` (+142 lines - Common Pitfalls)
+- `docs/operations/deployment.md` (+142 lines - Common Pitfalls)
 - `scripts/README.md` (+12 lines - New scripts)
 
 #### **Authentication & Security** 🔐

@@ -125,27 +125,27 @@ copilotos-bridge/
 │   ├── .env.prod.example   # Production environment template
 │   └── .env.local          # Local environment (gitignored)
 ├── scripts/
-│   ├── generate-production-secrets.sh # Secure credential generation
-│   ├── rotate-mongo-credentials.sh   # Safe MongoDB password rotation
-│   ├── rotate-redis-credentials.sh   # Safe Redis password rotation
-│   ├── validate-production-readiness.sh # Pre-rotation validation (10 checks)
-│   ├── test-credential-rotation.sh   # Automated credential rotation testing
-│   ├── security-audit.sh            # Security validation
-│   ├── test-docker-permissions.sh   # Permission testing
+│   ├── DEPLOY-NOW.sh                # Guided deployment workflow
+│   ├── deploy-with-tar.sh           # Tar-based deployment helper
+│   ├── push-to-registry.sh          # Container registry workflow
+│   ├── rotate-mongo-credentials.sh  # Safe MongoDB password rotation
+│   ├── rotate-redis-credentials.sh  # Safe Redis password rotation
+│   ├── monitor-backups.sh           # Backup monitoring helper
+│   ├── security-audit.sh            # Security validation suite
 │   ├── docker-cleanup.sh            # Docker resource cleanup
 │   └── create-demo-user.py          # Demo user creation
 ├── docs/
-│   ├── DEPLOYMENT.md                        # Production deployment guide
-│   ├── TOKEN_EXPIRATION_HANDLING.md         # JWT expiration & session management
-│   ├── RESOURCE_OPTIMIZATION.md             # Docker resource optimization strategies
-│   ├── MAKEFILE_RESOURCE_COMMANDS.md        # Resource command reference
-│   ├── PRODUCTION_CREDENTIAL_ROTATION.md    # Production credential rotation procedures
-│   ├── CREDENTIAL_MANAGEMENT.md             # Credential policies & best practices
-│   ├── DOCKER_ENV_FILE_CONFIGURATION.md     # Docker env_file technical guide
-│   ├── MAKEFILE_CREDENTIAL_COMMANDS.md      # Credential command reference
-│   ├── arquitectura/                        # LLM architecture documentation
-│   ├── evidencias/                          # Reproducible evidence files
-│   └── guides/                              # Quick start & developer guides
+│   ├── README.md                    # Documentation hub
+│   ├── operations/                  # Runbooks (deployment, credentials, backups)
+│   ├── document-review/             # Files V1 validation & metadata docs
+│   ├── extraction/                  # Text extraction abstraction & inventory
+│   ├── ocr/                         # OCR prompts and validation reports
+│   ├── saptiva/                     # SAPTIVA investigation logs and reports
+│   ├── testing/                     # Testing guides and coverage dashboards
+│   ├── bugfixes/                    # Post-mortems and remediation summaries
+│   ├── web/                         # Frontend component documentation
+│   ├── observability/               # Monitoring and dashboards
+│   └── archive/                     # Legacy documentation snapshots
 ├── IMPLEMENTATION_SUMMARY.md  # RAG implementation guide (1,900 lines)
 ├── Makefile                   # Development automation & resource tools
 └── README.md                  # This file
@@ -620,10 +620,10 @@ sudo rm -rf apps/web/.next
 ./scripts/fix-docker-permissions.sh
 
 # Verify fix worked
-./scripts/test-docker-permissions.sh
+make dev-build
 
 # For future builds
-./scripts/docker-build.sh web
+make rebuild-web
 ```
 
 #### Container Startup Issues
@@ -652,7 +652,7 @@ make clean && make dev
 ./scripts/validate-config.sh
 
 # Regenerate secrets
-./scripts/generate-production-secrets.sh
+make generate-credentials
 
 # Verify SAPTIVA API key
 curl -H "Authorization: Bearer $SAPTIVA_API_KEY" \
@@ -1033,16 +1033,19 @@ make docker-cleanup-aggressive  # Frees 50-70 GB typically
 make dev-build                  # Rebuild cache (takes 5-10 min first time)
 ```
 
-**Production Deployment:**
+**Producción:**
 ```bash
-# Option 1: Fast deployment (incremental build, 3-5 min)
+# Flujo base (build completo + tar, ~8-12 min)
+make deploy-tar   # alias: make deploy
+
+# Reusar imágenes existentes (~2-3 min)
 make deploy-fast
 
-# Option 2: Regular deployment (recommended default, 8-12 min)
+# Build local + push + deploy vía registry (~4-6 min)
 make deploy-prod
 
-# Option 3: Clean deployment (guaranteed fresh, 12-15 min)
-make deploy-tar
+# Sólo consumir imágenes ya publicadas en el registry (~3-5 min)
+make deploy-registry
 ```
 
 ### Resource Limits Configuration
@@ -1091,8 +1094,8 @@ Freed:   70.5 GB (94% reduction)
 
 ### Documentation
 
-- **Quick reference:** [`docs/MAKEFILE_RESOURCE_COMMANDS.md`](docs/MAKEFILE_RESOURCE_COMMANDS.md) - All commands with examples
-- **Deep dive:** [`docs/RESOURCE_OPTIMIZATION.md`](docs/RESOURCE_OPTIMIZATION.md) - Technical optimization strategies
+- **Quick reference:** [`docs/operations/makefile-resource-commands.md`](docs/operations/makefile-resource-commands.md) - All commands with examples
+- **Deep dive:** [`docs/operations/resource-optimization.md`](docs/operations/resource-optimization.md) - Technical optimization strategies
 - **Configuration:** [`infra/docker-compose.resources.yml`](infra/docker-compose.resources.yml) - Resource limits
 
 
@@ -1675,19 +1678,22 @@ The FastAPI application exposes comprehensive metrics at `/api/metrics`:
 
 ## Deployment
 
-### Production Deployment
+### Despliegue a Producción
 ```bash
-# Option 1: Quick deploy (if recent builds are good)
+# Flujo base (build completo + tar, ~8-12 min)
+make deploy-tar   # alias: make deploy
+
+# Reusar imágenes ya construidas (~2-3 min)
 make deploy-fast
 
-# Option 2: Optimized deploy (recommended for releases)
-make deploy-prod            # Builds, pushes to registry, deploys with rollback
+# Build local + push + deploy vía registry (~4-6 min)
+make deploy-prod
 
-# Option 3: Clean build (guaranteed fresh)
-make deploy-tar
+# Consumir imágenes ya publicadas en el registry (~3-5 min)
+make deploy-registry
 ```
 
-**See:** [`docs/deployment/SCRIPTS_DEPLOY.md`](docs/deployment/SCRIPTS_DEPLOY.md) for setup
+**Ver:** [`docs/deployment/SCRIPTS_DEPLOY.md`](docs/deployment/SCRIPTS_DEPLOY.md) para detalles de los scripts
 
 ### Option: Manual Build (Legacy)
 
@@ -1929,15 +1935,16 @@ git commit -m "feat: describe change"
   Technical specification for JWT token expiration detection, refresh strategies, WebSocket handling, and session preservation.
 
 **Deployment & Operations:**
-- Production deployment guide: **`docs/DEPLOYMENT.md`**
-- Quick deploy scripts: `docs/QUICK-DEPLOY.md`
-- Deploy automation scripts: **`docs/deployment/SCRIPTS_DEPLOY.md`**
-- Resource optimization guide: **`docs/RESOURCE_OPTIMIZATION.md`** _(580 lines)_
+- Deployment runbook: **`docs/operations/deployment.md`**
+- Credential & secrets operations: **`docs/operations/credentials.md`**
+- Legacy quick deploy notes: `docs/archive/legacy-deployment/`
+- Deployment scripts reference: **`docs/deployment/SCRIPTS_DEPLOY.md`**
+- Resource optimization guide: **`docs/operations/resource-optimization.md`** _(580 lines)_
   Comprehensive guide covering Docker resource analysis, cleanup strategies, Dockerfile optimization, monitoring, and automation.
 
 **Developer Guides:**
 - Quick start guide: `docs/guides/QUICK_START.md`
-- Makefile resource commands reference: **`docs/MAKEFILE_RESOURCE_COMMANDS.md`** _(450 lines)_
+- Makefile resource commands reference: **`docs/operations/makefile-resource-commands.md`** _(450 lines)_
   User guide for resource monitoring, cleanup commands, deployment workflows, and best practices.
 
 **API Documentation:**

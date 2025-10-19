@@ -1,48 +1,68 @@
-# 📚 Copilotos Bridge Documentation
+# 📚 Copilotos Bridge Documentation Hub
 
-Recopilación actualizada de guías, procedimientos y evidencias para Copilotos Bridge.
+Punto de partida para localizar guías, runbooks y reportes del proyecto.
 
 ---
 
-## 📋 Post-Mortems & Bug Fixes
-- **[Auto-Titling Fix (2025-10-07)](post-mortem-auto-titling-fix.md)** - Solución del sistema de auto-generación de títulos con IA
-  - Root cause: Detección incorrecta de conversaciones nuevas por timing de reconciliación optimista
-  - Solución: Detección basada en `messages.length === 0`
-  - Resultado: 100% de conversaciones con títulos generados por IA ✅
+## 🚀 Primeros Pasos
+- [Guía de Inicio Rápido](GETTING_STARTED.md)
+- [Quick Start para el equipo](guides/QUICK_START.md)
+- [Referencia de credenciales para onboarding](guides/CREDENTIALS.md)
 
-## 🚀 Guías Iniciales
-- [Quick Start Guide](guides/QUICK_START.md)
-- [Credentials Reference](guides/CREDENTIALS.md)
+---
 
-## 🚢 Deploy & Operaciones
-- [Quick Deployment Cheatsheet](QUICK-DEPLOY.md)
-- [Secure Production Deployment Guide](DEPLOYMENT.md)
-- [Deployment Playbook](deployment/README.md)
-- [Setup](setup/PRODUCTION_SETUP.md) · [Checklist](setup/PRODUCTION_CHECKLIST.md) · [Docker Compose Notes](setup/DEPLOYMENT.md)
-- Archivos de entorno de ejemplo: [`setup/.env.production.example`](setup/.env.production.example), [`setup/.env.staging.example`](setup/.env.staging.example)
+## 🛠️ Operaciones & Runbooks
+- [Playbook de despliegue a producción](operations/deployment.md)
+- [Gestión y rotación de credenciales](operations/credentials.md)
+- Respaldo y recuperación: [backup setup](operations/backup-setup.md) · [disaster recovery](operations/disaster-recovery.md)
+- Optimización diaria: [recursos](operations/resource-optimization.md) · [patterns SSH](operations/ssh-environment-patterns.md) · [troubleshooting](operations/troubleshooting.md)
+- Incidentes y post-mortems: [`operations/incidents/`](operations/incidents/)
 
-## 🏗️ Arquitectura y Flujos
-- Diagramas y flujos LLM: [`arquitectura/`](arquitectura/)
-- Casos de corrección UX/overlay: [`bugfixes/UI-OVL-001.yaml`](bugfixes/UI-OVL-001.yaml)
+---
 
-## 🔍 Evidencias y QA
-- Evidencias funcionales: [`evidencias/`](evidencias/)
-- Planes/manuales de prueba: [`testing/`](testing/)
+## 🔐 Seguridad
+- [Security audit report](security/security-audit-report.md)
+- [Security alert playbook](security/security-alert.md)
+- Ver también: [gestión de credenciales](operations/credentials.md)
 
-## 🔄 CI/CD y Entrega
-- Guías de pipeline empresarial y despliegues automatizados: [`ci-cd/`](ci-cd/)
-- Documentación detallada de scripts de despliegue: [`../scripts/README-DEPLOY.md`](../scripts/README-DEPLOY.md)
+---
 
-## 🗂️ Archivo Histórico
-Los documentos legacy y reportes de releases se movieron a [`archive/`](archive/), por ejemplo:
-- [DEPLOYMENT-BEST-PRACTICES.md](archive/DEPLOYMENT-BEST-PRACTICES.md)
-- [DEPLOYMENT-READY-v1.2.1.md](archive/DEPLOYMENT-READY-v1.2.1.md)
-- [DEPLOYMENT-TAR-GUIDE.md](archive/DEPLOYMENT-TAR-GUIDE.md)
-- [QUICKSTART-DEPLOY.md](archive/QUICKSTART-DEPLOY.md)
-- [BACKLOG_RECONCILIADO.md](archive/BACKLOG_RECONCILIADO.md)
+## 🔎 Saptiva & Text Extraction
+- Documentación completa de investigación y soporte: [`saptiva/`](saptiva/)
+- Abstracción de extractores, inventario y roadmap: [`extraction/`](extraction/)
+- OCR prompts, validaciones y mejoras: [`ocr/`](ocr/)
 
-Revisa esta carpeta cuando necesites contexto histórico o notas de releases anteriores.
+---
+
+## 🧱 Arquitectura & Producto
+- Diagramas LLM y flujos internos: [`arquitectura/`](arquitectura/)
+- Integraciones Web y chat: [`web/`](web/)
+- Document review & Files V1: [`document-review/`](document-review/)
+- Tech debt & mejoras: [`arquitectura/TECH_DEBT.md`](arquitectura/TECH_DEBT.md)
+
+---
+
+## ✅ Calidad, Testing & Evidencias
+- Estado de cobertura: [Test Coverage Dashboard](testing/test-coverage.md)
+- Reportes y planes de pruebas: [`testing/`](testing/)
+- Evidencias reproducibles: [`evidencias/`](evidencias/)
+- Ver también: [`bugfixes/`](bugfixes/) para cambios y post-mortems específicos.
+
+---
+
+## 🔄 CI/CD y Entrega Continua
+- Pipelines empresariales y automatización: [`ci-cd/`](ci-cd/)
+- Playbook de scripts de despliegue: [`deployment/`](deployment/) y [`../scripts/README-DEPLOY.md`](../scripts/README-DEPLOY.md)
+- Configuración de entornos: [`setup/`](setup/)
+
+---
+
+## 📦 Archivo Histórico
+- Documentos legacy agrupados en [`archive/`](archive/)
+- Referencias destacadas: [legacy deployment](archive/legacy-deployment/) · [legacy credentials](archive/legacy-credentials/) · [legacy testing](archive/legacy-testing/)
+
+---
 
 ## 📌 Otros Recursos
-- Registro de cambios: [CHANGELOG.md](CHANGELOG.md)
-- Makefile con comandos clave: [`../Makefile`](../Makefile) (usa `make help`)
+- Registro de cambios principal: [CHANGELOG.md](CHANGELOG.md)
+- Makefile con comandos clave: [`../Makefile`](../Makefile) (`make help`)

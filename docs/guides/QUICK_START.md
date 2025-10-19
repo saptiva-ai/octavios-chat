@@ -288,7 +288,7 @@ make create-user
 
 1. **Read the full README**: `cat README.md`
 2. **Explore API docs**: http://localhost:8001/docs
-3. **Check deployment guide**: `docs/DEPLOYMENT.md`
+3. **Check deployment guide**: `docs/operations/deployment.md`
 4. **Review security guide**: `docs/SECURITY.md`
 5. **View all commands**: `make help`
 
