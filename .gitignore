@@ -311,3 +311,8 @@ docker-compose.override.yml
 *.tar.gz
 *.tar.gz.sha256
 copilotos-bridge-*.tar.gz
+
+# Playwright
+playwright-report/
+test-results/
+test-data/
