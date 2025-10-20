@@ -37,10 +37,18 @@ This guide includes:
 
 **TL;DR - Three commands to start:**
 ```bash
-make setup          # Interactive configuration (asks for API key)
+make setup          # Interactive configuration (project name + API keys)
+make configure      # Re-run the wizard later without reinstalling deps
 make dev            # Starts all services
 make create-demo-user  # Creates test user (demo/Demo1234)
 ```
+
+**During `make setup` you will:**
+- Confirm the project display name used across the CLI (defaults to `CopilotOS`).
+- Provide your SAPTIVA API key (required for the platform to respond).
+- Generate secure secrets for MongoDB, Redis, and JWT authentication.
+
+Need to tweak the project name or rotate your SAPTIVA key later? Run `make configure` to re-open the wizard and sync the new values into `envs/.env` safely.
 
 **Troubleshooting the quick start**
 - If `make dev` fails with `port is already allocated`, an older stack is still running. Stop any previous compose projects with `make stop-all` before retrying.

@@ -67,6 +67,19 @@ generate_password() {
     openssl rand -base64 24 2>/dev/null | tr -d "=+/" | cut -c1-24 || echo "ChangeMe$(date +%s)"
 }
 
+slugify_project_name() {
+    # Convert arbitrary project name into a docker-compose friendly slug
+    local name="$1"
+    local slug
+    slug="$(echo "$name" | tr '[:upper:]' '[:lower:]')"
+    # Replace non-alphanumeric characters with hyphen and normalize the result
+    slug="$(echo "$slug" | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$$//; s/-{2,}/-/g')"
+    if [ -z "$slug" ]; then
+        slug="copilotos"
+    fi
+    echo "$slug"
+}
+
 validate_email() {
     local email="$1"
     if [[ "$email" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
@@ -210,10 +223,36 @@ print_header "◆ Configuration"
 echo -e "${BOLD}1. Basic Configuration${NC}"
 echo ""
 
-COMPOSE_PROJECT_NAME=$(prompt_with_default \
-    "Project name (for Docker Compose)" \
-    "${COMPOSE_PROJECT_NAME:-copilotos}" \
+DEFAULT_PROJECT_DISPLAY_NAME="CopilotOS"
+PROJECT_DISPLAY_NAME=$(prompt_with_default \
+    "Project display name" \
+    "${PROJECT_DISPLAY_NAME:-$DEFAULT_PROJECT_DISPLAY_NAME}" \
+    "PROJECT_DISPLAY_NAME")
+
+DEFAULT_COMPOSE_SLUG="$COMPOSE_PROJECT_NAME"
+if [ -z "$DEFAULT_COMPOSE_SLUG" ]; then
+    DEFAULT_COMPOSE_SLUG="$(slugify_project_name "$PROJECT_DISPLAY_NAME")"
+fi
+
+COMPOSE_PROJECT_NAME_INPUT=$(prompt_with_default \
+    "Docker Compose project slug" \
+    "$DEFAULT_COMPOSE_SLUG" \
     "COMPOSE_PROJECT_NAME")
+
+COMPOSE_PROJECT_NAME=$(slugify_project_name "$COMPOSE_PROJECT_NAME_INPUT")
+if [ "$COMPOSE_PROJECT_NAME" != "$COMPOSE_PROJECT_NAME_INPUT" ]; then
+    print_warning "Normalized compose project slug to: $COMPOSE_PROJECT_NAME"
+else
+    print_success "Compose project slug set to: $COMPOSE_PROJECT_NAME"
+fi
+
+if [ -z "$PROJECT_DISPLAY_NAME" ]; then
+    PROJECT_DISPLAY_NAME="$DEFAULT_PROJECT_DISPLAY_NAME"
+fi
+
+print_success "Project name set to: $PROJECT_DISPLAY_NAME"
+
+echo ""
 
 if [ "$ENVIRONMENT" = "production" ]; then
     DOMAIN=$(prompt_with_default \
@@ -441,6 +480,7 @@ cat > "$TARGET_FILE" << EOF
 # ============================================================================
 # BASIC CONFIGURATION
 # ============================================================================
+PROJECT_DISPLAY_NAME=$PROJECT_DISPLAY_NAME
 COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME
 DOMAIN=$DOMAIN
 NODE_ENV=$NODE_ENV
@@ -622,6 +662,7 @@ print_header "✔ Setup Complete!"
 echo -e "${BOLD}Configuration Summary:${NC}"
 echo ""
 echo -e "  ${CYAN}Environment:${NC}        $ENVIRONMENT"
+echo -e "  ${CYAN}Project:${NC}            $PROJECT_DISPLAY_NAME ($COMPOSE_PROJECT_NAME)"
 echo -e "  ${CYAN}Config File:${NC}        $TARGET_FILE"
 echo -e "  ${CYAN}Domain:${NC}             $DOMAIN"
 echo -e "  ${CYAN}API URL:${NC}            $NEXT_PUBLIC_API_URL"
