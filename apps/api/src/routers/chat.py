@@ -230,48 +230,52 @@ async def send_chat_message(
         # Update context with resolved session
         context = context.with_session(chat_session.id)
 
-        # FILE CONTEXT PERSISTENCE: Merge request file_ids with session's attached_file_ids
-        # This enables multi-turn conversations with documents without re-uploading
+        # FILE CONTEXT PERSISTENCE: Keep only the latest message's attachments
         request_file_ids = list((request.file_ids or []) + (request.document_ids or []))
-        session_file_ids = getattr(chat_session, 'attached_file_ids', []) or []
+        # Normalize request files to preserve order but remove duplicates
+        request_file_ids = list(dict.fromkeys(request_file_ids)) if request_file_ids else []
+        session_file_ids = list(getattr(chat_session, 'attached_file_ids', []) or [])
 
-        # Merge and deduplicate: request files + existing session files
-        # Use dict.fromkeys() to preserve order while removing duplicates
-        all_file_ids = list(dict.fromkeys(request_file_ids + session_file_ids))
+        if request_file_ids:
+            # New message provides files → use them and overwrite session context
+            current_file_ids = request_file_ids
+        else:
+            # No files in request → reuse context from previous message (if any)
+            current_file_ids = session_file_ids
 
         # OBS-2: Log post-normalización en backend
         logger.info(
             "message_normalized",
             text_len=len(request.message or ""),
-            file_ids_count=len(all_file_ids),
-            file_ids=all_file_ids,
+            file_ids_count=len(current_file_ids),
+            file_ids=current_file_ids,
             request_file_ids=request_file_ids,
             session_file_ids=session_file_ids,
             nonce=context.request_id[:8]
         )
 
         await _wait_until_ready_and_cached(
-            all_file_ids,
+            current_file_ids,
             user_id=context.user_id,
             redis_client=cache.client
         )
 
-        # Update session's attached_file_ids if new files were added
-        if request_file_ids and all_file_ids != session_file_ids:
+        # Update session's attached_file_ids when new files are provided
+        if request_file_ids and request_file_ids != session_file_ids:
             await chat_session.update({"$set": {
-                "attached_file_ids": all_file_ids,
+                "attached_file_ids": request_file_ids,
                 "updated_at": datetime.utcnow()
             }})
-            chat_session.attached_file_ids = all_file_ids
+            chat_session.attached_file_ids = request_file_ids
             logger.info(
                 "Updated session attached_file_ids",
                 chat_id=chat_session.id,
-                file_count=len(all_file_ids),
-                new_files=len(request_file_ids)
+                file_count=len(request_file_ids),
+                replaced_previous=bool(session_file_ids)
             )
 
         # Update context with ALL accumulated file IDs (request + session)
-        if all_file_ids:
+        if current_file_ids:
             context = ChatContext(
                 user_id=context.user_id,
                 request_id=context.request_id,
@@ -280,7 +284,7 @@ async def send_chat_message(
                 session_id=context.session_id,
                 message=context.message,
                 context=context.context,
-                document_ids=all_file_ids,  # All accumulated files
+                document_ids=current_file_ids,  # Latest files (new or reused)
                 model=context.model,
                 tools_enabled=context.tools_enabled,
                 stream=context.stream,
@@ -305,12 +309,12 @@ async def send_chat_message(
 
         # CRITICAL FIX: Add normalized file_ids to metadata
         # The chat service expects file_ids inside metadata.get("file_ids")
-        if request_file_ids:
-            user_message_metadata["file_ids"] = request_file_ids
+        if current_file_ids:
+            user_message_metadata["file_ids"] = current_file_ids
             logger.info(
                 "Added normalized file_ids to user message metadata",
-                file_ids=request_file_ids,
-                file_ids_count=len(request_file_ids)
+                file_ids=current_file_ids,
+                file_ids_count=len(current_file_ids)
             )
 
         user_message = await chat_service.add_user_message(
