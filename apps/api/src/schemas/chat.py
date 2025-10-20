@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from enum import Enum
 
-from pydantic import BaseModel, Field, validator, field_validator, root_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # Import FileMetadata from models for type-safe file attachments
 from ..models.chat import FileMetadata
@@ -137,20 +137,24 @@ class ChatRequest(BaseModel):
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata for the user message (e.g., file info for UI indicators)")
     channel: str = Field(default="chat", description="Communication channel (chat, report, title, etc.)")
 
-    @root_validator(pre=True)
+    @model_validator(mode='before')
+    @classmethod
     def ensure_tools_enabled(cls, values):
-        if 'tools_enabled' not in values or values['tools_enabled'] is None:
-            alias_value = values.get('enabled_tools')
-            values['tools_enabled'] = alias_value or {}
+        if isinstance(values, dict):
+            if 'tools_enabled' not in values or values['tools_enabled'] is None:
+                alias_value = values.get('enabled_tools')
+                values['tools_enabled'] = alias_value or {}
         return values
 
-    @validator('message')
+    @field_validator('message')
+    @classmethod
     def validate_message_not_empty(cls, v):
         if not v or not v.strip():
             raise ValueError('Message cannot be empty')
         return v.strip()
 
-    @validator('channel')
+    @field_validator('channel')
+    @classmethod
     def validate_channel(cls, v):
         """Validar que el canal sea uno de los permitidos"""
         allowed_channels = {"chat", "report", "title", "summary", "code"}
@@ -213,7 +217,8 @@ class ChatSessionUpdateRequest(BaseModel):
     pinned: Optional[bool] = Field(None, description="Pin/unpin the chat session")
     tools_enabled: Optional[Dict[str, bool]] = Field(None, description="Updated tool configuration")
 
-    @validator('title')
+    @field_validator('title')
+    @classmethod
     def validate_title(cls, v):
         if v is not None and not v.strip():
             raise ValueError('Title cannot be empty or whitespace only')
