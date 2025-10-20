@@ -252,3 +252,142 @@ sequenceDiagram
 - **Resolution**: Recommended 300 DPI for best OCR accuracy
 - **Encoding**: Base64 data URI format (`data:image/png;base64,...`)
 
+---
+
+## Development Setup
+
+### Python Virtual Environment (.venv)
+
+The project uses a Python virtual environment (`.venv`) for local development and testing. This allows you to run tests and development tools on your host machine without relying on Docker containers.
+
+#### When to Use .venv
+
+Use `.venv` for:
+- **Integration/E2E Tests**: Running tests that need to connect to services via host-mapped ports
+- **Local Development**: Fast iteration without Docker overhead
+- **IDE Integration**: Better IntelliSense, debugging, and code navigation
+- **Pre-commit Hooks**: Running linters and formatters locally
+
+**Continue using Docker** for:
+- **Running the Application**: API, web, and all services
+- **Unit Tests**: Tests that run inside the container with mocked dependencies
+- **Production-like Environment**: Ensuring consistency with deployed environment
+
+#### Setup Virtual Environment
+
+The virtual environment is automatically managed by the Makefile:
+
+```bash
+# Quick setup (creates .venv and installs dependencies)
+make venv-install
+
+# Or run specific setup targets that include venv
+make setup-quick          # Full quick setup
+make setup-interactive    # Interactive setup
+```
+
+**Manual setup** (if needed):
+
+```bash
+cd apps/api
+
+# Create virtual environment
+python3 -m venv .venv
+
+# Activate (Linux/macOS)
+source .venv/bin/activate
+
+# Activate (Windows)
+.venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt -r requirements-dev.txt
+
+# Deactivate when done
+deactivate
+```
+
+#### Running Tests with .venv
+
+```bash
+# E2E tests (uses .venv automatically)
+make test-e2e
+
+# Integration tests (from host with .venv)
+make test-integration
+
+# Or manually activate and run
+source apps/api/.venv/bin/activate
+pytest apps/api/tests/integration/ -v
+```
+
+**Port Mappings for Host Testing:**
+- MongoDB: `localhost:27018` → `mongodb:27017` (container)
+- Redis: `localhost:6380` → `redis:6379` (container)
+- API: `localhost:8001` → `api:8001` (container)
+
+These mappings are configured in `docker-compose.yml` and `tests/integration/conftest.py`.
+
+#### IDE Configuration
+
+**VS Code** (`apps/api/.vscode/settings.json`):
+```json
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": ["tests"]
+}
+```
+
+**PyCharm**:
+1. File → Settings → Project → Python Interpreter
+2. Add Interpreter → Existing Environment
+3. Select `apps/api/.venv/bin/python`
+
+#### Updating Dependencies
+
+```bash
+# Update .venv after requirements.txt changes
+make venv-install
+
+# Or manually
+source apps/api/.venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
+```
+
+#### Troubleshooting
+
+**Issue**: `ModuleNotFoundError` when running tests from host
+
+**Solution**: Ensure .venv is activated and dependencies installed:
+```bash
+make venv-install
+source apps/api/.venv/bin/activate
+pytest tests/integration/ -v
+```
+
+---
+
+**Issue**: Tests fail with "Connection refused" to MongoDB/Redis
+
+**Solution**: Ensure Docker services are running and use correct host ports:
+```bash
+# Start services
+make dev
+
+# Verify services
+docker ps | grep copilotos
+
+# Check port mappings
+docker compose ps
+```
+
+---
+
+**Issue**: `.venv` is too large or corrupted
+
+**Solution**: Remove and recreate:
+```bash
+rm -rf apps/api/.venv
+make venv-install
+```
