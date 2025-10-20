@@ -163,3 +163,24 @@ if (typeof global.Headers === 'undefined') {
     }
   }
 }
+
+// Polyfill TextEncoder/TextDecoder for hash tests
+if (typeof global.TextEncoder === 'undefined') {
+  const { TextEncoder, TextDecoder } = require('util')
+  global.TextEncoder = TextEncoder
+  global.TextDecoder = TextDecoder
+}
+
+// Polyfill crypto.subtle for Web Crypto API tests
+if (typeof global.crypto === 'undefined' || !global.crypto.subtle) {
+  const nodeCrypto = require('crypto')
+  Object.defineProperty(global, 'crypto', {
+    value: {
+      subtle: nodeCrypto.webcrypto.subtle,
+      getRandomValues: (arr) => nodeCrypto.webcrypto.getRandomValues(arr),
+      randomUUID: () => nodeCrypto.randomUUID(),
+    },
+    writable: true,
+    configurable: true,
+  })
+}
