@@ -1,6 +1,6 @@
 # Copilotos Bridge Makefile
 # Development-optimized workflow with auto .venv management
-.PHONY: help dev test test-all clean build lint security security-audit install-hooks shell-api shell-web \
+.PHONY: help configure sync-env dev test test-all clean build lint security security-audit install-hooks shell-api shell-web \
         push-registry push-registry-fast deploy-registry deploy-prod deploy deploy-clean deploy-quick deploy-tar \
         deploy-fast deploy-tar-fast logs-prod logs-api-prod logs-web-prod logs-mongo-prod logs-redis-prod ssh-prod status-prod \
         db-migrate db-backup db-restore db-stats db-collections db-fix-drafts \
@@ -17,11 +17,9 @@
 # CONFIGURATION
 # ============================================================================
 
-# Project
-PROJECT_NAME := copilotos
-COMPOSE_FILE_BASE := infra/docker-compose.yml
-COMPOSE_FILE_DEV := infra/docker-compose.dev.yml
-
+# Project defaults
+DEFAULT_PROJECT_DISPLAY_NAME := CopilotOS
+DEFAULT_COMPOSE_PROJECT_NAME := copilotos
 
 # Environment
 DEV_ENV_FILE := envs/.env
@@ -29,11 +27,39 @@ DEV_ENV_FALLBACK := envs/.env.local
 DEV_ENV_EXAMPLE := envs/.env.local.example
 PROD_ENV_FILE := envs/.env.prod
 
+# Load developer environment variables for local workflows (best effort)
+ifneq (,$(wildcard $(DEV_ENV_FALLBACK)))
+	include $(DEV_ENV_FALLBACK)
+endif
+ifneq (,$(wildcard $(DEV_ENV_FILE)))
+	include $(DEV_ENV_FILE)
+endif
+
 # Load production environment variables for deployment commands
 ifneq (,$(wildcard $(PROD_ENV_FILE)))
 	include $(PROD_ENV_FILE)
-	export
 endif
+export
+
+# Project configuration (fallback to sensible defaults)
+ifeq ($(strip $(PROJECT_DISPLAY_NAME)),)
+	PROJECT_DISPLAY_NAME := $(DEFAULT_PROJECT_DISPLAY_NAME)
+endif
+
+ifeq ($(strip $(COMPOSE_PROJECT_NAME)),)
+	COMPOSE_PROJECT_NAME := $(DEFAULT_COMPOSE_PROJECT_NAME)
+endif
+
+PROJECT_DISPLAY_NAME := $(strip $(PROJECT_DISPLAY_NAME))
+COMPOSE_PROJECT_NAME := $(strip $(COMPOSE_PROJECT_NAME))
+
+PROJECT_NAME := $(shell printf '%s' "$(COMPOSE_PROJECT_NAME)" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$$//; s/-{2,}/-/g')
+ifeq ($(strip $(PROJECT_NAME)),)
+	PROJECT_NAME := $(DEFAULT_COMPOSE_PROJECT_NAME)
+endif
+
+COMPOSE_FILE_BASE := infra/docker-compose.yml
+COMPOSE_FILE_DEV := infra/docker-compose.dev.yml
 
 # Production deployment configuration (with fallback defaults)
 # These should be set in envs/.env.prod for production deployments
@@ -81,12 +107,13 @@ NC := "" # No Color
 ## Show available commands with descriptions
 help:
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-	@echo "CopilotOS - Development Command Center"
+	@echo "$(PROJECT_DISPLAY_NAME) - Development Command Center"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo ""
 	@echo "▸ Quick Start"
-	@echo "  make setup                First-time setup (interactive)"
-	@echo "  make setup-quick          Quick setup (non-interactive)"
+	@echo "  make setup                First-time setup (project name & API keys)"
+	@echo "  make configure            Re-run setup to update config safely"
+	@echo "  make setup-quick          Quick setup (non-interactive defaults)"
 	@echo "  make setup-interactive-prod  Production setup (interactive)"
 	@echo "  make dev                  Start development environment (hot reload)"
 	@echo "  make create-demo-user     Create demo user (demo / Demo1234)"
@@ -256,6 +283,7 @@ setup-interactive:
 	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@chmod +x scripts/interactive-env-setup.sh
 	@./scripts/interactive-env-setup.sh development
+	@$(MAKE) --no-print-directory sync-env
 	@$(MAKE) --no-print-directory venv-install
 
 ## Interactive production setup
@@ -283,6 +311,21 @@ ensure-env:
 		fi; \
 	fi
 
+## Sync development environment file with interactive configuration
+sync-env:
+	@if [ ! -f $(DEV_ENV_FALLBACK) ]; then \
+		echo "$(RED)Error: $(DEV_ENV_FALLBACK) not found. Run $(GREEN)make setup$(RED) first.$(NC)"; \
+		exit 1; \
+	fi
+	@if [ -f $(DEV_ENV_FILE) ]; then \
+		BACKUP="$(DEV_ENV_FILE).backup.$$(date +%Y%m%d_%H%M%S)"; \
+		cp $(DEV_ENV_FILE) $$BACKUP; \
+		echo "$(YELLOW)Backup created: $$BACKUP$(NC)"; \
+	fi
+	@cp $(DEV_ENV_FALLBACK) $(DEV_ENV_FILE)
+	@chmod 600 $(DEV_ENV_FILE)
+	@echo "$(GREEN)$(DEV_ENV_FILE) synced with $(DEV_ENV_FALLBACK)$(NC)"
+
 ## First-time setup: interactive configuration (RECOMMENDED)
 setup: setup-interactive
 	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
@@ -293,6 +336,19 @@ setup: setup-interactive
 	@echo "  1. Run: $(GREEN)make dev$(NC)"
 	@echo "  2. Run: $(GREEN)make create-demo-user$(NC)"
 	@echo "  3. Visit: $(BLUE)http://localhost:3000$(NC)"
+	@echo ""
+
+## Update local configuration (project name, API keys, secrets)
+configure:
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BLUE)▸ Update Local Configuration$(NC)"
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@chmod +x scripts/interactive-env-setup.sh
+	@./scripts/interactive-env-setup.sh development
+	@$(MAKE) --no-print-directory sync-env
+	@echo ""
+	@echo "$(GREEN)◆ Configuration refreshed!$(NC)"
+	@echo "$(YELLOW)Tip: Restart running services to apply changes.$(NC)"
 	@echo ""
 
 ## Quick setup (non-interactive, uses example files)
