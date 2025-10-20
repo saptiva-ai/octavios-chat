@@ -10,6 +10,7 @@
         debug-file-sync debug-endpoints debug-logs-errors debug-network debug-full \
         troubleshoot resources resources-monitor docker-cleanup docker-cleanup-aggressive \
         test-sh lint-sh fix-sh audit-tests test-integration test-unit-host \
+        ci-status ci-logs ci-logs-failed ci-watch ci-list ci-rerun ci-jobs \
         obs-up obs-down obs-logs obs-restart obs-status obs-clean venv-install
 
 # ============================================================================
@@ -131,6 +132,15 @@ help:
 	@echo "  make test-integration     API integration tests (.venv + host)"
 	@echo "  make test-unit-host       API unit tests (.venv + host)"
 	@echo "  make health               Service health check"
+	@echo ""
+	@echo "▸ GitHub Actions / CI"
+	@echo "  make ci-status            Show latest workflow status"
+	@echo "  make ci-logs              View complete workflow logs"
+	@echo "  make ci-logs-failed       View only failed job logs"
+	@echo "  make ci-watch             Open workflow in browser"
+	@echo "  make ci-list              List recent workflow runs"
+	@echo "  make ci-rerun             Re-run latest failed workflow"
+	@echo "  make ci-jobs              View detailed job information"
 	@echo ""
 	@echo "▸ Code Quality"
 	@echo "  make lint                 Run linters (Python & TypeScript)"
@@ -1293,6 +1303,99 @@ test-api-parallel:
 list-api-tests:
 	@echo "$(BLUE)Available API tests:$(NC)"
 	@$(DOCKER_COMPOSE_DEV) exec api pytest tests/ --collect-only -q
+
+# ============================================================================
+# GITHUB ACTIONS / CI
+# ============================================================================
+# Commands for monitoring and debugging GitHub Actions workflows
+#
+# Usage:
+#   make ci-status         - Show status of latest workflow run
+#   make ci-logs           - View complete logs of latest run
+#   make ci-logs-failed    - View only failed job logs
+#   make ci-watch          - Open latest run in browser
+#   make ci-list           - List recent workflow runs (last 10)
+#   make ci-rerun          - Re-run latest failed workflow
+# ============================================================================
+
+## Show status and summary of latest GitHub Actions workflow
+ci-status:
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BLUE) Latest GitHub Actions Workflow$(NC)"
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@gh run list --limit 1
+	@echo ""
+	@echo "$(YELLOW) Run 'make ci-logs' to see full logs$(NC)"
+	@echo "$(YELLOW) Run 'make ci-logs-failed' to see only errors$(NC)"
+	@echo "$(YELLOW) Run 'make ci-watch' to open in browser$(NC)"
+
+## View complete logs of latest GitHub Actions workflow
+ci-logs:
+	@echo "$(YELLOW)Fetching logs for latest workflow run...$(NC)"
+	@RUN_ID=$$(gh run list --limit 1 --json databaseId --jq '.[0].databaseId'); \
+	if [ "$$RUN_ID" = "null" ] || [ -z "$$RUN_ID" ]; then \
+		echo "$(RED) No workflow runs found$(NC)"; \
+		exit 1; \
+	fi; \
+	echo "$(BLUE) Workflow Run ID: $$RUN_ID$(NC)"; \
+	echo ""; \
+	gh run view $$RUN_ID --log
+
+## View only failed job logs from latest workflow
+ci-logs-failed:
+	@echo "$(YELLOW)Fetching failed logs for latest workflow run...$(NC)"
+	@RUN_ID=$$(gh run list --limit 1 --json databaseId --jq '.[0].databaseId'); \
+	if [ "$$RUN_ID" = "null" ] || [ -z "$$RUN_ID" ]; then \
+		echo "$(RED) No workflow runs found$(NC)"; \
+		exit 1; \
+	fi; \
+	echo "$(BLUE) Workflow Run ID: $$RUN_ID$(NC)"; \
+	echo ""; \
+	STATUS=$$(gh run list --limit 1 --json status --jq '.[0].status'); \
+	if [ "$$STATUS" = "in_progress" ]; then \
+		echo "$(YELLOW) Workflow is still in progress. Logs will be available when it completes.$(NC)"; \
+		echo "$(YELLOW) Run 'make ci-watch' to monitor in real-time$(NC)"; \
+		exit 0; \
+	fi; \
+	gh run view $$RUN_ID --log-failed || echo "$(GREEN) No failed steps found!$(NC)"
+
+## Open latest workflow run in browser
+ci-watch:
+	@echo "$(YELLOW)Opening latest workflow run in browser...$(NC)"
+	@gh run list --limit 1 --web
+
+## List recent workflow runs (last 10)
+ci-list:
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BLUE) Recent GitHub Actions Workflows$(NC)"
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@gh run list --limit 10
+
+## Re-run latest failed workflow
+ci-rerun:
+	@echo "$(YELLOW)Re-running latest failed workflow...$(NC)"
+	@RUN_ID=$$(gh run list --status failure --limit 1 --json databaseId --jq '.[0].databaseId'); \
+	if [ "$$RUN_ID" = "null" ] || [ -z "$$RUN_ID" ]; then \
+		echo "$(GREEN) No failed workflow runs found$(NC)"; \
+		exit 0; \
+	fi; \
+	gh run rerun $$RUN_ID && \
+	echo "$(GREEN) Workflow re-run initiated!$(NC)" && \
+	echo "$(YELLOW) Run 'make ci-watch' to monitor progress$(NC)"
+
+## View detailed job information for latest workflow
+ci-jobs:
+	@echo "$(YELLOW)Fetching job details for latest workflow run...$(NC)"
+	@RUN_ID=$$(gh run list --limit 1 --json databaseId --jq '.[0].databaseId'); \
+	if [ "$$RUN_ID" = "null" ] || [ -z "$$RUN_ID" ]; then \
+		echo "$(RED) No workflow runs found$(NC)"; \
+		exit 1; \
+	fi; \
+	echo "$(BLUE) Workflow Run ID: $$RUN_ID$(NC)"; \
+	echo ""; \
+	gh run view $$RUN_ID
 
 # ============================================================================
 # CODE QUALITY
