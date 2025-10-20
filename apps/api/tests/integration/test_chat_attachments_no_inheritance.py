@@ -268,17 +268,17 @@ async def test_second_image_replaces_first_no_inheritance(
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_message_without_files_after_image_has_no_context(
+async def test_message_without_files_reuses_previous_context(
     auth_token_attachments,
     first_image
 ):
     """
-    E2E Test: Message without file_ids should NOT inherit previous message's files.
+    E2E Test: Message without file_ids should reuse previous message's files.
 
     Flow:
     1. Send message with first_image
     2. Send message WITHOUT file_ids
-    3. Verify second message has empty file_ids (no inheritance)
+    3. Verify second message uses first image context automatically
     """
     headers = {
         "Authorization": f"Bearer {auth_token_attachments}",
@@ -323,10 +323,12 @@ async def test_message_without_files_after_image_has_no_context(
 
             assert len(user_messages) == 2
             second_msg = user_messages[1]
-            assert len(second_msg.file_ids) == 0, \
-                "Second message should have empty file_ids (no inheritance)"
+            assert len(second_msg.file_ids) == 1, \
+                "Second message should reuse previous image when no new files provided"
+            assert str(first_image.id) in second_msg.file_ids, \
+                "Second message should include first_image.id when reusing context"
 
-            # Verify LLM call had no document context
+            # Verify LLM call reused previous document context
             assert mock_llm.call_count == 2
             second_call_args = mock_llm.call_args_list[1]
             second_payload = second_call_args.kwargs
@@ -335,9 +337,9 @@ async def test_message_without_files_after_image_has_no_context(
             system_messages = [m for m in second_messages if m.get('role') == 'system']
             if system_messages:
                 system_content = system_messages[0].get('content', '')
-                # Should NOT mention the image
-                assert 'meme.png' not in system_content.lower(), \
-                    "Second LLM call should NOT include previous image (no inheritance)"
+                # Should mention the reused image
+                assert 'meme.png' in system_content.lower(), \
+                    "Second LLM call should include previous image when reusing context"
 
             # Cleanup
             await ChatMessageModel.find(ChatMessageModel.chat_id == chat_id).delete()
@@ -490,3 +492,4 @@ async def test_three_images_each_turn_has_only_its_own(
                     await redis_client.delete(f"doc:text:{str(image.id)}")
             except Exception:
                 pass
+

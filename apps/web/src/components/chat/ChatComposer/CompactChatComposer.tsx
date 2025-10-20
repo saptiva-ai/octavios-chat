@@ -127,7 +127,7 @@ export function CompactChatComposer({
   loading = false,
   layout = "bottom",
   onActivate,
-  placeholder = "Pregúntame algo… o presiona Enviar para analizar tus adjuntos",
+  placeholder = "Pregúntame algo…",
   maxLength = 10000,
   showCancel = false,
   className,
@@ -258,11 +258,8 @@ export function CompactChatComposer({
 
   // MVP-LOCK: Dynamic placeholder based on file state (simplified)
   const dynamicPlaceholder = React.useMemo(() => {
-    if (hasReadyFiles) {
-      return `Pregúntame sobre ${filesV1Attachments.length === 1 ? "el archivo" : `los ${filesV1Attachments.length} archivos`} o presiona Enviar para analizar`;
-    }
-    return "Escribe tu mensaje… (Enter para enviar, Shift+Enter para salto)";
-  }, [hasReadyFiles, filesV1Attachments.length]);
+    return "Pregúntame algo…";
+  }, []);
 
   // Submit with animation (must be defined before handleKeyDown)
   const handleSendClick = React.useCallback(async () => {
@@ -552,7 +549,7 @@ export function CompactChatComposer({
             role="form"
             aria-label="Compositor de mensajes"
             className={cn(
-              "grid items-end gap-2",
+              "grid items-center gap-2",
               "rounded-2xl p-2",
               "bg-[var(--surface)]",
               "shadow-sm",
@@ -622,6 +619,7 @@ export function CompactChatComposer({
                   "focus-visible:outline-none focus-visible:ring-0",
                   "overflow-y-auto thin-scroll",
                   "transition-[height] duration-150 ease-out",
+                  "py-1.5",
                 )}
                 style={{
                   minHeight: `${MIN_HEIGHT}px`,

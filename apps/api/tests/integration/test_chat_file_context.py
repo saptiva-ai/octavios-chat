@@ -289,9 +289,9 @@ async def test_multi_turn_conversation_maintains_file_context(auth_token, test_d
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_adding_second_file_merges_with_existing(auth_token, test_document, test_user_chat):
+async def test_adding_second_file_replaces_previous(auth_token, test_document, test_user_chat):
     """
-    Integration Test: Adding a second file mid-conversation merges with existing files
+    Integration Test: Adding a second file mid-conversation replaces previous files
     """
     from src.services.cache_service import get_redis_client
 
@@ -359,14 +359,14 @@ async def test_adding_second_file_merges_with_existing(auth_token, test_document
                 )
                 assert response2.status_code == status.HTTP_200_OK
 
-                # Verify session has both files
+                # Verify session stores only the latest file (replaces previous)
                 session = await ChatSessionModel.get(chat_id)
                 assert session is not None
-                assert len(session.attached_file_ids) == 2
-                assert str(test_document.id) in session.attached_file_ids
+                assert len(session.attached_file_ids) == 1
                 assert str(document2.id) in session.attached_file_ids
+                assert str(test_document.id) not in session.attached_file_ids
 
-                # Message 3: No files - should have both in context
+                # Message 3: No files - should reuse latest document context
                 response3 = await client.post(
                     "/api/chat",
                     headers=headers,
@@ -378,15 +378,16 @@ async def test_adding_second_file_merges_with_existing(auth_token, test_document
                 )
                 assert response3.status_code == status.HTTP_200_OK
 
-                # Verify third call had both documents
+                # Verify third call reused second document only
                 third_call_args = mock_llm.call_args_list[2]
                 payload = third_call_args.kwargs
                 messages = payload.get('messages', [])
                 system_messages = [m for m in messages if m.get('role') == 'system']
                 system_content = system_messages[0].get('content', '')
 
-                # Should mention both documents
-                assert 'test.pdf' in system_content.lower() or 'second.pdf' in system_content.lower()
+                # Should mention only the second document
+                assert 'second.pdf' in system_content.lower()
+                assert 'test.pdf' not in system_content.lower()
 
                 # Cleanup
                 await ChatMessageModel.find(ChatMessageModel.chat_id == chat_id).delete()
