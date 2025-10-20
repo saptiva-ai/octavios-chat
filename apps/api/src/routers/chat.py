@@ -230,31 +230,28 @@ async def send_chat_message(
         # Update context with resolved session
         context = context.with_session(chat_session.id)
 
-        # MVP-FILE-CONTEXT: Merge session's attached files with request files for persistent context
-        request_file_ids = (request.file_ids or []) + (request.document_ids or [])
-        session_file_ids = chat_session.attached_file_ids or []
+        # POLÍTICA DE ADJUNTOS: Un mensaje guarda exactamente los adjuntos enviados en su payload.
+        # No existe "herencia" de adjuntos desde turnos previos.
+        # Cada turno usa SOLO sus propios file_ids.
+        request_file_ids = list((request.file_ids or []) + (request.document_ids or []))
 
+        # OBS-2: Log post-normalización en backend
         logger.info(
-            "chat_request_files",
-            incoming_file_ids=request.file_ids,
-            incoming_document_ids=request.document_ids,
-            session_attached=session_file_ids,
+            "message_normalized",
+            text_len=len(request.message or ""),
+            file_ids_count=len(request_file_ids),
+            file_ids=request_file_ids,
+            nonce=context.request_id[:8]
         )
-
-        merged_file_ids = list(
-            dict.fromkeys(request_file_ids + session_file_ids)
-        )
-
-        logger.info("chat_files_merged", merged_file_ids=merged_file_ids)
 
         await _wait_until_ready_and_cached(
-            merged_file_ids,
+            request_file_ids,
             user_id=context.user_id,
             redis_client=cache.client
         )
 
-        # Update context with merged file IDs
-        if merged_file_ids:
+        # Update context with THIS TURN's file IDs only (no inheritance)
+        if request_file_ids:
             context = ChatContext(
                 user_id=context.user_id,
                 request_id=context.request_id,
@@ -263,7 +260,7 @@ async def send_chat_message(
                 session_id=context.session_id,
                 message=context.message,
                 context=context.context,
-                document_ids=merged_file_ids,  # Merged document IDs
+                document_ids=request_file_ids,  # Only current turn's files
                 model=context.model,
                 tools_enabled=context.tools_enabled,
                 stream=context.stream,
@@ -271,21 +268,6 @@ async def send_chat_message(
                 max_tokens=context.max_tokens,
                 kill_switch_active=context.kill_switch_active
             )
-
-        # Store new file IDs in session if any were provided in request
-        if request_file_ids:
-            new_file_ids = [fid for fid in request_file_ids if fid not in session_file_ids]
-            if new_file_ids:
-                chat_session.attached_file_ids = merged_file_ids
-                chat_session.updated_at = datetime.utcnow()
-                await chat_session.save()
-                logger.info(
-                    "Updated session with attached files",
-                    chat_id=context.chat_id,
-                    session_id=chat_session.id,
-                    new_file_ids=new_file_ids,
-                    total_attached_files=len(merged_file_ids)
-                )
 
         # 4. Add user message
         # MVP-LOCK: Use metadata from request (contains file_ids AND file info for UI indicator)
