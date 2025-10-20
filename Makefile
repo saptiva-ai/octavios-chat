@@ -418,6 +418,12 @@ clean-all: stop
 fresh: clean-next dev
 	@echo "$(GREEN) Fresh start completed!$(NC)"
 
+## Clean deployment packages
+clean-packages:
+	@echo "$(YELLOW)Cleaning deployment packages...$(NC)"
+	@rm -f *.tar.gz *.tar.gz.sha256 2>/dev/null || true
+	@echo "$(GREEN)✓ Packages cleaned$(NC)"
+
 ## Clean development environment (removes volumes and cache)
 # REMOVED: dev-clean - Use 'make fresh' instead for full clean rebuild
 
