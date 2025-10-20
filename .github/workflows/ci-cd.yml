@@ -41,7 +41,7 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest -q --cov=src --cov-report=xml --cov-report=term
+          pytest -q --cov=src --cov-report=xml --cov-report=term --ignore=tests/integration
 
       - name: Upload coverage to Codecov (optional)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -182,6 +182,9 @@ jobs:
 
       - name: Run integration tests - Chat
         run: pytest tests/integration/test_chat_file_context.py -v --tb=short
+
+      - name: Run integration tests - Attachments Policy
+        run: pytest tests/integration/test_chat_attachments_no_inheritance.py -v --tb=short
 
       - name: Generate test report
         if: always()
