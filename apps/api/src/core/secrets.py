@@ -143,12 +143,16 @@ class SecretsManager:
                 return complete_url
 
             # Otherwise, construct from individual components (production default)
-            password = self.get_secret("REDIS_PASSWORD", required=True)
+            password = self.get_secret("REDIS_PASSWORD", required=False)
             host = os.getenv("REDIS_HOST", "redis")
             port = os.getenv("REDIS_PORT", "6379")
             db = os.getenv("REDIS_DB", "0")
 
-            return f"redis://:{password}@{host}:{port}/{db}"
+            # Build URL with or without password
+            if password:
+                return f"redis://:{password}@{host}:{port}/{db}"
+            else:
+                return f"redis://{host}:{port}/{db}"
 
         else:
             raise ValueError(f"Unsupported database service: {service}")
@@ -227,7 +231,7 @@ class SecretsManager:
         """Validate that all critical secrets are available."""
         critical_secrets = [
             ("MONGODB_PASSWORD", 12),
-            ("REDIS_PASSWORD", 12),
+            # REDIS_PASSWORD is optional (for CI/testing without auth)
             ("JWT_SECRET_KEY", 32),
             ("SECRET_KEY", 32),
         ]
