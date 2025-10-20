@@ -8,15 +8,17 @@ import os
 import sys
 from pathlib import Path
 
-# Set up environment
-os.environ["SAPTIVA_BASE_URL"] = "https://api.saptiva.com"
-# SAPTIVA_API_KEY should be provided via environment variable
-if not os.getenv("SAPTIVA_API_KEY"):
-    print("❌ SAPTIVA_API_KEY environment variable not set")
-    print("   Please set your API key: export SAPTIVA_API_KEY=your-api-key-here")
-    sys.exit(1)
-os.environ["SAPTIVA_TIMEOUT"] = "30"
-os.environ["SAPTIVA_MAX_RETRIES"] = "3"
+# Set up environment (only when running as main script)
+def setup_environment():
+    """Setup environment variables for standalone execution."""
+    os.environ["SAPTIVA_BASE_URL"] = "https://api.saptiva.com"
+    # SAPTIVA_API_KEY should be provided via environment variable
+    if not os.getenv("SAPTIVA_API_KEY"):
+        print("❌ SAPTIVA_API_KEY environment variable not set")
+        print("   Please set your API key: export SAPTIVA_API_KEY=your-api-key-here")
+        sys.exit(1)
+    os.environ["SAPTIVA_TIMEOUT"] = "30"
+    os.environ["SAPTIVA_MAX_RETRIES"] = "3"
 
 # Add src to path
 src_path = Path(__file__).parent / "src"
@@ -158,6 +160,7 @@ async def test_complete_integration():
 
 
 if __name__ == "__main__":
+    setup_environment()  # Setup environment only when running standalone
     result = asyncio.run(test_complete_integration())
     if result:
         print("\n🎯 ESTADO: ¡SAPTIVA integración COMPLETA y VERIFICADA!")
