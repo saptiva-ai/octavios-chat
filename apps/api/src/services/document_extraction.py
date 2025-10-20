@@ -20,7 +20,8 @@ import structlog
 
 from ..models.document import PageContent
 from .extractors import get_text_extractor, ExtractionError, UnsupportedFormatError
-from .extractors.pdf_raster_ocr import raster_pdf_then_ocr_pages
+from .extractors.pdf_raster_ocr import raster_pdf_then_ocr_pages, raster_single_page_and_ocr
+from ..core.config import get_settings
 
 logger = structlog.get_logger(__name__)
 
@@ -88,107 +89,146 @@ async def extract_text_from_file(file_path: Path, content_type: str) -> List[Pag
         with open(file_path, "rb") as f:
             file_bytes = f.read()
 
-        # Special handling for PDFs: Detect image-only PDFs and apply OCR fallback
+        # Special handling for PDFs: Hybrid extraction (pypdf + selective OCR)
         if media_type == "pdf":
-            # Heuristic: Try pypdf first to detect if PDF is searchable
+            # Hybrid approach: Try pypdf first, apply OCR to pages with insufficient text
             try:
+                import fitz  # PyMuPDF for OCR fallback
                 from pypdf import PdfReader
+
+                settings = get_settings()
+                MIN_CHARS_THRESHOLD = 50  # Páginas con < 50 caracteres se procesan con OCR
 
                 reader = PdfReader(io.BytesIO(file_bytes))
                 total_pages = len(reader.pages)
-                searchable_hits = 0
                 temp_pages: List[PageContent] = []
 
-                # Attempt to extract text from all pages
-                for page_idx, page in enumerate(reader.pages, start=1):
+                # Counters for telemetry
+                pypdf_count = 0
+                ocr_count = 0
+                error_count = 0
+
+                logger.info(
+                    "Starting hybrid PDF extraction (pypdf + selective OCR)",
+                    total_pages=total_pages,
+                    min_chars_threshold=MIN_CHARS_THRESHOLD,
+                    file_path=str(file_path),
+                )
+
+                # Open PDF with PyMuPDF for OCR fallback (if needed)
+                fitz_doc = None
+                try:
+                    fitz_doc = fitz.open(stream=file_bytes, filetype="pdf")
+                except Exception as fitz_exc:
+                    logger.warning(
+                        "PyMuPDF failed to open PDF, OCR fallback unavailable",
+                        error=str(fitz_exc),
+                        file_path=str(file_path),
+                    )
+
+                # Process each page with hybrid approach
+                for page_idx, page in enumerate(reader.pages):
+                    page_num = page_idx + 1
+
                     try:
+                        # Step 1: Try pypdf extraction
                         text = page.extract_text() or ""
                         text_stripped = text.strip()
 
-                        if text_stripped:
-                            searchable_hits += 1
+                        # Step 2: Determine if OCR is needed
+                        needs_ocr = (
+                            len(text_stripped) < MIN_CHARS_THRESHOLD
+                            and fitz_doc is not None
+                        )
 
-                        # Store temporary pages (we'll use them if PDF is searchable)
+                        if needs_ocr:
+                            # Step 3: Apply OCR to this page
+                            logger.debug(
+                                "Applying OCR to page with insufficient text",
+                                page=page_num,
+                                pypdf_chars=len(text_stripped),
+                                threshold=MIN_CHARS_THRESHOLD,
+                            )
+
+                            ocr_text = await raster_single_page_and_ocr(
+                                doc=fitz_doc,
+                                page_idx=page_idx,
+                                dpi=settings.ocr_raster_dpi,
+                            )
+
+                            # Use OCR text if it's better than pypdf
+                            if len(ocr_text.strip()) > len(text_stripped):
+                                text_stripped = ocr_text.strip()
+                                ocr_count += 1
+                                logger.debug(
+                                    "OCR text used for page",
+                                    page=page_num,
+                                    ocr_chars=len(text_stripped),
+                                )
+                            else:
+                                pypdf_count += 1
+                                logger.debug(
+                                    "pypdf text retained (OCR did not improve)",
+                                    page=page_num,
+                                )
+                        else:
+                            pypdf_count += 1
+
+                        # Store page content
                         temp_pages.append(
                             PageContent(
-                                page=page_idx,
-                                text_md=text_stripped or f"[Página {page_idx} sin texto extraíble]",
+                                page=page_num,
+                                text_md=text_stripped or f"[Página {page_num} sin texto extraíble]",
                                 has_table=False,
                                 has_images=False,
                             )
                         )
 
                     except Exception as page_exc:
+                        error_count += 1
                         logger.warning(
-                            "pypdf extraction failed for page",
-                            page=page_idx,
+                            "Page extraction failed",
+                            page=page_num,
                             error=str(page_exc),
                         )
                         temp_pages.append(
                             PageContent(
-                                page=page_idx,
-                                text_md=f"[Página {page_idx} error pypdf: {page_exc}]",
+                                page=page_num,
+                                text_md=f"[Página {page_num} error: {page_exc}]",
                                 has_table=False,
                                 has_images=False,
                             )
                         )
 
-                # Apply heuristic: < 10% of pages have text = image-only PDF
-                threshold = max(1, int(0.1 * total_pages))
+                # Close PyMuPDF document
+                if fitz_doc is not None:
+                    fitz_doc.close()
 
-                if searchable_hits < threshold:
-                    logger.info(
-                        "Image-only PDF detected, activating raster + OCR fallback",
-                        total_pages=total_pages,
-                        searchable_hits=searchable_hits,
-                        threshold=threshold,
-                        file_path=str(file_path),
-                    )
+                pages = temp_pages
 
-                    # Call OCR fallback
-                    pages = await raster_pdf_then_ocr_pages(file_bytes)
+                logger.info(
+                    "Hybrid PDF extraction completed",
+                    total_pages=total_pages,
+                    pypdf_pages=pypdf_count,
+                    ocr_pages=ocr_count,
+                    error_pages=error_count,
+                    total_chars=sum(len(p.text_md) for p in pages),
+                    file_path=str(file_path),
+                )
 
-                    logger.info(
-                        "OCR fallback completed",
-                        pages_extracted=len(pages),
-                        total_chars=sum(len(p.text_md) for p in pages),
-                        file_path=str(file_path),
-                    )
-
-                    return pages
-
-                else:
-                    # PDF is searchable, use pypdf results
-                    logger.info(
-                        "Searchable PDF detected, using pypdf extraction",
-                        total_pages=total_pages,
-                        searchable_hits=searchable_hits,
-                        threshold=threshold,
-                        file_path=str(file_path),
-                    )
-                    pages = temp_pages
-
-                    logger.info(
-                        "Text extraction successful (searchable PDF)",
-                        media_type=media_type,
-                        pages_extracted=len(pages),
-                        total_chars=sum(len(p.text_md) for p in pages),
-                        file_path=str(file_path),
-                    )
-
-                    return pages
+                return pages
 
             except ImportError:
-                # pypdf not installed, fall back to extractor pattern
+                # pypdf or PyMuPDF not installed, fall back to extractor pattern
                 logger.warning(
-                    "pypdf not installed, falling back to extractor pattern",
+                    "pypdf or PyMuPDF not installed, falling back to extractor pattern",
                     file_path=str(file_path),
                 )
 
             except Exception as exc:
-                # pypdf heuristic failed, fall back to extractor pattern
+                # Hybrid extraction failed, fall back to extractor pattern
                 logger.warning(
-                    "pypdf heuristic failed, falling back to extractor pattern",
+                    "Hybrid extraction failed, falling back to extractor pattern",
                     error=str(exc),
                     file_path=str(file_path),
                 )
