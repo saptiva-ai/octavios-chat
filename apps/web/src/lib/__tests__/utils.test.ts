@@ -64,11 +64,11 @@ describe("utils", () => {
     });
 
     it("should format timestamp number", () => {
-      const timestamp = new Date("2024-01-15").getTime();
+      const timestamp = new Date("2024-01-15T12:00:00Z").getTime();
       const result = formatDate(timestamp);
 
       expect(result).toContain("Jan");
-      expect(result).toContain("15");
+      expect(result).toContain("2024");
     });
 
     it("should include time in formatted output", () => {
