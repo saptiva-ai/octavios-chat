@@ -238,6 +238,9 @@ class TestExtractContentForRagFromCache:
         assert warnings == []
         assert metadata["used_chars"] == 0
         assert metadata["used_docs"] == 0
+        assert metadata["selected_doc_ids"] == []
+        assert metadata["truncated_doc_ids"] == []
+        assert metadata["dropped_doc_ids"] == []
 
     def test_formats_single_document(self):
         """Should format a single document with header"""
@@ -257,6 +260,8 @@ class TestExtractContentForRagFromCache:
         assert metadata["used_docs"] == 1
         assert metadata["used_chars"] > 0
         assert len(warnings) == 0
+        assert metadata["selected_doc_ids"] == ["doc-123"]
+        assert metadata["truncated_doc_ids"] == []
 
     def test_formats_image_with_ocr(self):
         """Should format image documents with OCR indicator"""
@@ -310,6 +315,7 @@ class TestExtractContentForRagFromCache:
 
         assert "[Contenido truncado - documento excede límite por archivo]" in result
         assert metadata["used_docs"] == 1
+        assert metadata["truncated_doc_ids"] == ["doc-123"]
 
     def test_respects_max_docs_limit(self):
         """Should limit number of documents processed"""
@@ -333,6 +339,7 @@ class TestExtractContentForRagFromCache:
         assert metadata["omitted_docs"] == 3
         assert len(warnings) > 0
         assert "Se usaron 2 documentos máximo" in warnings[0]
+        assert len(metadata["dropped_doc_ids"]) == 3
 
     def test_respects_global_char_budget(self):
         """Should enforce total character limit across all docs"""
@@ -358,8 +365,39 @@ class TestExtractContentForRagFromCache:
         )
 
         # Should truncate to fit global budget (with small margin for headers)
-        assert metadata["used_chars"] <= 6100  # Allow margin for document headers
+        assert metadata["used_chars"] <= 6400  # Allow margin for headers and truncation notes
         assert len(warnings) > 0
+        assert sorted(metadata["truncated_doc_ids"]) == ["doc-1", "doc-2"]
+
+    def test_round_robin_preserves_newer_documents(self):
+        """Should keep multiple documents within budget using round-robin."""
+        doc_texts = {
+            "doc-older": {
+                "text": "A" * 9000,
+                "filename": "older.pdf",
+                "content_type": "application/pdf",
+                "ocr_applied": False,
+            },
+            "doc-newer": {
+                "text": "B" * 1500,
+                "filename": "newer.png",
+                "content_type": "image/png",
+                "ocr_applied": True,
+            },
+        }
+
+        result, warnings, metadata = DocumentService.extract_content_for_rag_from_cache(
+            doc_texts,
+            max_total_chars=6000,
+            max_chars_per_doc=8000,
+            max_docs=3,
+        )
+
+        assert "older.pdf" in result
+        assert "newer.png" in result
+        assert metadata["used_docs"] == 2
+        assert "doc-newer" in metadata["selected_doc_ids"]
+        assert len(warnings) > 0  # Global truncation warning
 
     def test_skips_expired_documents(self):
         """Should skip documents with expired marker"""
@@ -385,6 +423,7 @@ class TestExtractContentForRagFromCache:
         assert "[Documento 'expired.pdf' expirado de cache]" not in result
         assert metadata["used_docs"] == 1
         assert any("expiró en Redis" in w for w in warnings)
+        assert "doc-2" in metadata["dropped_doc_ids"]
 
     def test_separates_documents_with_divider(self):
         """Should separate multiple documents with divider"""

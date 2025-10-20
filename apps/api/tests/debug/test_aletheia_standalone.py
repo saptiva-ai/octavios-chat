@@ -19,7 +19,7 @@ os.environ.setdefault('ALETHEIA_API_KEY', 'test-key')
 os.environ.setdefault('ALETHEIA_TIMEOUT', '30')
 os.environ.setdefault('ALETHEIA_MAX_RETRIES', '3')
 
-from services.aletheia_client import AletheiaClient
+from src.services.aletheia_client import AletheiaClient
 
 
 def test_circuit_breaker():

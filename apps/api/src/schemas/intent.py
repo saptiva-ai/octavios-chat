@@ -20,7 +20,7 @@ class IntentLabel(str, Enum):
 class IntentRequest(BaseModel):
     """Request body for the intent classification endpoint."""
 
-    text: str = Field(..., min_length=1, strip_whitespace=True, description="Utterance to classify")
+    text: str = Field(..., min_length=1, description="Utterance to classify", json_schema_extra={"strip_whitespace": True})
 
 
 class IntentPrediction(BaseModel):

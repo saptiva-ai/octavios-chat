@@ -10,7 +10,7 @@ Implements Strategy Pattern to handle:
 import os
 import time
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import structlog
 
 from ..core.telemetry import trace_span
@@ -106,6 +106,16 @@ class SimpleChatStrategy(ChatStrategy):
                 )
 
                 if doc_texts:
+                    preselection_warnings: List[str] = []
+                    missing_doc_ids = [
+                        doc_id for doc_id in context.document_ids if doc_id not in doc_texts
+                    ]
+                    if missing_doc_ids:
+                        preselection_warnings.append(
+                            "Documentos aún en procesamiento o no disponibles: "
+                            + ", ".join(missing_doc_ids)
+                        )
+
                     # BE-PERF-1: Unpack tuple (content, warnings, metadata)
                     document_context, doc_warnings, context_metadata = DocumentService.extract_content_for_rag_from_cache(
                         doc_texts=doc_texts,
@@ -113,6 +123,9 @@ class SimpleChatStrategy(ChatStrategy):
                         max_total_chars=max_total_doc_chars,
                         max_docs=max_docs_per_chat
                     )
+
+                    if preselection_warnings:
+                        doc_warnings.extend(preselection_warnings)
 
                     if doc_warnings:
                         logger.warning(

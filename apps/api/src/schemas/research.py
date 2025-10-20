@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from enum import Enum
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class TaskStatus(str, Enum):
@@ -53,7 +53,8 @@ class DeepResearchRequest(BaseModel):
         description="Explicit user action required - must be True to trigger Deep Research"
     )
 
-    @validator('query')
+    @field_validator('query')
+    @classmethod
     def validate_query_not_empty(cls, v):
         if not v or not v.strip():
             raise ValueError('Query cannot be empty')

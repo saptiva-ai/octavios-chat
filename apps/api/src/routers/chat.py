@@ -12,7 +12,7 @@ import asyncio
 import os
 import time
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from uuid import uuid4
 
 import structlog
@@ -29,6 +29,7 @@ from ..core.telemetry import (
     increment_llm_timeout,  # OBS-1: New metric
 )
 from ..models.chat import ChatSession as ChatSessionModel, ChatMessage as ChatMessageModel, MessageRole
+from ..models.document import Document, DocumentStatus
 from ..schemas.chat import (
     ChatRequest,
     ChatResponse,
@@ -57,6 +58,96 @@ NO_STORE_HEADERS = {
     "Pragma": "no-cache",
     "Expires": "0",
 }
+
+
+async def _is_ready_and_cached(
+    file_id: str,
+    user_id: str,
+    redis_client
+) -> bool:
+    """Check if a document belongs to the user, is READY, and has cached text."""
+
+    if not file_id:
+        return False
+
+    try:
+        document = await Document.get(file_id)
+    except Exception as exc:
+        logger.warning(
+            "wait_ready_document_lookup_failed",
+            file_id=file_id,
+            error=str(exc)
+        )
+        return False
+
+    if not document or document.user_id != user_id:
+        return False
+
+    if document.status != DocumentStatus.READY:
+        return False
+
+    redis_key = f"doc:text:{file_id}"
+
+    try:
+        cached_value = await redis_client.get(redis_key)
+    except Exception as exc:
+        logger.warning(
+            "wait_ready_redis_lookup_failed",
+            file_id=file_id,
+            error=str(exc)
+        )
+        return False
+
+    return bool(cached_value)
+
+
+async def _wait_until_ready_and_cached(
+    file_ids: List[str],
+    user_id: str,
+    redis_client,
+    max_wait_ms: int = 1200,
+    step_ms: int = 150
+) -> None:
+    """Best-effort wait for documents to reach READY status and have cached text."""
+
+    if not file_ids:
+        return
+
+    unique_ids = [fid for fid in dict.fromkeys(file_ids) if fid]
+    if not unique_ids:
+        return
+
+    waited_ms = 0
+    missing: List[str] = unique_ids
+
+    while waited_ms <= max_wait_ms:
+        current_missing: List[str] = []
+
+        for fid in unique_ids:
+            ready = await _is_ready_and_cached(fid, user_id, redis_client)
+            if not ready:
+                current_missing.append(fid)
+
+        if not current_missing:
+            if waited_ms > 0:
+                logger.info(
+                    "wait_ready_completed",
+                    file_ids=unique_ids,
+                    waited_ms=waited_ms
+                )
+            return
+
+        await asyncio.sleep(step_ms / 1000)
+        waited_ms += step_ms
+        missing = current_missing
+
+    if missing:
+        logger.info(
+            "wait_ready_timeout",
+            missing_file_ids=missing,
+            waited_ms=waited_ms,
+            total_ids=len(unique_ids)
+        )
 
 
 def _build_chat_context(
@@ -143,11 +234,27 @@ async def send_chat_message(
         request_file_ids = (request.file_ids or []) + (request.document_ids or [])
         session_file_ids = chat_session.attached_file_ids or []
 
-        # Combine and deduplicate file IDs (prioritize request files, then session files)
-        all_file_ids = list(dict.fromkeys(request_file_ids + session_file_ids))
+        logger.info(
+            "chat_request_files",
+            incoming_file_ids=request.file_ids,
+            incoming_document_ids=request.document_ids,
+            session_attached=session_file_ids,
+        )
+
+        merged_file_ids = list(
+            dict.fromkeys(request_file_ids + session_file_ids)
+        )
+
+        logger.info("chat_files_merged", merged_file_ids=merged_file_ids)
+
+        await _wait_until_ready_and_cached(
+            merged_file_ids,
+            user_id=context.user_id,
+            redis_client=cache.client
+        )
 
         # Update context with merged file IDs
-        if all_file_ids:
+        if merged_file_ids:
             context = ChatContext(
                 user_id=context.user_id,
                 request_id=context.request_id,
@@ -156,7 +263,7 @@ async def send_chat_message(
                 session_id=context.session_id,
                 message=context.message,
                 context=context.context,
-                document_ids=all_file_ids,  # Merged document IDs
+                document_ids=merged_file_ids,  # Merged document IDs
                 model=context.model,
                 tools_enabled=context.tools_enabled,
                 stream=context.stream,
@@ -169,7 +276,7 @@ async def send_chat_message(
         if request_file_ids:
             new_file_ids = [fid for fid in request_file_ids if fid not in session_file_ids]
             if new_file_ids:
-                chat_session.attached_file_ids = all_file_ids
+                chat_session.attached_file_ids = merged_file_ids
                 chat_session.updated_at = datetime.utcnow()
                 await chat_session.save()
                 logger.info(
@@ -177,7 +284,7 @@ async def send_chat_message(
                     chat_id=context.chat_id,
                     session_id=chat_session.id,
                     new_file_ids=new_file_ids,
-                    total_attached_files=len(all_file_ids)
+                    total_attached_files=len(merged_file_ids)
                 )
 
         # 4. Add user message
