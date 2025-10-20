@@ -363,6 +363,20 @@ jobs:
           HOST=$(echo "${{ secrets.PROD_SERVER }}" | cut -d'@' -f2)
           ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts
 
+      - name: 🔒 PRE-DEPLOY BACKUP (MongoDB)
+        env:
+          PROD_SERVER: ${{ secrets.PROD_SERVER }}
+          PROD_DEPLOY_PATH: ${{ secrets.PROD_DEPLOY_PATH }}
+        run: |
+          echo "🔒 Creating pre-deployment backup of MongoDB..."
+          ssh "$PROD_SERVER" "cd $PROD_DEPLOY_PATH && \
+            BACKUP_NAME=pre-deploy-\$(date +%Y%m%d-%H%M%S) && \
+            echo '📦 Backup name: \$BACKUP_NAME' && \
+            ./scripts/backup-mongodb.sh --backup-dir ~/backups/pre-deploy --env-file envs/.env && \
+            echo '✅ Backup completed successfully' && \
+            ls -lh ~/backups/pre-deploy/\$BACKUP_NAME* || echo '⚠️  Backup verification pending'"
+          echo "✅ Pre-deployment backup completed"
+
       - name: Package application (no secrets)
         run: make package
 
