@@ -1,10 +1,10 @@
 """E2E tests for document upload and review SSE endpoints."""
 
+import pytest
 import asyncio
 import json
 from io import BytesIO
 
-import pytest
 import pytest_asyncio
 from datetime import datetime, timedelta
 from jose import jwt

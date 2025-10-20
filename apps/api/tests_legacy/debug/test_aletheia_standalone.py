@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Standalone test for Aletheia client metrics functionality
+Standalone test para métricas Aletheia (suite legacy).
 """
 
+import pytest
 import os
 import sys
 import asyncio

@@ -8,11 +8,35 @@ No existe "herencia" de adjuntos desde turnos previos.
 """
 
 import pytest
+import pytest_asyncio
 from unittest.mock import Mock, patch, AsyncMock
 from fastapi.testclient import TestClient
 
-# Will be imported from main app
-# from apps.api.main import app
+
+@pytest_asyncio.fixture(scope="function", autouse=True)
+async def initialize_db():
+    """Initialize database connection for tests.
+
+    This fixture ensures Beanie ODM is initialized before running tests.
+    """
+    from src.core.database import Database
+
+    try:
+        await Database.connect_to_mongo()
+    except Exception:
+        pass  # Already connected
+
+    yield
+
+    # Cleanup after tests
+    from src.models.chat import ChatSession, ChatMessage
+
+    try:
+        # Clean up test data
+        await ChatSession.find(ChatSession.user_id == "test-user").delete()
+        await ChatMessage.find(ChatMessage.chat_id == "test-chat").delete()
+    except Exception:
+        pass  # Best effort cleanup
 
 
 def fake_png_bytes(label: str) -> bytes:
@@ -32,9 +56,9 @@ async def test_second_image_replaces_first_in_message():
         4. Verify that segunda.png message has ONLY segunda.png, not primera
     """
     # This test validates the database layer directly
-    from apps.api.src.models.chat import ChatMessage, MessageRole, ChatSession
-    from apps.api.src.services.chat_service import ChatService
-    from apps.api.src.core.config import get_settings
+    from src.models.chat import ChatMessage, MessageRole, ChatSession
+    from src.services.chat_service import ChatService
+    from src.core.config import get_settings
 
     settings = get_settings()
     chat_service = ChatService(settings)
@@ -110,8 +134,8 @@ async def test_llm_serializer_includes_only_message_images():
 
     Validates no cross-message image inheritance.
     """
-    from apps.api.src.models.chat import ChatMessage, MessageRole
-    from apps.api.src.services.llm_message_serializer import serialize_message_for_llm
+    from src.models.chat import ChatMessage, MessageRole
+    from src.services.llm_message_serializer import serialize_message_for_llm
 
     # Message 1: with image
     msg_1 = ChatMessage(
@@ -130,7 +154,7 @@ async def test_llm_serializer_includes_only_message_images():
     )
 
     # Mock presign to return predictable URLs
-    with patch("apps.api.src.services.llm_message_serializer.presign_file_url") as mock_presign:
+    with patch("src.services.llm_message_serializer.presign_file_url") as mock_presign:
         mock_presign.side_effect = lambda fid, uid: f"https://example.com/{fid}.png"
 
         # Serialize first message
@@ -161,8 +185,8 @@ async def test_build_llm_messages_no_accumulation():
 
     Each message carries only its own file_ids, no accumulation across turns.
     """
-    from apps.api.src.models.chat import ChatMessage, MessageRole
-    from apps.api.src.services.llm_message_serializer import build_llm_messages_from_history
+    from src.models.chat import ChatMessage, MessageRole
+    from src.services.llm_message_serializer import build_llm_messages_from_history
 
     messages = [
         ChatMessage(
@@ -185,7 +209,7 @@ async def test_build_llm_messages_no_accumulation():
         ),
     ]
 
-    with patch("apps.api.src.services.llm_message_serializer.presign_file_url") as mock_presign:
+    with patch("src.services.llm_message_serializer.presign_file_url") as mock_presign:
         mock_presign.side_effect = lambda fid, uid: f"https://example.com/{fid}.png"
 
         llm_messages = await build_llm_messages_from_history(messages, "test-user")
