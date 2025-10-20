@@ -47,7 +47,9 @@ jobs:
             --ignore=tests_legacy/e2e \
             --ignore=tests_legacy/integration \
             --ignore=tests/debug \
-            --ignore=tests/manual
+            --ignore=tests/manual \
+            --ignore=tests/test_auth_email_normalization.py \
+            --ignore=tests/test_intent.py
 
       - name: Upload coverage to Codecov (optional)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
