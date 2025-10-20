@@ -12,8 +12,8 @@ from ..schemas.research import DeepResearchRequest, DeepResearchResponse
 from ..models.task import TaskStatus
 
 
-async def mock_auth_dispatch(request, call_next):
-    """Mock authentication middleware for testing."""
+async def mock_auth_dispatch(self, request, call_next):
+    """Mock authentication middleware dispatch for testing."""
     # Inject mock user into request state
     request.state.user_id = "test-user-123"
     request.state.authenticated = True
