@@ -208,7 +208,19 @@ class Settings(BaseSettings):
         description="Text extraction provider: 'third_party' (pypdf+pytesseract) or 'saptiva' (Saptiva Native Tools)",
         alias="EXTRACTOR_PROVIDER"
     )
-    
+
+    # PDF OCR Fallback Configuration (for image-only/scanned PDFs)
+    max_ocr_pages: int = Field(
+        default=30,
+        description="Maximum number of pages to OCR for image-only PDFs (controls cost/latency)",
+        alias="MAX_OCR_PAGES"
+    )
+    ocr_raster_dpi: int = Field(
+        default=180,
+        description="DPI for PDF rasterization before OCR (150-200 recommended, higher = better quality but slower)",
+        alias="OCR_RASTER_DPI"
+    )
+
     # Rate Limiting
     rate_limit_enabled: bool = Field(default=True, description="Enable rate limiting")
     rate_limit_calls: int = Field(default=100, description="Rate limit calls per period")
