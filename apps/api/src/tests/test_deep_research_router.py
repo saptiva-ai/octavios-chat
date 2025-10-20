@@ -12,6 +12,19 @@ from ..schemas.research import DeepResearchRequest, DeepResearchResponse
 from ..models.task import TaskStatus
 
 
+async def mock_auth_dispatch(request, call_next):
+    """Mock authentication middleware for testing."""
+    # Inject mock user into request state
+    request.state.user_id = "test-user-123"
+    request.state.authenticated = True
+    request.state.user_claims = {
+        "sub": "test-user-123",
+        "username": "test_user",
+        "email": "test@example.com"
+    }
+    return await call_next(request)
+
+
 @pytest.fixture
 def client():
     """Create a test client."""
@@ -74,10 +87,8 @@ class TestDeepResearchEndpoints:
         mock_aletheia.start_deep_research.return_value = MagicMock(status="accepted")
         mock_aletheia_client.return_value = mock_aletheia
 
-        # Mock authentication
-        with patch('apps.api.src.middleware.auth.verify_token') as mock_auth:
-            mock_auth.return_value = mock_auth_user
-
+        # Mock authentication middleware
+        with patch('apps.api.src.middleware.auth.AuthMiddleware.dispatch', new=mock_auth_dispatch):
             response = client.post(
                 "/api/deep-research",
                 json=valid_research_request,
@@ -105,9 +116,7 @@ class TestDeepResearchEndpoints:
             "research_type": "invalid_type"
         }
 
-        with patch('apps.api.src.middleware.auth.verify_token') as mock_auth:
-            mock_auth.return_value = mock_auth_user
-
+        with patch('apps.api.src.middleware.auth.AuthMiddleware.dispatch', new=mock_auth_dispatch):
             response = client.post(
                 "/api/deep-research",
                 json=invalid_request,
@@ -134,9 +143,7 @@ class TestDeepResearchEndpoints:
         mock_task.input_data = {"query": "test query", "stream": True}
         mock_task_model.get.return_value = mock_task
 
-        with patch('apps.api.src.middleware.auth.verify_token') as mock_auth:
-            mock_auth.return_value = mock_auth_user
-
+        with patch('apps.api.src.middleware.auth.AuthMiddleware.dispatch', new=mock_auth_dispatch):
             response = client.get(
                 "/api/deep-research/task-123",
                 headers={"Authorization": "Bearer test-token"}
@@ -158,9 +165,7 @@ class TestDeepResearchEndpoints:
         """Test research status for non-existent task."""
         mock_task_model.get.return_value = None
 
-        with patch('apps.api.src.middleware.auth.verify_token') as mock_auth:
-            mock_auth.return_value = mock_auth_user
-
+        with patch('apps.api.src.middleware.auth.AuthMiddleware.dispatch', new=mock_auth_dispatch):
             response = client.get(
                 "/api/deep-research/nonexistent-task",
                 headers={"Authorization": "Bearer test-token"}
@@ -187,9 +192,7 @@ class TestDeepResearchEndpoints:
 
         cancel_request = {"reason": "User cancelled"}
 
-        with patch('apps.api.src.middleware.auth.verify_token') as mock_auth:
-            mock_auth.return_value = mock_auth_user
-
+        with patch('apps.api.src.middleware.auth.AuthMiddleware.dispatch', new=mock_auth_dispatch):
             response = client.post(
                 "/api/deep-research/task-123/cancel",
                 json=cancel_request,
@@ -219,9 +222,7 @@ class TestDeepResearchEndpoints:
 
         cancel_request = {"reason": "User cancelled"}
 
-        with patch('apps.api.src.middleware.auth.verify_token') as mock_auth:
-            mock_auth.return_value = mock_auth_user
-
+        with patch('apps.api.src.middleware.auth.AuthMiddleware.dispatch', new=mock_auth_dispatch):
             response = client.post(
                 "/api/deep-research/task-123/cancel",
                 json=cancel_request,
