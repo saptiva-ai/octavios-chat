@@ -145,8 +145,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-        env:
-          REDIS_PASSWORD: test_password
 
     steps:
       - name: Checkout code
@@ -171,7 +169,6 @@ jobs:
           MONGODB_USER=copilotos_user
           MONGODB_PASSWORD=test_password
           MONGODB_DATABASE=copilotos
-          REDIS_PASSWORD=test_password
           JWT_SECRET_KEY=$(openssl rand -base64 64)
           SECRET_KEY=test-secret-key
           JWT_ACCESS_TOKEN_EXPIRE_MINUTES=60
