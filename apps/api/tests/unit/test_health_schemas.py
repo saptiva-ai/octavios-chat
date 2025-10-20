@@ -7,9 +7,9 @@ import pytest
 from datetime import datetime
 
 from src.schemas.health import (
-    HealthStatus,
     ServiceStatus,
-    HealthCheckResponse,
+    HealthStatus,
+    ServiceCheck,
     LivenessResponse,
     ReadinessResponse
 )
@@ -19,81 +19,66 @@ from src.schemas.health import (
 class TestHealthSchemas:
     """Test health check schema models"""
 
-    def test_service_status_creation(self):
-        """Test ServiceStatus model creation"""
-        service = ServiceStatus(
-            name="database",
-            status=HealthStatus.HEALTHY,
+    def test_service_status_enum_values(self):
+        """Test ServiceStatus enum has expected values"""
+        assert ServiceStatus.HEALTHY == "healthy"
+        assert ServiceStatus.DEGRADED == "degraded"
+        assert ServiceStatus.UNHEALTHY == "unhealthy"
+
+    def test_health_status_creation(self):
+        """Test HealthStatus model creation"""
+        now = datetime.utcnow()
+        health = HealthStatus(
+            status=ServiceStatus.HEALTHY,
+            timestamp=now,
+            version="1.0.0",
+            uptime_seconds=100.5,
+            checks={"database": {"status": "healthy"}}
+        )
+
+        assert health.status == ServiceStatus.HEALTHY
+        assert health.timestamp == now
+        assert health.version == "1.0.0"
+        assert health.uptime_seconds == 100.5
+        assert "database" in health.checks
+
+    def test_service_check_creation(self):
+        """Test ServiceCheck model creation"""
+        check = ServiceCheck(
+            status=ServiceStatus.HEALTHY,
             latency_ms=15.5,
-            message="Connection successful"
+            connected=True,
+            error="",
+            metadata={"host": "localhost"}
         )
 
-        assert service.name == "database"
-        assert service.status == HealthStatus.HEALTHY
-        assert service.latency_ms == 15.5
-        assert service.message == "Connection successful"
+        assert check.status == ServiceStatus.HEALTHY
+        assert check.latency_ms == 15.5
+        assert check.connected is True
+        assert check.error == ""
+        assert check.metadata["host"] == "localhost"
 
-    def test_service_status_optional_fields(self):
-        """Test ServiceStatus with optional fields"""
-        service = ServiceStatus(
-            name="redis",
-            status=HealthStatus.UNHEALTHY
+    def test_service_check_unhealthy(self):
+        """Test ServiceCheck for unhealthy service"""
+        check = ServiceCheck(
+            status=ServiceStatus.UNHEALTHY,
+            latency_ms=0.0,
+            connected=False,
+            error="Connection timeout"
         )
 
-        assert service.name == "redis"
-        assert service.status == HealthStatus.UNHEALTHY
-        assert service.latency_ms is None
-        assert service.message is None
-
-    def test_health_check_response_healthy(self):
-        """Test HealthCheckResponse for healthy system"""
-        service = ServiceStatus(
-            name="database",
-            status=HealthStatus.HEALTHY,
-            latency_ms=10.0
-        )
-
-        response = HealthCheckResponse(
-            status=HealthStatus.HEALTHY,
-            timestamp=datetime.utcnow(),
-            version="1.0.0",
-            uptime_seconds=3600.0,
-            services=[service]
-        )
-
-        assert response.status == HealthStatus.HEALTHY
-        assert isinstance(response.timestamp, datetime)
-        assert response.version == "1.0.0"
-        assert response.uptime_seconds == 3600.0
-        assert len(response.services) == 1
-        assert response.services[0].name == "database"
-
-    def test_health_check_response_degraded(self):
-        """Test HealthCheckResponse for degraded system"""
-        db_service = ServiceStatus(
-            name="database",
-            status=HealthStatus.HEALTHY
-        )
-        redis_service = ServiceStatus(
-            name="redis",
-            status=HealthStatus.UNHEALTHY,
-            message="Connection timeout"
-        )
-
-        response = HealthCheckResponse(
-            status=HealthStatus.DEGRADED,
-            timestamp=datetime.utcnow(),
-            version="1.0.0",
-            uptime_seconds=100.0,
-            services=[db_service, redis_service]
-        )
-
-        assert response.status == HealthStatus.DEGRADED
-        assert len(response.services) == 2
+        assert check.status == ServiceStatus.UNHEALTHY
+        assert check.connected is False
+        assert "timeout" in check.error.lower()
 
     def test_liveness_response(self):
         """Test LivenessResponse model"""
         response = LivenessResponse(status="alive")
+        assert response.status == "alive"
+
+    def test_liveness_response_default(self):
+        """Test LivenessResponse has default value"""
+        response = LivenessResponse()
         assert response.status == "alive"
 
     def test_readiness_response(self):
@@ -101,42 +86,82 @@ class TestHealthSchemas:
         response = ReadinessResponse(status="ready")
         assert response.status == "ready"
 
-    def test_health_status_enum_values(self):
-        """Test HealthStatus enum has expected values"""
-        assert hasattr(HealthStatus, 'HEALTHY')
-        assert hasattr(HealthStatus, 'UNHEALTHY')
-        assert hasattr(HealthStatus, 'DEGRADED')
+    def test_readiness_response_default(self):
+        """Test ReadinessResponse has default value"""
+        response = ReadinessResponse()
+        assert response.status == "ready"
 
-    def test_service_status_json_serialization(self):
-        """Test ServiceStatus can be serialized to JSON"""
-        service = ServiceStatus(
-            name="database",
-            status=HealthStatus.HEALTHY,
-            latency_ms=15.5,
-            message="OK"
+    def test_health_status_degraded(self):
+        """Test HealthStatus for degraded system"""
+        now = datetime.utcnow()
+        health = HealthStatus(
+            status=ServiceStatus.DEGRADED,
+            timestamp=now,
+            version="1.0.0",
+            uptime_seconds=50.0,
+            checks={
+                "database": {"status": "healthy"},
+                "redis": {"status": "unhealthy"}
+            }
         )
 
-        json_data = service.model_dump()
-        assert json_data["name"] == "database"
-        assert json_data["latency_ms"] == 15.5
+        assert health.status == ServiceStatus.DEGRADED
+        assert len(health.checks) == 2
 
-    def test_health_check_response_json_serialization(self):
-        """Test HealthCheckResponse can be serialized to JSON"""
-        service = ServiceStatus(
-            name="api",
-            status=HealthStatus.HEALTHY
+    def test_service_check_json_serialization(self):
+        """Test ServiceCheck can be serialized to JSON"""
+        check = ServiceCheck(
+            status=ServiceStatus.HEALTHY,
+            latency_ms=10.0,
+            connected=True
         )
 
-        response = HealthCheckResponse(
-            status=HealthStatus.HEALTHY,
-            timestamp=datetime.utcnow(),
+        json_data = check.model_dump()
+        assert json_data["status"] == "healthy"
+        assert json_data["latency_ms"] == 10.0
+        assert json_data["connected"] is True
+
+    def test_health_status_json_serialization(self):
+        """Test HealthStatus can be serialized to JSON"""
+        now = datetime.utcnow()
+        health = HealthStatus(
+            status=ServiceStatus.HEALTHY,
+            timestamp=now,
             version="1.0.0",
             uptime_seconds=100.0,
-            services=[service]
+            checks={"api": {"status": "healthy"}}
         )
 
-        json_data = response.model_dump()
-        assert json_data["status"] == HealthStatus.HEALTHY
+        json_data = health.model_dump()
+        assert json_data["status"] == "healthy"
         assert "timestamp" in json_data
         assert json_data["version"] == "1.0.0"
-        assert len(json_data["services"]) == 1
+        assert len(json_data["checks"]) == 1
+
+    def test_service_check_metadata_optional(self):
+        """Test ServiceCheck metadata is optional"""
+        check = ServiceCheck(
+            status=ServiceStatus.HEALTHY,
+            latency_ms=5.0,
+            connected=True
+        )
+
+        assert check.metadata == {}
+
+    def test_health_status_with_multiple_checks(self):
+        """Test HealthStatus with multiple service checks"""
+        now = datetime.utcnow()
+        health = HealthStatus(
+            status=ServiceStatus.HEALTHY,
+            timestamp=now,
+            version="1.0.0",
+            uptime_seconds=200.0,
+            checks={
+                "database": {"status": "healthy", "latency_ms": 5.0},
+                "redis": {"status": "healthy", "latency_ms": 2.0},
+                "api": {"status": "healthy", "latency_ms": 1.0}
+            }
+        )
+
+        assert len(health.checks) == 3
+        assert all(check["status"] == "healthy" for check in health.checks.values())

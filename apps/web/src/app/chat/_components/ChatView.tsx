@@ -393,10 +393,9 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
       // BUG FIX: Always collect file metadata when files are present,
       // regardless of toggle state. The toggle only controls backend processing.
       let fileIds: string[] | undefined;
+      let readyFiles: typeof filesV1Attachments = [];
       if (filesV1Attachments.length > 0) {
-        const readyFiles = filesV1Attachments.filter(
-          (a) => a.status === "READY",
-        );
+        readyFiles = filesV1Attachments.filter((a) => a.status === "READY");
 
         if (readyFiles.length > 0) {
           fileIds = readyFiles.map((a) => a.file_id);
@@ -702,7 +701,7 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
         (a) => a.status !== "READY",
       );
       if (pendingAttachments.length > 0) {
-        toast.info(
+        toast(
           `⏳ Procesando ${pendingAttachments.length} archivo${
             pendingAttachments.length === 1 ? "" : "s"
           }… Intenta de nuevo en unos segundos.`,
