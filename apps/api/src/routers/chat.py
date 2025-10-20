@@ -279,10 +279,24 @@ async def send_chat_message(
             metadata_keys=list(request.metadata.keys()) if request.metadata else []
         )
 
+        # BUILD METADATA: Include normalized request_file_ids
+        # This ensures the ChatMessage stores the correct file_ids
+        user_message_metadata = request.metadata.copy() if request.metadata else {}
+
+        # CRITICAL FIX: Add normalized file_ids to metadata
+        # The chat service expects file_ids inside metadata.get("file_ids")
+        if request_file_ids:
+            user_message_metadata["file_ids"] = request_file_ids
+            logger.info(
+                "Added normalized file_ids to user message metadata",
+                file_ids=request_file_ids,
+                file_ids_count=len(request_file_ids)
+            )
+
         user_message = await chat_service.add_user_message(
             chat_session=chat_session,
             content=context.message,
-            metadata=request.metadata if request.metadata else None
+            metadata=user_message_metadata if user_message_metadata else None
         )
 
         # DEBUG: Log what was saved

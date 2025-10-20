@@ -20,7 +20,7 @@ from src.services.document_extraction import extract_text_from_file
 
 
 # Real scanned PDF path (2.3MB, image-only pages)
-TEST_PDF_PATH = Path("/home/jazielflo/Proyects/copilotos-bridge/tests/data/pdf/HPE.pdf")
+TEST_PDF_PATH = Path("/tmp/HPE.pdf")
 
 
 @pytest.mark.asyncio

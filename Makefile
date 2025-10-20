@@ -9,8 +9,8 @@
         debug-containers debug-api debug-models \
         debug-file-sync debug-endpoints debug-logs-errors debug-network debug-full \
         troubleshoot resources resources-monitor docker-cleanup docker-cleanup-aggressive \
-        test-sh lint-sh fix-sh audit-tests \
-        obs-up obs-down obs-logs obs-restart obs-status obs-clean
+        test-sh lint-sh fix-sh audit-tests test-integration test-unit-host \
+        obs-up obs-down obs-logs obs-restart obs-status obs-clean venv-install
 
 # ============================================================================
 # CONFIGURATION
@@ -125,9 +125,11 @@ help:
 	@echo "▸ Testing"
 	@echo "  make test                 Run tests within containers"
 	@echo "  make test-all             Full backend + frontend test suite"
-	@echo "  make test-api             API unit tests"
-	@echo "  make test-web             Web unit tests"
-	@echo "  make test-e2e             Playwright end-to-end tests"
+	@echo "  make test-api             API unit tests (in Docker)"
+	@echo "  make test-web             Web unit tests (in Docker)"
+	@echo "  make test-e2e             Playwright end-to-end tests (.venv)"
+	@echo "  make test-integration     API integration tests (.venv + host)"
+	@echo "  make test-unit-host       API unit tests (.venv + host)"
 	@echo "  make health               Service health check"
 	@echo ""
 	@echo "▸ Code Quality"
@@ -199,10 +201,10 @@ help:
 	@echo "  $(YELLOW)make deploy-history$(NC)       Show deployment history and versions"
 	@echo ""
 	@echo "$(BLUE)Deployment Features:$(NC)"
-	@echo "  ✔ Automatic versioning (git SHA + timestamp)"
-	@echo "  ✔ Pre-deployment backup"
-	@echo "  ✔ Health check validation"
-	@echo "  ✔ Auto-rollback on failure"
+	@echo "  Automatic versioning (git SHA + timestamp)"
+	@echo "  Pre-deployment backup"
+	@echo "  Health check validation"
+	@echo "  Auto-rollback on failure"
 	@echo ""
 	@echo "$(GREEN) ▸ Registry Workflow (Advanced):$(NC)"
 	@echo "  $(YELLOW)make push-registry$(NC)        Push images to Docker registry"
@@ -324,7 +326,7 @@ dev: ensure-env
 	@$(DOCKER_COMPOSE_DEV) up -d
 	@echo ""
 	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo "$(GREEN)✓ Services started$(NC)"
+	@echo "$(GREEN)  Services started$(NC)"
 	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
 	@echo "  $(BLUE) Frontend:$(NC) $(YELLOW)http://localhost:3000$(NC)"
@@ -349,8 +351,8 @@ rebuild-api: ensure-env
 	@$(DOCKER_COMPOSE_DEV) build --no-cache api
 	@$(DOCKER_COMPOSE_DEV) down api
 	@$(DOCKER_COMPOSE_DEV) up -d api
-	@echo "$(GREEN) ✓ API container rebuilt and restarted$(NC)"
-	@echo "$(BLUE) ℹ  Container recreated with fresh code and env vars$(NC)"
+	@echo "$(GREEN) API container rebuilt and restarted$(NC)"
+	@echo "$(BLUE)  Container recreated with fresh code and env vars$(NC)"
 
 ## Rebuild web container without cache
 rebuild-web: ensure-env
@@ -358,8 +360,8 @@ rebuild-web: ensure-env
 	@$(DOCKER_COMPOSE_DEV) build --no-cache web
 	@$(DOCKER_COMPOSE_DEV) down web
 	@$(DOCKER_COMPOSE_DEV) up -d web
-	@echo "$(GREEN) ✓ Web container rebuilt and restarted$(NC)"
-	@echo "$(BLUE) ℹ  Container recreated with fresh code and env vars$(NC)"
+	@echo "$(GREEN) Web container rebuilt and restarted$(NC)"
+	@echo "$(BLUE)  Container recreated with fresh code and env vars$(NC)"
 
 ## Rebuild all containers without cache
 rebuild-all: ensure-env
@@ -367,8 +369,8 @@ rebuild-all: ensure-env
 	@$(DOCKER_COMPOSE_DEV) build --no-cache
 	@$(DOCKER_COMPOSE_DEV) down
 	@$(DOCKER_COMPOSE_DEV) up -d
-	@echo "$(GREEN) ✓ All containers rebuilt and restarted$(NC)"
-	@echo "$(BLUE) ℹ  All containers recreated with fresh code and env vars$(NC)"
+	@echo "$(GREEN)   All containers rebuilt and restarted$(NC)"
+	@echo "$(BLUE)    All containers recreated with fresh code and env vars$(NC)"
 
 ## Clean Next.js cache and volumes
 ## Removes both host .next directory and Docker anonymous volumes
@@ -385,11 +387,11 @@ clean-cache: stop
 	@rm -rf apps/web/.next 2>/dev/null || true
 	@docker volume rm $(PROJECT_NAME)_next_cache $(PROJECT_NAME)_next_standalone_cache $(PROJECT_NAME)_web-next-cache 2>/dev/null || true
 	@docker volume rm $(PROJECT_NAME)_mongodb_data $(PROJECT_NAME)_mongodb_config $(PROJECT_NAME)_redis_data 2>/dev/null || echo "$(YELLOW) Database volumes not removed (use 'make clean-all' to remove them)$(NC)"
-	@echo "$(GREEN) ✓ Cache cleaned$(NC)"
+	@echo "$(GREEN) Cache cleaned$(NC)"
 
 ## Nuclear option: clean everything including database
 clean-all: stop
-	@echo "$(RED) ▲ WARNING: This will delete ALL data including database!$(NC)"
+	@echo "$(RED)  WARNING: This will delete ALL data including database!$(NC)"
 	@read -p "Are you sure? [y/N] " -n 1 -r; \
 	echo; \
 	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
@@ -397,14 +399,14 @@ clean-all: stop
 		rm -rf apps/web/.next 2>/dev/null || true; \
 		$(DOCKER_COMPOSE_DEV) down -v --remove-orphans; \
 		docker volume prune -f; \
-		echo "$(GREEN) ✓ Everything cleaned$(NC)"; \
+		echo "$(GREEN) Everything cleaned$(NC)"; \
 	else \
 		echo "$(YELLOW) Cancelled$(NC)"; \
 	fi
 
 ## Fresh start: clean and rebuild
 fresh: clean-next dev
-	@echo "$(GREEN) ✓ Fresh start completed!$(NC)"
+	@echo "$(GREEN) Fresh start completed!$(NC)"
 
 ## Clean development environment (removes volumes and cache)
 # REMOVED: dev-clean - Use 'make fresh' instead for full clean rebuild
@@ -426,19 +428,19 @@ verify-deps-fix:
 
 ## Stop all services (dev compose)
 stop:
-	@echo "$(YELLOW)Stopping services...$(NC)"
+	@echo "$(YELLOW) Stopping services...$(NC)"
 	@$(DOCKER_COMPOSE_DEV) down
-	@echo "$(GREEN) ✓ Services stopped$(NC)"
+	@echo "$(GREEN) Services stopped$(NC)"
 
 ## Stop ALL project containers (including base compose)
 stop-all:
-	@echo "$(YELLOW)Stopping ALL project containers...$(NC)"
+	@echo "$(YELLOW) Stopping ALL project containers...$(NC)"
 	@cd infra && docker compose down --remove-orphans 2>/dev/null || true
 	@$(DOCKER_COMPOSE_DEV) down --remove-orphans
-	@echo "$(GREEN) ✓ All project containers stopped$(NC)"
+	@echo "$(GREEN) All project containers stopped$(NC)"
 
 ## Restart all services (recreates containers to reload env vars)
-# ▲  IMPORTANT: This uses 'down' + 'up' instead of 'restart' because
+#    IMPORTANT: This uses 'down' + 'up' instead of 'restart' because
 #    'docker compose restart' does NOT reload environment variables from .env
 #    Use this command after:
 #    • Updating credentials in .env
@@ -448,8 +450,8 @@ restart:
 	@echo "$(YELLOW)Restarting services (recreating containers to reload env vars)...$(NC)"
 	@$(DOCKER_COMPOSE_DEV) down
 	@$(DOCKER_COMPOSE_DEV) up -d
-	@echo "$(GREEN) ✓ Services restarted$(NC)"
-	@echo "$(YELLOW)▸ Waiting for services to be ready...$(NC)"
+	@echo "$(GREEN) Services restarted$(NC)"
+	@echo "$(YELLOW) Waiting for services to be ready...$(NC)"
 	@sleep 3
 	@if curl -sf http://localhost:8001/api/health > /dev/null 2>&1; then \
 		echo "$(GREEN) API is healthy!$(NC)"; \
@@ -489,26 +491,26 @@ health:
 	@echo ""
 	@printf "  $(YELLOW) API Health:$(NC)        "
 	@curl -sf http://localhost:8001/api/health > /dev/null 2>&1 && \
-		echo "$(GREEN) ✓ Healthy$(NC)" || \
-		echo "$(RED) ✖ Not responding$(NC)"
-	@printf "  $(YELLOW)Frontend:$(NC)          "
+		echo "$(GREEN) Healthy$(NC)" || \
+		echo "$(RED) Not responding$(NC)"
+	@printf "  $(YELLOW) Frontend:$(NC)          "
 	@curl -sf http://localhost:3000/healthz > /dev/null 2>&1 && \
-		echo "$(GREEN) ✓ Healthy$(NC)" || \
-		echo "$(RED) ✖ Not responding$(NC)"
+		echo "$(GREEN) Healthy$(NC)" || \
+		echo "$(RED) Not responding$(NC)"
 	@printf "  $(YELLOW) MongoDB:$(NC)           "
 	@$(DOCKER_COMPOSE_DEV) exec -T mongodb mongosh --eval "db.runCommand('ping')" > /dev/null 2>&1 && \
-		echo "$(GREEN) ✓ Connected$(NC)" || \
-		echo "$(RED) ✖ Not connected$(NC)"
+		echo "$(GREEN) Connected$(NC)" || \
+		echo "$(RED) Not connected$(NC)"
 	@printf "  $(YELLOW) Redis:$(NC)             "
 	@$(DOCKER_COMPOSE_DEV) exec -T redis redis-cli ping > /dev/null 2>&1 && \
-		echo "$(GREEN) ✓ Connected$(NC)" || \
-		echo "$(RED) ✖ Not connected$(NC)"
+		echo "$(GREEN) Connected$(NC)" || \
+		echo "$(RED) Not connected$(NC)"
 	@echo ""
 
 ## Full verification (setup + health + auth)
 verify: health
 	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo "$(BLUE)Verification Tests$(NC)"
+	@echo "$(BLUE) Verification Tests$(NC)"
 	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
 	@bash scripts/verify-deployment.sh 2>/dev/null || echo "$(YELLOW) Run 'bash scripts/verify-deployment.sh' for full verification$(NC)"
@@ -531,8 +533,8 @@ create-demo-user:
 		-H "Content-Type: application/json" \
 		-d '{"username":"demo","email":"demo@example.com","password":"Demo1234"}' \
 		2>/dev/null | grep -q "access_token" && \
-		echo "$(GREEN) ✓ Demo user created successfully!$(NC)" || \
-		(echo "$(YELLOW) ▲ User may already exist. Try 'make delete-demo-user' first$(NC)" && exit 1)
+		echo "$(GREEN) Demo user created successfully!$(NC)" || \
+		(echo "$(YELLOW) User may already exist. Try 'make delete-demo-user' first$(NC)" && exit 1)
 	@echo ""
 	@echo "$(GREEN) You can now login at:$(NC) $(BLUE)http://localhost:3000/login$(NC)"
 
@@ -766,8 +768,8 @@ redis-monitor:
 #                recreate containers or reload environment variables from .env
 #
 #    SOLUTION: Always use 'down' + 'up' to reload credentials:
-#              ✔ CORRECT:   docker compose down api && docker compose up -d api
-#              ✖ WRONG:     docker compose restart api
+#              CORRECT:   docker compose down api && docker compose up -d api
+#              WRONG:     docker compose restart api
 #
 #    IMPACT: This caused Redis authentication errors (WRONGPASS), MongoDB auth
 #            failures, and led developers to incorrectly delete volumes thinking
@@ -832,7 +834,7 @@ generate-credentials:
 	@echo "$(GREEN)JWT Secret Key (64 characters):$(NC)"
 	@openssl rand -base64 64 | tr -d '\n' && echo ""
 	@echo ""
-	@echo "$(YELLOW)◆ Usage:$(NC)"
+	@echo "$(YELLOW) Usage:$(NC)"
 	@echo "  1. Copy the generated passwords above"
 	@echo "  2. Update your envs/.env or envs/.env.prod file:"
 	@echo "     MONGODB_PASSWORD=<32-char-password>"
@@ -869,9 +871,9 @@ rotate-mongo-password:
 	chmod +x scripts/rotate-mongo-credentials.sh && \
 	./scripts/rotate-mongo-credentials.sh "$$OLD_PASS" "$$NEW_PASS" && \
 	echo "" && \
-	echo "$(GREEN)✔ MongoDB password rotated!$(NC)" && \
+	echo "$(GREEN) MongoDB password rotated!$(NC)" && \
 	echo "" && \
-	echo "$(YELLOW)◆ Next steps:$(NC)" && \
+	echo "$(YELLOW) Next steps:$(NC)" && \
 	echo "  1. Update $(DEV_ENV_FILE):" && \
 	echo "     MONGODB_PASSWORD=$$NEW_PASS" && \
 	echo "  2. Recreate containers (REQUIRED to reload credentials):" && \
@@ -884,7 +886,7 @@ rotate-mongo-password:
 ## Rotate Redis password safely (WITHOUT data loss)
 rotate-redis-password:
 	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo "$(BLUE)▸ Redis Password Rotation$(NC)"
+	@echo "$(BLUE) Redis Password Rotation$(NC)"
 	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
 	@if ! docker ps | grep -q "$(PROJECT_NAME)-redis"; then \
@@ -902,9 +904,9 @@ rotate-redis-password:
 	chmod +x scripts/rotate-redis-credentials.sh && \
 	./scripts/rotate-redis-credentials.sh "$$NEW_PASS" && \
 	echo "" && \
-	echo "$(GREEN)✔ Redis password rotated!$(NC)" && \
+	echo "$(GREEN) Redis password rotated!$(NC)" && \
 	echo "" && \
-	echo "$(YELLOW)◆ Next steps:$(NC)" && \
+	echo "$(YELLOW) Next steps:$(NC)" && \
 	echo "  1. Update $(DEV_ENV_FILE):" && \
 	echo "     REDIS_PASSWORD=$$NEW_PASS" && \
 	echo "  2. Recreate containers (REQUIRED to reload credentials):" && \
@@ -928,7 +930,7 @@ validate-production:
 ## Complete environment reset (▲ DELETES ALL DATA)
 reset:
 	@echo "$(RED)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo "$(RED)  ▲  COMPLETE ENVIRONMENT RESET$(NC)"
+	@echo "$(RED)           COMPLETE ENVIRONMENT RESET$(NC)"
 	@echo "$(RED)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
 	@echo "$(YELLOW)This will:$(NC)"
@@ -997,14 +999,14 @@ reset:
 	fi; \
 	echo ""; \
 	echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"; \
-	echo "$(GREEN)✔ Environment reset completed!$(NC)"; \
+	echo "$(GREEN) Environment reset completed!$(NC)"; \
 	echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"; \
 	echo ""; \
-	echo "$(YELLOW)◆ Next steps:$(NC)"; \
+	echo "$(YELLOW) Next steps:$(NC)"; \
 	echo "  1. Run: $(GREEN)make create-demo-user$(NC)"; \
 	echo "  2. Visit: $(BLUE)http://localhost:3000$(NC)"; \
 	echo ""; \
-	echo "$(YELLOW)◆ New credentials have been saved to $(DEV_ENV_FILE)$(NC)"; \
+	echo "$(YELLOW) New credentials have been saved to $(DEV_ENV_FILE)$(NC)"; \
 	echo ""
 
 # ============================================================================
@@ -1051,13 +1053,13 @@ debug-api:
 	@echo "$(BLUE)API Container Debug$(NC)"
 	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@echo "$(YELLOW)Volume Mounts:$(NC)"
+	@echo "$(YELLOW) Volume Mounts:$(NC)"
 	@docker inspect $(PROJECT_NAME)-api --format='{{range .Mounts}}{{.Source}} -> {{.Destination}} ({{.Type}}){{"\n"}}{{end}}'
 	@echo ""
-	@echo "$(YELLOW)Environment Variables (filtered):$(NC)"
+	@echo "$(YELLOW) Environment Variables (filtered):$(NC)"
 	@docker exec $(PROJECT_NAME)-api env | grep -E "MONGODB|REDIS|SAPTIVA|JWT|DEBUG|LOG_LEVEL" | sort
 	@echo ""
-	@echo "$(YELLOW)Python Version:$(NC)"
+	@echo "$(YELLOW) Python Version:$(NC)"
 	@docker exec $(PROJECT_NAME)-api python3 --version
 	@echo ""
 	@echo "$(YELLOW)Installed Packages:$(NC)"
@@ -1172,7 +1174,7 @@ debug-network:
 debug-full: debug-containers debug-api debug-models debug-file-sync debug-network debug-endpoints
 	@echo ""
 	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo "$(GREEN)✓ Full diagnostic completed$(NC)"
+	@echo "$(GREEN) Full diagnostic completed$(NC)"
 	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
 
@@ -1221,7 +1223,7 @@ troubleshoot:
 
 ## Run all tests
 test: test-api test-web test-sh
-	@echo "$(GREEN)✓ All tests completed$(NC)"
+	@echo "$(GREEN) All tests completed$(NC)"
 
 ## Run complete test suite (backend + frontend) with detailed output
 test-all:
@@ -1249,11 +1251,28 @@ test-e2e: venv-install
 	@echo "$(YELLOW)Running E2E tests...$(NC)"
 	@pnpm exec playwright test
 
+## Run API integration tests (from host with .venv)
+test-integration: venv-install
+	@echo "$(YELLOW)Running API integration tests from host...$(NC)"
+	@if [ ! -d "$(VENV_DIR)" ]; then \
+		echo "$(RED)Error: Virtual environment not found$(NC)"; \
+		echo "$(YELLOW)Run 'make venv-install' first$(NC)"; \
+		exit 1; \
+	fi
+	@cd apps/api && $(PYTHON) -m pytest tests/integration/ -v --tb=short
+	@echo "$(GREEN) Integration tests completed$(NC)"
+
+## Run API unit tests (from host with .venv)
+test-unit-host: venv-install
+	@echo "$(YELLOW)Running API unit tests from host...$(NC)"
+	@cd apps/api && $(PYTHON) -m pytest tests/test_*.py tests/unit/ -v --tb=short
+	@echo "$(GREEN) Unit tests completed$(NC)"
+
 ## Run API tests with coverage report
 test-api-coverage:
 	@echo "$(YELLOW)Running API tests with coverage...$(NC)"
 	@$(DOCKER_COMPOSE_DEV) exec api pytest tests/ -v --cov=src --cov-report=html --cov-report=term-missing
-	@echo "$(GREEN)✓ Coverage report generated at: apps/api/htmlcov/index.html$(NC)"
+	@echo "$(GREEN) Coverage report generated at: apps/api/htmlcov/index.html$(NC)"
 
 ## Run specific API test file
 test-api-file:
@@ -1440,7 +1459,7 @@ push-registry-fast:
 deploy-prod: push-registry
 	@echo ""
 	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo "$(GREEN)✔ Images pushed to registry!$(NC)"
+	@echo "$(GREEN) Images pushed to registry!$(NC)"
 	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
 	@if [ "$(PROD_SERVER_HOST)" = "your-ssh-user@your-server-ip-here" ]; then \
@@ -1492,10 +1511,10 @@ deploy-history:
 ## Check production server status
 deploy-status:
 	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo "$(BLUE)▸ Production Server Status$(NC)"
+	@echo "$(BLUE) Production Server Status$(NC)"
 	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@if [ -z "$(PROD_SERVER_HOST)" ]; then \
-		echo "$(RED)▲ ERROR: Production server not configured!$(NC)"; \
+		echo "$(RED) ERROR: Production server not configured!$(NC)"; \
 		echo "Run: $(GREEN)make setup-interactive-prod$(NC)"; \
 		exit 1; \
 	fi
