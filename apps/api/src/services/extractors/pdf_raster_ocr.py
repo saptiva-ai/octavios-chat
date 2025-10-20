@@ -124,9 +124,10 @@ async def raster_pdf_then_ocr_pages(pdf_bytes: bytes) -> List[PageContent]:
             # Convert to PIL Image
             img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
 
-            # Convert to PNG bytes
+            # Convert to JPEG bytes with compression (much smaller than PNG)
+            # JPEG at 85% quality is ~5-10x smaller than PNG while maintaining OCR accuracy
             img_buffer = BytesIO()
-            img.save(img_buffer, format="PNG")
+            img.save(img_buffer, format="JPEG", quality=85, optimize=True)
             png_bytes = img_buffer.getvalue()
 
             logger.debug(
@@ -134,7 +135,7 @@ async def raster_pdf_then_ocr_pages(pdf_bytes: bytes) -> List[PageContent]:
                 page=page_idx + 1,
                 width=pix.width,
                 height=pix.height,
-                png_size_kb=len(png_bytes) // 1024,
+                jpeg_size_kb=len(png_bytes) // 1024,
             )
 
             # OCR with retries
@@ -144,8 +145,8 @@ async def raster_pdf_then_ocr_pages(pdf_bytes: bytes) -> List[PageContent]:
                     extracted_text = await ocr_extractor.extract_text(
                         media_type="image",
                         data=png_bytes,
-                        mime="image/png",
-                        filename=f"page_{page_idx + 1}.png",
+                        mime="image/jpeg",
+                        filename=f"page_{page_idx + 1}.jpg",
                     )
                     break  # Success
 
@@ -241,3 +242,113 @@ async def raster_pdf_then_ocr_pages(pdf_bytes: bytes) -> List[PageContent]:
     )
 
     return pages
+
+
+async def raster_single_page_and_ocr(
+    doc: fitz.Document,
+    page_idx: int,
+    dpi: int = 180
+) -> str:
+    """
+    Rasterize a single PDF page and extract text via OCR.
+
+    This function is used by hybrid extraction when pypdf yields insufficient text
+    for a specific page in an otherwise searchable PDF.
+
+    Args:
+        doc: Opened PyMuPDF document (fitz.Document)
+        page_idx: Zero-based page index to process
+        dpi: Rasterization DPI (default: 180)
+
+    Returns:
+        Extracted text from OCR, or error message if all retries fail
+
+    Example:
+        >>> doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        >>> text = await raster_single_page_and_ocr(doc, page_idx=5)
+        >>> print(f"OCR text: {text[:100]}...")
+    """
+    page_start_time = time.time()
+    ocr_extractor = SaptivaExtractor()
+
+    try:
+        # Load and rasterize page
+        page = doc.load_page(page_idx)
+        pix = page.get_pixmap(dpi=dpi)
+
+        # Convert to PIL Image
+        img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+
+        # Convert to JPEG bytes with compression (much smaller than PNG)
+        # JPEG at 85% quality is ~5-10x smaller than PNG while maintaining OCR accuracy
+        img_buffer = BytesIO()
+        img.save(img_buffer, format="JPEG", quality=85, optimize=True)
+        png_bytes = img_buffer.getvalue()
+
+        logger.debug(
+            "Single page rasterized for OCR",
+            page=page_idx + 1,
+            width=pix.width,
+            height=pix.height,
+            jpeg_size_kb=len(png_bytes) // 1024,
+        )
+
+        # OCR with retries
+        extracted_text = ""
+        for attempt in range(3):
+            try:
+                extracted_text = await ocr_extractor.extract_text(
+                    media_type="image",
+                    data=png_bytes,
+                    mime="image/jpeg",
+                    filename=f"page_{page_idx + 1}.jpg",
+                )
+                break  # Success
+
+            except Exception as exc:
+                if attempt == 2:  # Last attempt failed
+                    logger.error(
+                        "Single page OCR failed after 3 attempts",
+                        page=page_idx + 1,
+                        error=str(exc),
+                        error_type=type(exc).__name__,
+                    )
+                    extracted_text = f"[Página {page_idx + 1} - OCR fallido: {type(exc).__name__}]"
+                else:
+                    # Retry with exponential backoff
+                    delay = 0.7 * (attempt + 1)
+                    logger.warning(
+                        "Single page OCR attempt failed, retrying",
+                        page=page_idx + 1,
+                        attempt=attempt + 1,
+                        retry_in_seconds=delay,
+                        error=str(exc),
+                    )
+                    await asyncio.sleep(delay)
+
+        # Clean up text
+        final_text = (extracted_text or "").strip()
+        if not final_text:
+            final_text = f"[Página {page_idx + 1} sin texto detectable]"
+
+        # Log metrics
+        page_duration = time.time() - page_start_time
+        logger.info(
+            "Single page OCR completed",
+            page=page_idx + 1,
+            text_length=len(final_text),
+            duration_seconds=round(page_duration, 2),
+            chars_per_second=int(len(final_text) / page_duration) if page_duration > 0 else 0,
+        )
+
+        return final_text
+
+    except Exception as exc:
+        logger.error(
+            "Unexpected error processing single page OCR",
+            page=page_idx + 1,
+            error=str(exc),
+            error_type=type(exc).__name__,
+            exc_info=True,
+        )
+        return f"[Error procesando página {page_idx + 1}: {type(exc).__name__}]"
