@@ -21,7 +21,7 @@ def _ensure_saptiva_env() -> bool:
         return False
     return True
 
-from services.saptiva_client import SaptivaClient, get_saptiva_client
+from src.services.saptiva_client import SaptivaClient, get_saptiva_client
 
 
 async def test_saptiva_client():
