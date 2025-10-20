@@ -486,14 +486,12 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
               ? undefined
               : currentChatId || undefined;
 
-            // DEBUG: Log what we're sending to backend
-            logDebug("[ChatView] Sending to backend", {
-              metadata: userMessageMetadata,
-              file_ids: fileIdsForBackend,
-              hasMetadata: !!userMessageMetadata,
-              metadataKeys: userMessageMetadata
-                ? Object.keys(userMessageMetadata)
-                : [],
+            // OBS-1: Log payload before sending to backend
+            logDebug("[ChatView] payload_outbound", {
+              text_len: msg.length,
+              file_ids: fileIdsForBackend || [],
+              nonce: placeholderId.slice(-8),
+              metadata_present: !!userMessageMetadata,
             });
 
             const response = await apiClient.sendChatMessage({
@@ -505,7 +503,7 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
               stream: false,
               tools_enabled: toolsEnabled,
               document_ids: documentIds.length > 0 ? documentIds : undefined,
-              // BUG FIX: Use fileIdsForBackend (respects toggle) instead of fileIds
+              // POLÍTICA: file_ids solo del turno actual (no herencia)
               file_ids:
                 fileIdsForBackend && fileIdsForBackend.length > 0
                   ? fileIdsForBackend
@@ -514,12 +512,14 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
               metadata: userMessageMetadata,
             });
 
-            if (readyFiles.length > 0) {
+            // POLÍTICA: Limpieza absoluta de attachments post-envío
+            // No heredar adjuntos entre turnos
+            if (filesV1Attachments.length > 0) {
               clearFilesV1Attachments();
               logDebug(
-                "[ChatView] Cleared file attachments after successful send",
+                "[ChatView] Attachments cleared post-send (no inheritance)",
                 {
-                  count: readyFiles.length,
+                  cleared_count: filesV1Attachments.length,
                 },
               );
             }
