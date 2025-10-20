@@ -245,7 +245,6 @@ describe("auth-store state transitions", () => {
           username: "newuser",
           email: "new@example.com",
           password: "SecurePass123!",
-          name: "New User",
         });
         expect(success).toBe(true);
       });
@@ -277,7 +276,6 @@ describe("auth-store state transitions", () => {
           username: "existinguser",
           email: "existing@example.com",
           password: "Pass123!",
-          name: "Existing User",
         });
         expect(success).toBe(false);
       });
