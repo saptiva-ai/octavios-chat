@@ -230,28 +230,48 @@ async def send_chat_message(
         # Update context with resolved session
         context = context.with_session(chat_session.id)
 
-        # POLÍTICA DE ADJUNTOS: Un mensaje guarda exactamente los adjuntos enviados en su payload.
-        # No existe "herencia" de adjuntos desde turnos previos.
-        # Cada turno usa SOLO sus propios file_ids.
+        # FILE CONTEXT PERSISTENCE: Merge request file_ids with session's attached_file_ids
+        # This enables multi-turn conversations with documents without re-uploading
         request_file_ids = list((request.file_ids or []) + (request.document_ids or []))
+        session_file_ids = getattr(chat_session, 'attached_file_ids', []) or []
+
+        # Merge and deduplicate: request files + existing session files
+        # Use dict.fromkeys() to preserve order while removing duplicates
+        all_file_ids = list(dict.fromkeys(request_file_ids + session_file_ids))
 
         # OBS-2: Log post-normalización en backend
         logger.info(
             "message_normalized",
             text_len=len(request.message or ""),
-            file_ids_count=len(request_file_ids),
-            file_ids=request_file_ids,
+            file_ids_count=len(all_file_ids),
+            file_ids=all_file_ids,
+            request_file_ids=request_file_ids,
+            session_file_ids=session_file_ids,
             nonce=context.request_id[:8]
         )
 
         await _wait_until_ready_and_cached(
-            request_file_ids,
+            all_file_ids,
             user_id=context.user_id,
             redis_client=cache.client
         )
 
-        # Update context with THIS TURN's file IDs only (no inheritance)
-        if request_file_ids:
+        # Update session's attached_file_ids if new files were added
+        if request_file_ids and all_file_ids != session_file_ids:
+            await chat_session.update({"$set": {
+                "attached_file_ids": all_file_ids,
+                "updated_at": datetime.utcnow()
+            }})
+            chat_session.attached_file_ids = all_file_ids
+            logger.info(
+                "Updated session attached_file_ids",
+                chat_id=chat_session.id,
+                file_count=len(all_file_ids),
+                new_files=len(request_file_ids)
+            )
+
+        # Update context with ALL accumulated file IDs (request + session)
+        if all_file_ids:
             context = ChatContext(
                 user_id=context.user_id,
                 request_id=context.request_id,
@@ -260,7 +280,7 @@ async def send_chat_message(
                 session_id=context.session_id,
                 message=context.message,
                 context=context.context,
-                document_ids=request_file_ids,  # Only current turn's files
+                document_ids=all_file_ids,  # All accumulated files
                 model=context.model,
                 tools_enabled=context.tools_enabled,
                 stream=context.stream,
