@@ -35,7 +35,8 @@ describe("useResearchStore", () => {
         query: "Test query",
         status: "pending",
         progress: 0,
-        createdAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       act(() => {
@@ -54,7 +55,8 @@ describe("useResearchStore", () => {
         query: "Query 1",
         status: "pending",
         progress: 0,
-        createdAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       const task2: ResearchTask = {
@@ -62,7 +64,8 @@ describe("useResearchStore", () => {
         query: "Query 2",
         status: "pending",
         progress: 0,
-        createdAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       act(() => {
@@ -83,7 +86,8 @@ describe("useResearchStore", () => {
         query: "Query 1",
         status: "pending",
         progress: 0,
-        createdAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       const task2: ResearchTask = {
@@ -91,7 +95,8 @@ describe("useResearchStore", () => {
         query: "Query 2",
         status: "running",
         progress: 50,
-        createdAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       act(() => {
@@ -116,7 +121,8 @@ describe("useResearchStore", () => {
         query: "Test query",
         status: "pending",
         progress: 0,
-        createdAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       act(() => {
@@ -138,7 +144,8 @@ describe("useResearchStore", () => {
         query: "Test query",
         status: "running",
         progress: 0,
-        createdAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       act(() => {
@@ -160,7 +167,8 @@ describe("useResearchStore", () => {
         query: "Test query",
         status: "pending",
         progress: 0,
-        createdAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       act(() => {
@@ -186,7 +194,8 @@ describe("useResearchStore", () => {
         query: "Query 1",
         status: "pending",
         progress: 0,
-        createdAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       const task2: ResearchTask = {
@@ -194,7 +203,8 @@ describe("useResearchStore", () => {
         query: "Query 2",
         status: "pending",
         progress: 0,
-        createdAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       act(() => {
@@ -218,7 +228,8 @@ describe("useResearchStore", () => {
         query: "Test query",
         status: "pending",
         progress: 0,
-        createdAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       act(() => {
@@ -242,7 +253,8 @@ describe("useResearchStore", () => {
         query: "Test query",
         status: "pending",
         progress: 0,
-        createdAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       act(() => {
@@ -266,7 +278,8 @@ describe("useResearchStore", () => {
         query: "Query 1",
         status: "pending",
         progress: 0,
-        createdAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       const task2: ResearchTask = {
@@ -274,7 +287,8 @@ describe("useResearchStore", () => {
         query: "Query 2",
         status: "pending",
         progress: 0,
-        createdAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       act(() => {
@@ -298,7 +312,8 @@ describe("useResearchStore", () => {
         query: "Test query",
         status: "pending",
         progress: 0,
-        createdAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       act(() => {
@@ -323,7 +338,8 @@ describe("useResearchStore", () => {
         query: "Test query",
         status: "pending",
         progress: 0,
-        createdAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       act(() => {
@@ -373,7 +389,8 @@ describe("useResearchStore", () => {
         query: "Test query",
         status: "pending",
         progress: 0,
-        createdAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       act(() => {
@@ -423,7 +440,8 @@ describe("useResearch (backward compatibility)", () => {
       query: "Test query",
       status: "pending",
       progress: 0,
-      createdAt: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
 
     act(() => {
