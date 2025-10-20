@@ -515,6 +515,16 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
               metadata: userMessageMetadata,
             });
 
+            if (readyFiles.length > 0) {
+              clearFilesV1Attachments();
+              logDebug(
+                "[ChatView] Cleared file attachments after successful send",
+                {
+                  count: readyFiles.length,
+                },
+              );
+            }
+
             // Parche A: Show warnings from decision_metadata (expired docs, etc.)
             if (response?.decision_metadata?.warnings?.length) {
               toast.error(response.decision_metadata.warnings.join(" • "), {
@@ -626,8 +636,8 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
               task_id: response.task_id,
             };
 
-            // NOTE: File attachments are now cleared immediately in handleSendMessage,
-            // not here after the backend response. This ensures instant UX feedback.
+            // NOTE: File attachments are cleared after a successful backend response
+            // to avoid losing attachments if the request fails mid-flight.
 
             return assistantMessage;
           } catch (error) {
@@ -658,8 +668,7 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
       updateSessionTitle,
       messages.length,
       filesV1Attachments,
-      // clearFilesV1Attachments is stable from useFiles hook
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+      clearFilesV1Attachments,
     ],
   );
 
@@ -689,17 +698,16 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
         ? "Revísalo y dame un resumen"
         : trimmed;
 
-      // IMMEDIATE CLEANUP: Snapshot and clear file attachments BEFORE sending
-      // This ensures chips disappear immediately, not after LLM response
-      const fileAttachmentsSnapshot = hasReadyFiles
-        ? [...filesV1Attachments.filter((a) => a.status === "READY")]
-        : [];
-
-      if (fileAttachmentsSnapshot.length > 0) {
-        clearFilesV1Attachments();
-        logDebug("[ChatView] Cleared file attachments immediately on send", {
-          count: fileAttachmentsSnapshot.length,
-        });
+      const pendingAttachments = filesV1Attachments.filter(
+        (a) => a.status !== "READY",
+      );
+      if (pendingAttachments.length > 0) {
+        toast.info(
+          `⏳ Procesando ${pendingAttachments.length} archivo${
+            pendingAttachments.length === 1 ? "" : "s"
+          }… Intenta de nuevo en unos segundos.`,
+        );
+        return;
       }
 
       try {
@@ -720,18 +728,6 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
         try {
           await sendStandardMessage(effectiveMessage, attachments);
         } catch (sendError) {
-          // ERROR RECOVERY: Restore file attachments if send fails
-          if (fileAttachmentsSnapshot.length > 0) {
-            fileAttachmentsSnapshot.forEach((file) => {
-              addFilesV1Attachment(file);
-            });
-            logDebug(
-              "[ChatView] Restored file attachments after send failure",
-              {
-                count: fileAttachmentsSnapshot.length,
-              },
-            );
-          }
           throw sendError;
         }
       }
@@ -744,8 +740,6 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
       setNudgeMessage,
       setResearchError,
       filesV1Attachments,
-      clearFilesV1Attachments,
-      addFilesV1Attachment,
     ],
   );
 

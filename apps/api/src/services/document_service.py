@@ -10,7 +10,8 @@ Provides methods for:
 - Validating document ownership
 """
 
-from typing import List, Optional, Dict, Any
+from datetime import datetime
+from typing import List, Optional, Dict, Any, Set
 import structlog
 
 from beanie.operators import In
@@ -57,11 +58,26 @@ class DocumentService:
             return {}
 
         # First validate ownership via MongoDB
-        documents = await Document.find(
+        documents_cursor = Document.find(
             In(Document.id, object_ids),
             Document.user_id == user_id,
             Document.status == DocumentStatus.READY
-        ).to_list()
+        )
+
+        documents = await documents_cursor.to_list()
+
+        try:
+            documents.sort(key=lambda doc: getattr(doc, "created_at", datetime.min))  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+        logger.info(
+            "rag_docs_found",
+            requested_ids=document_ids,
+            found_doc_ids=[str(doc.id) for doc in documents],
+            found_count=len(documents),
+            user_id=user_id
+        )
 
         if len(documents) < len(document_ids):
             logger.warning(
@@ -97,6 +113,7 @@ class DocumentService:
                 }
                 logger.debug("Retrieved text from Redis with metadata", doc_id=doc_id, length=len(text))
             else:
+                logger.warning("rag_doc_missing_in_cache", file_id=doc_id)
                 logger.warning("Document text not in Redis cache (expired?)", doc_id=doc_id)
                 doc_texts[doc_id] = {
                     "text": f"[Documento '{doc.filename}' expirado de cache]",
@@ -140,11 +157,18 @@ class DocumentService:
             return []
 
         # Query documents with ownership validation
-        documents = await Document.find(
+        documents_cursor = Document.find(
             In(Document.id, object_ids),
             Document.user_id == user_id,
             Document.status == DocumentStatus.READY
-        ).to_list()
+        )
+
+        documents = await documents_cursor.to_list()
+
+        try:
+            documents.sort(key=lambda doc: getattr(doc, "created_at", datetime.min))  # type: ignore[attr-defined]
+        except Exception:
+            pass
 
         retrieved_count = len(documents)
         if retrieved_count < len(document_ids):
@@ -183,91 +207,180 @@ class DocumentService:
             - metadata: Dict with 'used_chars' and 'used_docs' for telemetry
         """
         if not doc_texts:
-            return "", [], {"used_chars": 0, "used_docs": 0}
+            return "", [], {
+                "used_chars": 0,
+                "used_docs": 0,
+                "requested_docs": 0,
+                "omitted_docs": 0,
+                "selected_doc_ids": [],
+                "truncated_doc_ids": [],
+                "dropped_doc_ids": []
+            }
 
-        formatted_parts = []
-        warnings = []
-        used_chars = 0
-        used_docs = 0
+        doc_items = list(doc_texts.items())
 
-        for doc_id, doc_data in doc_texts.items():
-            # Extract text and metadata
-            text = doc_data.get("text", "")
+        logger.info(
+            "rag_pre_selection",
+            docs=[(doc_id, len((doc_data or {}).get("text") or "")) for doc_id, doc_data in doc_items],
+            max_docs=max_docs,
+            max_chars=max_total_chars
+        )
+
+        warnings: List[str] = []
+        truncated_docs: Set[str] = set()
+        dropped_docs: Set[str] = set()
+        selected_doc_ids: List[str] = []
+
+        prepared_docs: List[Dict[str, Any]] = []
+        for doc_id, doc_data in doc_items:
+            text = doc_data.get("text", "") or ""
             filename = doc_data.get("filename", "unknown")
             content_type = doc_data.get("content_type", "")
             ocr_applied = doc_data.get("ocr_applied", False)
-            # Check document count limit
-            if used_docs >= max_docs:
-                warnings.append(
-                    f"Se usaron {max_docs} documentos máximo; el resto se omitió. "
-                    f"Considera dividir tu consulta o priorizar documentos clave."
-                )
-                logger.warning(
-                    "Document count limit reached",
-                    max_docs=max_docs,
-                    omitted_count=len(doc_texts) - used_docs
-                )
-                break
 
-            # BE-2: Detect expired documents (set in get_document_text_from_cache)
             if isinstance(text, str) and text.startswith("[Documento") and "expirado" in text:
                 warning_msg = f"Documento {doc_id} expiró en Redis. Sube nuevamente si deseas incluirlo."
                 warnings.append(warning_msg)
                 logger.warning("Skipping expired document", doc_id=doc_id)
+                dropped_docs.add(doc_id)
                 continue
 
-            # Truncate by per-doc limit first
+            per_doc_truncated = False
             if len(text) > max_chars_per_doc:
                 text = text[:max_chars_per_doc]
-                text += f"\n\n*[Contenido truncado - documento excede límite por archivo]*"
+                per_doc_truncated = True
+                truncated_docs.add(doc_id)
 
-            # Check global character budget
-            remaining_budget = max_total_chars - used_chars
-            if remaining_budget <= 0:
-                warnings.append(
-                    "Se alcanzó el límite global de contexto; se omitió contenido adicional. "
-                    "Intenta con menos documentos o consultas más específicas."
-                )
-                logger.warning(
-                    "Global character budget exhausted",
-                    max_total_chars=max_total_chars,
-                    used_chars=used_chars,
-                    omitted_docs=len(doc_texts) - used_docs
-                )
+            prepared_docs.append(
+                {
+                    "doc_id": doc_id,
+                    "text": text,
+                    "filename": filename,
+                    "content_type": content_type,
+                    "ocr_applied": ocr_applied,
+                    "per_doc_truncated": per_doc_truncated,
+                }
+            )
+
+        total_docs = len(prepared_docs)
+        if total_docs == 0:
+            metadata = {
+                "used_chars": 0,
+                "used_docs": 0,
+                "requested_docs": len(doc_texts),
+                "omitted_docs": len(doc_texts),
+                "selected_doc_ids": [],
+                "truncated_doc_ids": [],
+                "dropped_doc_ids": sorted(dropped_docs)
+            }
+            logger.info(
+                "rag_selection_result",
+                selected_doc_ids=[],
+                truncated_docs=[],
+                dropped_docs=sorted(dropped_docs),
+                total_context_chars=0,
+                warnings_count=len(warnings)
+            )
+            return "", warnings, metadata
+
+        if total_docs > max_docs:
+            warnings.append(
+                f"Se usaron {max_docs} documentos máximo; el resto se omitió. "
+                f"Considera dividir tu consulta o priorizar documentos clave."
+            )
+            logger.warning(
+                "Document count limit reached",
+                max_docs=max_docs,
+                omitted_count=total_docs - max_docs
+            )
+            for dropped in prepared_docs[max_docs:]:
+                dropped_docs.add(dropped["doc_id"])
+            prepared_docs = prepared_docs[:max_docs]
+
+        round_robin_chunk = max(512, min(2000, max_chars_per_doc))
+        remaining_budget = max_total_chars
+        assembled_segments: Dict[str, List[str]] = {
+            doc["doc_id"]: [] for doc in prepared_docs
+        }
+        pointers: Dict[str, int] = {doc["doc_id"]: 0 for doc in prepared_docs}
+        global_truncated_warned: Set[str] = set()
+
+        while remaining_budget > 0:
+            progressed = False
+            for doc in prepared_docs:
+                doc_id = doc["doc_id"]
+                text = doc["text"]
+                pointer = pointers[doc_id]
+                if pointer >= len(text):
+                    continue
+                take = min(round_robin_chunk, len(text) - pointer, remaining_budget)
+                if take <= 0:
+                    continue
+                assembled_segments[doc_id].append(text[pointer:pointer + take])
+                pointers[doc_id] += take
+                remaining_budget -= take
+                progressed = True
+                if remaining_budget == 0:
+                    break
+            if not progressed:
                 break
 
-            # Truncate to fit remaining budget
-            if len(text) > remaining_budget:
-                text = text[:remaining_budget]
-                text += f"\n\n*[Contenido truncado por presupuesto global de contexto]*"
-                warnings.append(
-                    f"Documento {doc_id} truncado para respetar presupuesto global de {max_total_chars} caracteres."
-                )
+        formatted_parts: List[str] = []
+        used_chars = 0
 
-            # Format with header - differentiate images from PDFs
-            is_image = content_type.startswith("image/")
-            if is_image and ocr_applied:
-                header = f"## 📷 Imagen: {filename}\n**Texto extraído con OCR:**\n\n"
+        for doc in prepared_docs:
+            doc_id = doc["doc_id"]
+            fragments = assembled_segments.get(doc_id) or []
+            if not fragments:
+                dropped_docs.add(doc_id)
+                continue
+
+            body_text = "".join(fragments)
+
+            if doc["per_doc_truncated"]:
+                body_text = body_text.rstrip() + "\n\n*[Contenido truncado - documento excede límite por archivo]*"
+
+            if pointers[doc_id] < len(doc["text"]):
+                truncated_docs.add(doc_id)
+                if doc_id not in global_truncated_warned:
+                    warnings.append(
+                        f"Documento {doc_id} truncado para respetar presupuesto global de {max_total_chars} caracteres."
+                    )
+                    global_truncated_warned.add(doc_id)
+                body_text = body_text.rstrip() + "\n\n*[Contenido truncado por presupuesto global de contexto]*"
+
+            is_image = doc["content_type"].startswith("image/")
+            if is_image and doc["ocr_applied"]:
+                header = f"## 📷 Imagen: {doc['filename']}\n**Texto extraído con OCR:**\n\n"
             elif is_image:
-                header = f"## 📷 Imagen: {filename}\n\n"
+                header = f"## 📷 Imagen: {doc['filename']}\n\n"
             else:
-                header = f"## 📄 Documento: {filename}\n\n"
+                header = f"## 📄 Documento: {doc['filename']}\n\n"
 
-            formatted = f"{header}{text}"
-            formatted_parts.append(formatted)
-
-            # Track usage
-            used_chars += len(text)
-            used_docs += 1
+            formatted_parts.append(f"{header}{body_text}")
+            used_chars += len(body_text)
+            selected_doc_ids.append(doc_id)
 
         result = "\n\n---\n\n".join(formatted_parts)
-
+        used_docs = len(selected_doc_ids)
         metadata = {
             "used_chars": used_chars,
             "used_docs": used_docs,
             "requested_docs": len(doc_texts),
-            "omitted_docs": len(doc_texts) - used_docs
+            "omitted_docs": len(doc_texts) - used_docs,
+            "selected_doc_ids": selected_doc_ids,
+            "truncated_doc_ids": sorted(truncated_docs),
+            "dropped_doc_ids": sorted(dropped_docs)
         }
+
+        logger.info(
+            "rag_selection_result",
+            selected_doc_ids=selected_doc_ids,
+            truncated_docs=sorted(truncated_docs),
+            dropped_docs=sorted(dropped_docs),
+            total_context_chars=used_chars,
+            warnings_count=len(warnings)
+        )
 
         logger.info(
             "Formatted document content for RAG (from cache) with limits",

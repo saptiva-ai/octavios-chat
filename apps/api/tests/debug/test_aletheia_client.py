@@ -12,7 +12,7 @@ import os
 # Add the src directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from services.aletheia_client import get_aletheia_client
+from src.services.aletheia_client import get_aletheia_client
 
 
 async def test_aletheia_client():

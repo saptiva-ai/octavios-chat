@@ -23,9 +23,9 @@ import os
 # Add the src directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..', 'src'))
 
-from models.chat import FileMetadata, ChatMessage, MessageRole, ChatSession
-from services.chat_service import ChatService
-from core.config import Settings
+from src.models.chat import FileMetadata, ChatMessage, MessageRole, ChatSession
+from src.services.chat_service import ChatService
+from src.core.config import Settings
 
 
 @pytest.mark.unit

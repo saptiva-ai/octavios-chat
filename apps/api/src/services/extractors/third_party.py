@@ -272,6 +272,15 @@ class ThirdPartyExtractor(TextExtractor):
             if not text:
                 return "[Imagen sin texto detectable - la imagen puede estar vacía o el texto es demasiado borroso]"
 
+            logger.info(
+                "image_extraction_summary",
+                file_id=locals().get("file_id"),
+                filename=filename,
+                content_type=content_type,
+                text_len=len(text),
+                image_size=image.size,
+            )
+
             logger.debug(
                 "OCR extraction completed",
                 filename=filename,
