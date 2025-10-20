@@ -174,9 +174,26 @@ if (typeof global.TextEncoder === 'undefined') {
 // Polyfill crypto.subtle for Web Crypto API tests
 if (typeof global.crypto === 'undefined' || !global.crypto.subtle) {
   const nodeCrypto = require('crypto')
+
+  // Wrapper to handle ArrayBuffer from jsdom context
+  const originalDigest = nodeCrypto.webcrypto.subtle.digest.bind(nodeCrypto.webcrypto.subtle)
+  const wrappedDigest = async (algorithm, data) => {
+    // Convert jsdom ArrayBuffer to Node.js Buffer
+    let buffer = data
+    if (data instanceof ArrayBuffer) {
+      buffer = Buffer.from(data)
+    } else if (ArrayBuffer.isView(data)) {
+      buffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength)
+    }
+    return originalDigest(algorithm, buffer)
+  }
+
   Object.defineProperty(global, 'crypto', {
     value: {
-      subtle: nodeCrypto.webcrypto.subtle,
+      subtle: {
+        ...nodeCrypto.webcrypto.subtle,
+        digest: wrappedDigest,
+      },
       getRandomValues: (arr) => nodeCrypto.webcrypto.getRandomValues(arr),
       randomUUID: () => nodeCrypto.randomUUID(),
     },
