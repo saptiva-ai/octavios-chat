@@ -53,6 +53,7 @@ Need to tweak the project name or rotate your SAPTIVA key later? Run `make confi
 **CI/CD defaults to Docker registry deploys.** Configure these GitHub Action secrets so the runner can push/pull versioned images (timestamped tags) before rolling back to the TAR flow if needed:
 - `PROD_SERVER`, `PROD_SSH_KEY`, `PROD_DEPLOY_PATH`
 - `REGISTRY_URL`, `REGISTRY_USER`, `REGISTRY_TOKEN`
+- The deployment script now triggers a remote MongoDB backup, validates registry secrets, and force-frees the core service ports (3000/8001/6380/27017) before recreating containers, so rollouts are safer even when falling back to the TAR path.
 
 **Troubleshooting the quick start**
 - If `make dev` fails with `port is already allocated`, an older stack is still running. Stop any previous compose projects with `make stop-all` before retrying.
