@@ -166,6 +166,7 @@ production-secrets*.txt
 !envs/.env.secrets.example
 !envs/.env.secrets.template
 .venv
+apps/api/venv_test/
 env/
 venv/
 ENV/
