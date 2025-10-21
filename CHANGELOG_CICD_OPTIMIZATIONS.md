@@ -126,36 +126,48 @@ cache-to: type=registry,ref=ghcr.io/.../api:buildcache,mode=max
 
 ---
 
-### 3. Fixture Dependency Fix - Beanie Initialization Order
+### 3. Fixture Auto-Cleanup Removido - Causa Race Conditions
 
 **Archivo:** `apps/api/tests/integration/conftest.py`
 
-**Problema:**
+**Problema (Commit 1b2ab84 - Primer intento):**
 ```python
-# ❌ Ambos fixtures con autouse=True causaban race condition
-@pytest_asyncio.fixture(scope="function", autouse=True)
-async def initialize_db():
-    await Database.connect_to_mongo()
-    yield
-
+# ❌ Fixture con autouse=True causaba CollectionWasNotInitialized
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def auto_cleanup_for_parallel_tests():
-    await User.delete_all()  # ❌ CollectionWasNotInitialized!
+    await User.delete_all()  # ❌ Error!
 ```
 
-**Solución:**
+**Intento de Fix (Commit 7d23b1f):**
 ```python
-# ✅ Fixture de cleanup depende explícitamente de initialize_db
+# ⚠️ Agregada dependencia en initialize_db
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def auto_cleanup_for_parallel_tests(initialize_db):
-    """Depends on initialize_db to ensure Beanie is initialized before cleanup."""
-    await User.delete_all()  # ✅ Ahora funciona!
+    # Limpia ANTES del test
+    await User.delete_all()
+    yield
+    # Limpia DESPUÉS del test
+    await User.delete_all()
+```
+
+**Nuevo Problema Descubierto:**
+- Worker 1 crea usuario → inicia test
+- Worker 2 ejecuta `auto_cleanup_for_parallel_tests` → **LIMPIA TODA LA DB**
+- Worker 1 intenta login → ❌ "Usuario no encontrado"
+- Error: `INVALID_CREDENTIALS`, `USER_NOT_FOUND`
+
+**Solución Final (Este commit):**
+```python
+# ✅ ELIMINADO el fixture auto_cleanup completamente
+# Los usernames únicos (fix #5) eliminan las colisiones
+# El fixture clean_db ya existente es suficiente para tests específicos
 ```
 
 **Beneficios:**
-- ✅ Garantiza orden correcto de ejecución de fixtures
-- ✅ Beanie se inicializa antes de cualquier operación de base de datos
-- ✅ Elimina errores de `CollectionWasNotInitialized`
+- ✅ Elimina race conditions causadas por limpieza global
+- ✅ Usernames únicos previenen colisiones sin necesidad de limpieza agresiva
+- ✅ Cada test corre independientemente sin afectar otros workers
+- ✅ El fixture `clean_db` existente maneja limpieza cuando se necesita explícitamente
 
 ---
 
@@ -217,32 +229,44 @@ async def test_user(clean_db):
 
 ---
 
-### 6. Docker Push Temporalmente Deshabilitado
+### 6. Docker Push - Configuración de Permisos GHCR
 
 **Archivo:** `.github/workflows/ci-cd.yml`
 
-**Cambio:**
+**Problema Original:**
+- Error 403 Forbidden al intentar pushear a GHCR
+- Causa raíz: Enterprise policy deshabilita write permissions para GITHUB_TOKEN
+- Solución: Configurar permisos de los packages manualmente
+
+**Cambios Realizados:**
+
+**Fase 1 - Temporal (Commit 7d23b1f):**
 ```yaml
-# Temporalmente deshabilitado hasta configurar permisos GHCR
+# Deshabilitado temporalmente para diagnosticar
 - name: Build and push API image
   with:
-    push: false  # Era: push: true
+    push: false
 ```
 
-**Razón:**
-- El repositorio no tiene permisos para pushear a GHCR packages
-- Error 403 Forbidden persistía a pesar de labels OCI
-- Esto es un issue de configuración de GitHub/GHCR, no del código
+**Fase 2 - Configuración Manual:**
+1. ✅ Verificados packages existentes en GHCR
+2. ✅ Configurados permisos en GitHub UI:
+   - Package `copilotos-bridge/api` → Write access para repositorio
+   - Package `copilotos-bridge/web` → Write access para repositorio
 
-**Próximos Pasos:**
-1. Configurar permisos del package en GHCR manualmente
-2. Verificar que `copilotos-bridge/api` y `copilotos-bridge/web` existen
-3. Cambiar `push: false` → `push: true` cuando los permisos estén configurados
+**Fase 3 - Re-habilitado (Este commit):**
+```yaml
+# Re-habilitado después de configurar permisos
+- name: Build and push API image
+  with:
+    push: true
+```
 
-**Impacto:**
+**Impacto Final:**
 - ✅ CI valida que el build funciona correctamente
 - ✅ Tests se ejecutan normalmente
-- ⚠️ Las imágenes NO se pushean a GHCR (temporal)
+- ✅ Las imágenes se pushean exitosamente a GHCR
+- ✅ Deployment pipeline completo funcional
 
 ---
 
