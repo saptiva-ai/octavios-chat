@@ -133,8 +133,8 @@ describe("useFiles", () => {
     it("validates file size", async () => {
       const { result } = renderHook(() => useFiles());
 
-      // Create file larger than 10MB
-      const largeContent = "x".repeat(11 * 1024 * 1024);
+      // Create file larger than 50MB (default limit)
+      const largeContent = "x".repeat(51 * 1024 * 1024);
       const largeFile = createMockFile(
         largeContent,
         "large.pdf",
@@ -142,7 +142,7 @@ describe("useFiles", () => {
       );
       // Override size for validation
       Object.defineProperty(largeFile, "size", {
-        value: 11 * 1024 * 1024,
+        value: 51 * 1024 * 1024,
       });
 
       let attachment: FileAttachment | null = null;
