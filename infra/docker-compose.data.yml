@@ -1,0 +1,94 @@
+# ========================================
+# COPILOTOS BRIDGE - DATA LAYER (SHARED)
+# ========================================
+# Este archivo define los volúmenes y servicios de datos que son
+# COMPARTIDOS entre los stacks blue/green para zero-downtime deployments.
+#
+# Los volúmenes se crean como 'external: true' para que persistan
+# independientemente de qué stack (blue/green) esté activo.
+#
+# Usage:
+#   # Primera vez (crear volúmenes)
+#   docker volume create copilotos-data-mongodb
+#   docker volume create copilotos-data-redis
+#
+#   # Levantar capa de datos
+#   docker compose -f infra/docker-compose.data.yml up -d
+#
+# IMPORTANTE: Este compose NO debe tener COMPOSE_PROJECT_NAME variable.
+# Los datos deben ser independientes del color (blue/green).
+
+services:
+  # ========================================
+  # MONGODB DATABASE (SHARED DATA)
+  # ========================================
+  mongodb:
+    image: mongo:7.0
+    container_name: copilotos-data-mongodb
+    restart: unless-stopped
+    env_file:
+      - ../envs/.env.prod
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USER:-copilotos_user}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD:-secure_password_change_me}
+      MONGO_INITDB_DATABASE: ${MONGODB_DATABASE:-copilotos}
+    volumes:
+      - copilotos-data-mongodb:/data/db
+      - copilotos-data-mongodb-config:/data/configdb
+    ports:
+      - "27017:27017"  # Puerto fijo, no variable
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.runCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - copilotos-data
+
+  # ========================================
+  # REDIS CACHE (SHARED DATA)
+  # ========================================
+  redis:
+    image: redis:7-alpine
+    container_name: copilotos-data-redis
+    restart: unless-stopped
+    env_file:
+      - ../envs/.env.prod
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:-redis_password_change_me}
+      --maxmemory ${REDIS_MAX_MEMORY:-512mb}
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - copilotos-data-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    ports:
+      - "6379:6379"  # Puerto fijo, no variable
+    networks:
+      - copilotos-data
+
+# ========================================
+# VOLÚMENES EXTERNOS (PERSISTEN ENTRE DEPLOYS)
+# ========================================
+volumes:
+  copilotos-data-mongodb:
+    external: true
+  copilotos-data-mongodb-config:
+    external: true
+  copilotos-data-redis:
+    external: true
+
+# ========================================
+# RED COMPARTIDA (BLUE/GREEN SE CONECTAN AQUÍ)
+# ========================================
+networks:
+  copilotos-data:
+    name: copilotos-data-network
+    driver: bridge
