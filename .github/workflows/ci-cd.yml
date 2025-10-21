@@ -361,66 +361,54 @@ jobs:
           HOST=$(echo "${{ secrets.PROD_SERVER }}" | cut -d'@' -f2)
           ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts
 
-      - name: 🔒 PRE-DEPLOY BACKUP (MongoDB)
+      - name: Prepare deployment version
+        id: prepare_version
+        run: |
+          GIT_SHA=$(git rev-parse --short HEAD)
+          TIMESTAMP=$(date -u +%Y%m%d-%H%M%S)
+          VERSION="${GIT_SHA}-${TIMESTAMP}"
+          echo "DEPLOY_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "deploy_version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Deployment version: $VERSION"
+
+      - name: Docker login (registry)
         env:
-          PROD_SERVER: ${{ secrets.PROD_SERVER }}
+          REGISTRY_URL: ${{ secrets.REGISTRY_URL }}
+          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+        run: |
+          if [ -z "$REGISTRY_URL" ] || [ -z "$REGISTRY_USER" ] || [ -z "$REGISTRY_TOKEN" ]; then
+            echo "Registry credentials not configured. Skipping login."
+            exit 0
+          fi
+          REGISTRY_HOST=$(echo "$REGISTRY_URL" | cut -d'/' -f1)
+          echo "$REGISTRY_TOKEN" | docker login "$REGISTRY_HOST" -u "$REGISTRY_USER" --password-stdin
+
+      - name: Deploy (registry first, tar fallback)
+        env:
+          PROD_SERVER_HOST: ${{ secrets.PROD_SERVER }}
+          DEPLOY_SERVER: ${{ secrets.PROD_SERVER }}
           PROD_DEPLOY_PATH: ${{ secrets.PROD_DEPLOY_PATH }}
+          PROD_DOMAIN: ${{ secrets.PROD_DOMAIN }}
+          REGISTRY_URL: ${{ secrets.REGISTRY_URL }}
+          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+          DEPLOY_VERSION: ${{ env.DEPLOY_VERSION }}
         run: |
-          echo "🔒 Creating pre-deployment backup of MongoDB..."
-          ssh "$PROD_SERVER" "cd $PROD_DEPLOY_PATH && \
-            BACKUP_NAME=pre-deploy-\$(date +%Y%m%d-%H%M%S) && \
-            echo '📦 Backup name: \$BACKUP_NAME' && \
-            ./scripts/backup-mongodb.sh --backup-dir ~/backups/pre-deploy --env-file envs/.env && \
-            echo '✅ Backup completed successfully' && \
-            ls -lh ~/backups/pre-deploy/\$BACKUP_NAME* || echo '⚠️  Backup verification pending'"
-          echo "✅ Pre-deployment backup completed"
-
-      - name: Package application (no secrets)
-        run: make package
-
-      - name: Upload package to server
-        env:
-          PROD_SERVER: ${{ secrets.PROD_SERVER }}
-          PROD_DEPLOY_PATH: ${{ secrets.PROD_DEPLOY_PATH }}
-        run: |
-          PKG=$(ls -1t *.tar.gz | head -n1)
-          echo "Uploading $PKG to $PROD_SERVER:$PROD_DEPLOY_PATH/incoming/"
-          scp -o StrictHostKeyChecking=no -q "$PKG" "$PKG.sha256" "$PROD_SERVER:$PROD_DEPLOY_PATH/incoming/"
-
-      - name: Deploy on remote server
-        env:
-          PROD_SERVER: ${{ secrets.PROD_SERVER }}
-          PROD_DEPLOY_PATH: ${{ secrets.PROD_DEPLOY_PATH }}
-        run: |
-          PKG=$(ls -1t *.tar.gz | head -n1)
-          ssh "$PROD_SERVER" "export APP_NAME=copilotos-bridge; export PROD_DEPLOY_PATH=$PROD_DEPLOY_PATH; bash $PROD_DEPLOY_PATH/scripts/deploy-with-tar.sh $PKG"
-
-      - name: Verify deployment health
-        env:
-          PROD_SERVER: ${{ secrets.PROD_SERVER }}
-        run: |
-          echo "Waiting for services to be healthy..."
-          sleep 10
-
-          echo "Checking API health..."
-          if ssh "$PROD_SERVER" "curl -fsS http://localhost:8001/api/health"; then
-            echo "✓ API is healthy"
-          else
-            echo "✗ API health check failed"
-            exit 1
+          set -o pipefail
+          echo "Starting deployment with version: ${DEPLOY_VERSION}"
+          if [ -z "$REGISTRY_URL" ] || [ -z "$REGISTRY_USER" ] || [ -z "$REGISTRY_TOKEN" ]; then
+            echo "Registry credentials missing. Running TAR deployment directly."
+            ./scripts/deploy.sh tar --force
+            exit 0
           fi
 
-          echo "Checking Web health..."
-          if ssh "$PROD_SERVER" "curl -fsS http://localhost:3000"; then
-            echo "✓ Web is healthy"
+          if ./scripts/deploy.sh registry --force; then
+            echo "Registry deployment completed successfully."
           else
-            echo "✗ Web health check failed"
-            exit 1
+            echo "Registry deployment failed. Attempting TAR fallback..."
+            ./scripts/deploy.sh tar --force
           fi
-
-      - name: Clean up local packages
-        if: always()
-        run: make clean-packages
 
   # ============================================================================
   # Security Scan (Optional)

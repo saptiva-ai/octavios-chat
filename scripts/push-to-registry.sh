@@ -64,8 +64,12 @@ if [ -z "$REGISTRY_USER" ]; then
 fi
 
 # Determine version
-if [ -z "$VERSION" ]; then
-    VERSION="$GIT_COMMIT"
+if [ -n "$VERSION" ]; then
+    DEPLOY_VERSION="$VERSION"
+elif [ -n "${DEPLOY_VERSION:-}" ]; then
+    VERSION="$DEPLOY_VERSION"
+else
+    VERSION="${GIT_COMMIT}-$(date +%Y%m%d-%H%M%S)"
 fi
 
 echo "╔═══════════════════════════════════════════════════════════════╗"
