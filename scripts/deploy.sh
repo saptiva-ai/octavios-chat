@@ -415,7 +415,7 @@ run_predeploy_backup() {
             exit 42
         fi
         mkdir -p \$HOME/backups/pre-deploy
-        scripts/backup-mongodb.sh --backup-dir \$HOME/backups/pre-deploy --env-file envs/.env
+        scripts/backup-mongodb.sh --backup-dir \$HOME/backups/pre-deploy --env-file envs/.env.prod
     " && {
         log_success "MongoDB backup completed on server"
         return 0
@@ -661,14 +661,14 @@ start_deployment() {
     step "Step 4/7: Start Deployment on Server"
 
     log_info "Stopping current containers..."
-    ssh "$DEPLOY_SERVER" "cd $DEPLOY_PATH/infra && docker compose down --remove-orphans" || {
+    ssh "$DEPLOY_SERVER" "cd $DEPLOY_PATH/infra && docker compose -f docker-compose.prod.yml down --remove-orphans" || {
         log_warning "Stop failed (containers may not be running)"
     }
 
     ensure_ports_free
 
     log_info "Starting new containers..."
-    ssh "$DEPLOY_SERVER" "cd $DEPLOY_PATH/infra && docker compose up -d --remove-orphans" || {
+    ssh "$DEPLOY_SERVER" "cd $DEPLOY_PATH/infra && docker compose -f docker-compose.prod.yml up -d --remove-orphans" || {
         log_error "Container start failed"
         return 1
     }
@@ -754,7 +754,7 @@ rollback_to_previous() {
 
     # Restore backup
     log_info "Stopping failed deployment..."
-    ssh "$DEPLOY_SERVER" "cd $DEPLOY_PATH/infra && docker compose down"
+    ssh "$DEPLOY_SERVER" "cd $DEPLOY_PATH/infra && docker compose -f docker-compose.prod.yml down"
 
     log_info "Restoring backup images..."
     ssh "$DEPLOY_SERVER" "
@@ -763,7 +763,7 @@ rollback_to_previous() {
     "
 
     log_info "Starting previous version..."
-    ssh "$DEPLOY_SERVER" "cd $DEPLOY_PATH/infra && docker compose up -d"
+    ssh "$DEPLOY_SERVER" "cd $DEPLOY_PATH/infra && docker compose -f docker-compose.prod.yml up -d"
 
     sleep 20
 
