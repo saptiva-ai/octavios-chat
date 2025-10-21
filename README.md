@@ -14,9 +14,9 @@ Copilotos Bridge delivers a ChatGPT-style experience tailored to SAPTIVA deploym
 
 ### Key Features
 - Chat workspace with model selector, conversation history, streaming responses, and keyboard shortcuts.
-- **Document Reviewer with RAG**: Upload PDFs and images, ask questions about content with AI-powered retrieval-augmented generation.
+- **Document Reviewer **: Upload PDFs and images, ask questions about content with AI-powered.
 - Direct SAPTIVA API integration with end-to-end tracing and real production responses.
-- Deep research orchestrated through Aletheia with source attribution and progress streaming.
+- Deep research orchestrated through Aletheia with source attribution and progress streaming. (Not implemented yet)
 - Security-first design with JWT authentication, rate limiting, secrets management, and container hardening.
 - Accessibility-first UI with ARIA labeling, full keyboard control, and responsive layouts.
 - Docker-first deployment that aligns local development and production releases.
@@ -26,7 +26,7 @@ Copilotos Bridge delivers a ChatGPT-style experience tailored to SAPTIVA deploym
 
 **First time here?** Check out our comprehensive getting started guide:
 
-➤ **[Getting Started Guide](docs/GETTING_STARTED.md)** - Complete step-by-step setup guide (5 minutes to running stack)
+**[Getting Started Guide](docs/GETTING_STARTED.md)** - Complete step-by-step setup guide (5 minutes to running stack)
 
 This guide includes:
 - Prerequisites checklist
@@ -53,7 +53,7 @@ Need to tweak the project name or rotate your SAPTIVA key later? Run `make confi
 **CI/CD defaults to Docker registry deploys.** Configure these GitHub Action secrets so the runner can push/pull versioned images (timestamped tags) before rolling back to the TAR flow if needed:
 - `PROD_SERVER`, `PROD_SSH_KEY`, `PROD_DEPLOY_PATH`
 - `REGISTRY_URL`, `REGISTRY_USER`, `REGISTRY_TOKEN`
-- The deployment script now triggers a remote MongoDB backup, validates registry secrets, and force-frees the core service ports (3000/8001/6380/27017) before recreating containers, so rollouts are safer even when falling back to the TAR path.
+- The deployment script now triggers a remote MongoDB backup, validates registry secrets, logs into GHCR on the server, and force-frees the core service ports (3000/8001/6380/27017) before recreating containers, so rollouts are safer even cuando toca usar el fallback TAR.
 
 **Troubleshooting the quick start**
 - If `make dev` fails with `port is already allocated`, an older stack is still running. Stop any previous compose projects with `make stop-all` before retrying.
@@ -138,7 +138,6 @@ copilotos-bridge/
 │   ├── .env.prod.example   # Production environment template
 │   └── .env.local          # Local environment (gitignored)
 ├── scripts/
-│   ├── DEPLOY-NOW.sh                # Guided deployment workflow
 │   ├── deploy-with-tar.sh           # Tar-based deployment helper
 │   ├── push-to-registry.sh          # Container registry workflow
 │   ├── rotate-mongo-credentials.sh  # Safe MongoDB password rotation
@@ -159,7 +158,6 @@ copilotos-bridge/
 │   ├── web/                         # Frontend component documentation
 │   ├── observability/               # Monitoring and dashboards
 │   └── archive/                     # Legacy documentation snapshots
-├── IMPLEMENTATION_SUMMARY.md  # RAG implementation guide (1,900 lines)
 ├── Makefile                   # Development automation & resource tools
 └── README.md                  # This file
 ```
