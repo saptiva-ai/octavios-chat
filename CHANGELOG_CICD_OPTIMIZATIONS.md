@@ -270,7 +270,77 @@ async def test_user(clean_db):
 
 ---
 
-### 7. Workflow Structure - Comentarios Mejorados
+### 7. Test Fixtures - Remover Dependencia clean_db
+
+**Archivos:**
+- `apps/api/tests/integration/conftest.py`
+- `apps/api/tests/integration/test_chat_file_context.py`
+- `apps/api/tests/integration/test_chat_attachments_no_inheritance.py`
+
+**Problema (Commit f064e52):**
+```python
+# ❌ Dependencia en clean_db causa cross-worker interference
+@pytest_asyncio.fixture
+async def test_user(clean_db):  # clean_db hace User.delete_all()
+    username = f"test-user-{unique_id}"
+```
+
+**Comportamiento Problemático:**
+- Worker 1: `test_user` crea user1
+- Worker 2: `clean_db` ejecuta `User.delete_all()` → **borra user1**
+- Worker 1: intenta login → ❌ "Usuario no encontrado"
+
+**Solución (Este commit):**
+```python
+# ✅ Sin dependencia en clean_db
+@pytest_asyncio.fixture
+async def test_user():  # Usernames únicos previenen colisiones
+    username = f"test-user-{unique_id}"
+```
+
+**Beneficios:**
+- ✅ Elimina cross-worker interference completamente
+- ✅ Cada test crea su usuario sin limpiar otros
+- ✅ Usernames únicos previenen colisiones naturalmente
+- ✅ Tests realmente independientes en parallel mode
+
+---
+
+### 8. Docker Build - Fix Web Dockerfile Target
+
+**Archivo:** `.github/workflows/ci-cd.yml`
+
+**Problema:**
+```yaml
+# ❌ Web Dockerfile no tiene stage "production"
+- name: Build and push Web image
+  with:
+    target: production  # Error: stage not found
+```
+
+**Stages Disponibles en Web Dockerfile:**
+- `base`
+- `deps`
+- `dev`
+- `builder`
+- `runner` ✅ (stage final para producción)
+
+**Solución:**
+```yaml
+# ✅ Usar stage correcto "runner"
+- name: Build and push Web image
+  with:
+    target: runner
+```
+
+**Beneficios:**
+- ✅ Build de Web completa exitosamente
+- ✅ Imagen Web se pushea a GHCR
+- ✅ Deployment pipeline completo funcional
+
+---
+
+### 9. Workflow Structure - Comentarios Mejorados
 
 **Archivo:** `.github/workflows/ci-cd.yml`
 
