@@ -92,6 +92,12 @@ cache-to: type=registry,ref=ghcr.io/.../api:buildcache,mode=max
 - name: Build and push API image
   uses: docker/build-push-action@v5
   with:
+    build-args: |
+      TORCH_CPU_INDEX_URL=https://download.pytorch.org/whl/cpu
+    labels: |
+      org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+      org.opencontainers.image.revision=${{ github.sha }}
+      org.opencontainers.image.created=${{ steps.tags.outputs.VERSION }}
     cache-from: type=local,src=/tmp/.buildx-cache-api
     cache-to: type=local,dest=/tmp/.buildx-cache-api-new,mode=max
 
@@ -107,6 +113,8 @@ cache-to: type=registry,ref=ghcr.io/.../api:buildcache,mode=max
 - ✅ Más rápido (almacenamiento local vs remoto)
 - ✅ Cache persiste entre runs del mismo workflow
 - ✅ Control automático del tamaño (evita crecimiento infinito)
+- ✅ Build args explícitos para torch CPU index
+- ✅ Labels OCI para asociar packages con repositorio
 
 **Performance:**
 
@@ -118,7 +126,63 @@ cache-to: type=registry,ref=ghcr.io/.../api:buildcache,mode=max
 
 ---
 
-### 3. Workflow Structure - Comentarios Mejorados
+### 3. Fixture Dependency Fix - Beanie Initialization Order
+
+**Archivo:** `apps/api/tests/integration/conftest.py`
+
+**Problema:**
+```python
+# ❌ Ambos fixtures con autouse=True causaban race condition
+@pytest_asyncio.fixture(scope="function", autouse=True)
+async def initialize_db():
+    await Database.connect_to_mongo()
+    yield
+
+@pytest_asyncio.fixture(scope="function", autouse=True)
+async def auto_cleanup_for_parallel_tests():
+    await User.delete_all()  # ❌ CollectionWasNotInitialized!
+```
+
+**Solución:**
+```python
+# ✅ Fixture de cleanup depende explícitamente de initialize_db
+@pytest_asyncio.fixture(scope="function", autouse=True)
+async def auto_cleanup_for_parallel_tests(initialize_db):
+    """Depends on initialize_db to ensure Beanie is initialized before cleanup."""
+    await User.delete_all()  # ✅ Ahora funciona!
+```
+
+**Beneficios:**
+- ✅ Garantiza orden correcto de ejecución de fixtures
+- ✅ Beanie se inicializa antes de cualquier operación de base de datos
+- ✅ Elimina errores de `CollectionWasNotInitialized`
+
+---
+
+### 4. Docker Build Metadata - OCI Labels
+
+**Archivo:** `.github/workflows/ci-cd.yml`
+
+**Cambio:**
+```yaml
+- name: Build and push API image
+  uses: docker/build-push-action@v5
+  with:
+    labels: |
+      org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+      org.opencontainers.image.revision=${{ github.sha }}
+      org.opencontainers.image.created=${{ steps.tags.outputs.VERSION }}
+```
+
+**Beneficios:**
+- ✅ Asocia packages de GHCR con el repositorio correctamente
+- ✅ Mejora trazabilidad (revision, creation timestamp)
+- ✅ Cumple con estándares OCI
+- ✅ Ayuda a prevenir errores 403 en primera creación de package
+
+---
+
+### 5. Workflow Structure - Comentarios Mejorados
 
 **Archivo:** `.github/workflows/ci-cd.yml`
 
