@@ -1,11 +1,22 @@
-name: CI + CD
+name: CI + CD (Optimized - DISABLED)
+
+# ⚠️ WORKFLOW DISABLED ⚠️
+# This workflow contains experimental optimizations that need further testing.
+# Use ci-cd.yml for the stable workflow.
+# To run this workflow, trigger it manually via GitHub Actions UI.
 
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
-  workflow_dispatch:
+  workflow_dispatch:  # Only manual triggers
+  # Automatic triggers disabled:
+  # push:
+  #   branches: [main, develop]
+  # pull_request:
+  #   branches: [main, develop]
+
+# Cancel in-progress workflows for the same PR/branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # ============================================================================
@@ -29,19 +40,27 @@ jobs:
           cache: "pip"
           cache-dependency-path: apps/api/requirements.txt
 
+      - name: Cache venv
+        uses: actions/cache@v4
+        with:
+          path: apps/api/.venv
+          key: venv-${{ runner.os }}-py3.11-${{ hashFiles('apps/api/requirements.txt') }}
+          restore-keys: |
+            venv-${{ runner.os }}-py3.11-
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-cov pytest-asyncio pytest-mock httpx safety
+          pip install pytest pytest-cov pytest-asyncio pytest-mock pytest-xdist httpx safety
 
       - name: Security audit with Safety
         run: |
           safety check --ignore 64459 --ignore 64396
 
-      - name: Run tests
+      - name: Run tests (parallelized)
         run: |
-          pytest -q --cov=src --cov-report=xml --cov-report=term \
+          pytest -n auto --cov=src --cov-report=xml --cov-report=term \
             --ignore=tests/integration \
             --ignore=tests/e2e \
             --ignore=tests/debug \
@@ -89,8 +108,11 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Fetch dependencies
+        run: pnpm fetch
+
+      - name: Install dependencies (offline mode)
+        run: pnpm install --frozen-lockfile --offline --prefer-offline
 
       - name: Type check
         run: pnpm --filter web typecheck
@@ -157,11 +179,19 @@ jobs:
           cache: "pip"
           cache-dependency-path: apps/api/requirements.txt
 
+      - name: Cache venv
+        uses: actions/cache@v4
+        with:
+          path: apps/api/.venv
+          key: venv-integration-${{ runner.os }}-py3.11-${{ hashFiles('apps/api/requirements.txt') }}
+          restore-keys: |
+            venv-integration-${{ runner.os }}-py3.11-
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-cov pytest-asyncio httpx
+          pip install pytest pytest-cov pytest-asyncio pytest-xdist httpx
 
       - name: Configure environment for tests
         run: |
@@ -183,14 +213,10 @@ jobs:
           timeout 30 bash -c 'until nc -z localhost 6380; do sleep 1; done'
           sleep 5
 
-      - name: Run integration tests - Auth
-        run: pytest tests/integration/test_auth_flow.py -v --tb=short
-
-      - name: Run integration tests - Chat
-        run: pytest tests/integration/test_chat_file_context.py -v --tb=short
-
-      - name: Run integration tests - Attachments Policy
-        run: pytest tests/integration/test_chat_attachments_no_inheritance.py -v --tb=short
+      - name: Run integration tests (parallelized)
+        run: |
+          pytest tests/integration/ -n auto -v --tb=short \
+            --ignore=tests/integration/__pycache__
 
       - name: Generate test report
         if: always()
@@ -206,16 +232,134 @@ jobs:
           retention-days: 7
 
   # ============================================================================
+  # Docker Build + Push to Registry (with local cache)
+  # ============================================================================
+  build_images:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    # Always build on main, or on PRs if backend/frontend code changed
+    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate image tags
+        id: tags
+        run: |
+          GIT_SHA=$(git rev-parse --short HEAD)
+          TIMESTAMP=$(date -u +%Y%m%d-%H%M%S)
+          VERSION="${GIT_SHA}-${TIMESTAMP}"
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "GIT_SHA=$GIT_SHA" >> "$GITHUB_OUTPUT"
+
+      # Cache Docker layers locally (faster and more stable than registry cache)
+      - name: Cache Docker layers (API)
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache-api
+          key: ${{ runner.os }}-buildx-api-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-api-
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/api
+          file: ./apps/api/Dockerfile
+          target: production
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/copilotos-bridge/api:${{ steps.tags.outputs.VERSION }}
+            ghcr.io/${{ github.repository_owner }}/copilotos-bridge/api:${{ steps.tags.outputs.GIT_SHA }}
+            ghcr.io/${{ github.repository_owner }}/copilotos-bridge/api:latest
+          build-args: |
+            TORCH_CPU_INDEX_URL=https://download.pytorch.org/whl/cpu
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.tags.outputs.VERSION }}
+          cache-from: type=local,src=/tmp/.buildx-cache-api
+          cache-to: type=local,dest=/tmp/.buildx-cache-api-new,mode=max
+
+      # Move cache to prevent infinite growth
+      - name: Move API cache
+        run: |
+          rm -rf /tmp/.buildx-cache-api
+          mv /tmp/.buildx-cache-api-new /tmp/.buildx-cache-api
+
+      # Cache Docker layers locally (Web)
+      - name: Cache Docker layers (Web)
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache-web
+          key: ${{ runner.os }}-buildx-web-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-web-
+
+      - name: Build and push Web image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/web/Dockerfile
+          target: runner
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/copilotos-bridge/web:${{ steps.tags.outputs.VERSION }}
+            ghcr.io/${{ github.repository_owner }}/copilotos-bridge/web:${{ steps.tags.outputs.GIT_SHA }}
+            ghcr.io/${{ github.repository_owner }}/copilotos-bridge/web:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.tags.outputs.VERSION }}
+          cache-from: type=local,src=/tmp/.buildx-cache-web
+          cache-to: type=local,dest=/tmp/.buildx-cache-web-new,mode=max
+
+      # Move cache to prevent infinite growth
+      - name: Move Web cache
+        run: |
+          rm -rf /tmp/.buildx-cache-web
+          mv /tmp/.buildx-cache-web-new /tmp/.buildx-cache-web
+
+  # ============================================================================
   # Integration Tests (Docker Compose Smoke)
   # ============================================================================
   integration:
     name: Integration Smoke Tests
     runs-on: ubuntu-latest
-    needs: [backend, frontend]
+    needs: [build_images]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull pre-built images
+        run: |
+          docker pull ghcr.io/${{ github.repository_owner }}/copilotos-bridge/api:latest
+          docker pull ghcr.io/${{ github.repository_owner }}/copilotos-bridge/web:latest
+          docker tag ghcr.io/${{ github.repository_owner }}/copilotos-bridge/api:latest copilotos-api:latest
+          docker tag ghcr.io/${{ github.repository_owner }}/copilotos-bridge/web:latest copilotos-web:latest
 
       - name: Create environment file for CI
         run: |
@@ -225,9 +369,9 @@ jobs:
           echo "JWT_SECRET_KEY=$(openssl rand -hex 32)" >> envs/.env
           echo "API_KEY=$(openssl rand -hex 16)" >> envs/.env
 
-      - name: Start services
+      - name: Start services (using pre-built images)
         run: |
-          docker compose -f infra/docker-compose.yml up -d --wait
+          docker compose -f infra/docker-compose.yml up -d --no-build --wait
           sleep 10
 
       - name: Run integration smoke tests
@@ -339,12 +483,12 @@ jobs:
   #       run: docker compose -f infra/docker-compose.yml down -v
 
   # ============================================================================
-  # Deploy to Production (tar-based)
+  # Deploy to Production (registry-first, tar fallback)
   # ============================================================================
   deploy_tar:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: [backend, frontend, backend-integration, integration]
+    needs: [build_images, backend-integration, integration]
     # Only deploy on push to main
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
