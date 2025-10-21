@@ -24,15 +24,10 @@ from src.schemas.user import UserCreate
 
 
 @pytest_asyncio.fixture
-async def test_user_chat() -> Dict[str, str]:
-    """Create a test user for chat tests and return credentials.
-
-    Note: Removed clean_db dependency to avoid cross-worker interference.
-    """
-    import uuid
-    unique_id = uuid.uuid4().hex[:8]
-    username = f"test-file-context-{unique_id}"
-    email = f"test-file-context-{unique_id}@example.com"
+async def test_user_chat(clean_db) -> Dict[str, str]:
+    """Create a test user for chat tests and return credentials."""
+    username = "test-file-context"
+    email = "test-file-context@example.com"
     password = "Demo1234"
 
     # Register user
