@@ -72,6 +72,8 @@ DEPLOY_SERVER="${DEPLOY_SERVER:-${PROD_SERVER_HOST:-}}"
 DEPLOY_PATH="${DEPLOY_PATH:-${PROD_DEPLOY_PATH:-/opt/copilotos-bridge}}"
 PROD_DOMAIN="${PROD_DOMAIN:-localhost}"
 REGISTRY_URL="${REGISTRY_URL:-ghcr.io/saptiva-ai/copilotos-bridge}"
+REGISTRY_USER="${REGISTRY_USER:-}"
+REGISTRY_TOKEN="${REGISTRY_TOKEN:-}"
 
 # ========================================
 # PARSE ARGUMENTS
@@ -83,6 +85,7 @@ NO_ROLLBACK=false
 FORCE=false
 SPECIFIC_VERSION=""
 DRY_RUN=false
+SKIP_BACKUP=false
 
 # First argument might be method
 if [[ $# -gt 0 ]] && [[ ! "$1" =~ ^-- ]]; then
@@ -117,6 +120,10 @@ while [[ $# -gt 0 ]]; do
             SPECIFIC_VERSION="$2"
             shift 2
             ;;
+        --skip-backup)
+            SKIP_BACKUP=true
+            shift
+            ;;
         --dry-run)
             DRY_RUN=true
             shift
@@ -138,6 +145,7 @@ Options:
   --no-rollback        Don't auto-rollback on failure
   --force              Skip confirmation prompts
   --version VERSION    Deploy specific version
+  --skip-backup        Skip pre-deployment Mongo backup
   --dry-run            Validate everything without executing
   -h, --help           Show this help
 
@@ -176,6 +184,21 @@ step() {
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${GREEN}$1${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+}
+
+check_registry_credentials() {
+    local missing=()
+    [[ -z "$REGISTRY_URL" ]] && missing+=("REGISTRY_URL")
+    [[ -z "$REGISTRY_USER" ]] && missing+=("REGISTRY_USER")
+    [[ -z "$REGISTRY_TOKEN" ]] && missing+=("REGISTRY_TOKEN")
+
+    if [ ${#missing[@]} -gt 0 ]; then
+        log_error "Registry credentials missing or empty: ${missing[*]}"
+        log_info "Ensure these secrets are set (e.g. in GitHub Actions): REGISTRY_URL, REGISTRY_USER, REGISTRY_TOKEN"
+        return 1
+    fi
+
+    return 0
 }
 
 # ========================================
@@ -291,15 +314,13 @@ preflight_checks() {
         ((errors++))
     fi
 
-    # Check 6: For registry method, validate REGISTRY_URL
+    # Check 6: For registry method, validate credentials
     if [ "$DEPLOY_METHOD" = "registry" ]; then
         log_info "Validating registry configuration..."
-        if [ -z "$REGISTRY_URL" ] || [ "$REGISTRY_URL" = "ghcr.io/saptiva-ai/copilotos-bridge" ]; then
-            log_error "REGISTRY_URL not properly configured"
-            echo "  Set in envs/.env.prod: REGISTRY_URL=ghcr.io/username/repo"
-            ((errors++))
+        if check_registry_credentials; then
+            log_success "Registry credentials detected for $REGISTRY_URL"
         else
-            log_success "Registry URL configured: $REGISTRY_URL"
+            ((errors++))
         fi
     fi
 
@@ -374,6 +395,53 @@ list_deployment_history() {
     else
         echo "  No deployment history"
     fi
+}
+
+# ========================================
+# PRE DEPLOYMENT BACKUP
+# ========================================
+run_predeploy_backup() {
+    step "Pre-Deployment Mongo Backup"
+
+    if [ "$SKIP_BACKUP" = true ]; then
+        log_warning "Skipping Mongo backup (--skip-backup flag)"
+        return 0
+    fi
+
+    ssh "$DEPLOY_SERVER" "
+        set -e
+        cd $DEPLOY_PATH
+        if [ ! -x scripts/backup-mongodb.sh ]; then
+            exit 42
+        fi
+        mkdir -p \$HOME/backups/pre-deploy
+        scripts/backup-mongodb.sh --backup-dir \$HOME/backups/pre-deploy --env-file envs/.env
+    " && {
+        log_success "MongoDB backup completed on server"
+        return 0
+    }
+
+    local status=$?
+    case $status in
+        42)
+            log_warning "scripts/backup-mongodb.sh not found or not executable on server - skipping backup"
+            ;;
+        *)
+            log_error "MongoDB backup failed (exit code $status)"
+            if [ "$FORCE" = true ]; then
+                log_warning "Continuing due to --force flag"
+            else
+                read -p "Backup failed. Continue deployment anyway? (y/N) " -n 1 -r
+                echo
+                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                    log_error "Deployment aborted due to backup failure"
+                    exit 1
+                fi
+            fi
+            ;;
+    esac
+
+    return 0
 }
 
 # ========================================
@@ -494,6 +562,10 @@ deploy_via_tar() {
 deploy_via_registry() {
     step "Step 3/7: Deploy via Docker Registry"
 
+    if ! check_registry_credentials; then
+        return 1
+    fi
+
     # Push to registry
     log_info "Tagging for registry: $REGISTRY_URL"
     docker tag "copilotos-api:$NEW_VERSION" "$REGISTRY_URL/api:$NEW_VERSION"
@@ -544,16 +616,37 @@ deploy_via_local() {
 # ========================================
 # START DEPLOYMENT
 # ========================================
+ensure_ports_free() {
+    log_info "Ensuring service ports are free..."
+    ssh "$DEPLOY_SERVER" "
+        set -e
+        for port in 3000 8001 6380 27017; do
+            containers=\$(docker ps --format '{{.ID}}' --filter \"publish=\${port}\")
+            if [ -n \"\$containers\" ]; then
+                echo \"Stopping containers exposing port \$port...\"
+                docker stop \$containers >/dev/null 2>&1 || true
+            fi
+            if command -v fuser >/dev/null 2>&1; then
+                sudo -n fuser -k \${port}/tcp >/dev/null 2>&1 || true
+            elif command -v lsof >/dev/null 2>&1; then
+                sudo -n lsof -ti tcp:\$port | xargs -r sudo -n kill -9 >/dev/null 2>&1 || true
+            fi
+        done
+    " || log_warning "Port cleanup encountered warnings (continuing)"
+}
+
 start_deployment() {
     step "Step 4/7: Start Deployment on Server"
 
     log_info "Stopping current containers..."
-    ssh "$DEPLOY_SERVER" "cd $DEPLOY_PATH/infra && docker compose down" || {
+    ssh "$DEPLOY_SERVER" "cd $DEPLOY_PATH/infra && docker compose down --remove-orphans" || {
         log_warning "Stop failed (containers may not be running)"
     }
 
+    ensure_ports_free
+
     log_info "Starting new containers..."
-    ssh "$DEPLOY_SERVER" "cd $DEPLOY_PATH/infra && docker compose up -d" || {
+    ssh "$DEPLOY_SERVER" "cd $DEPLOY_PATH/infra && docker compose up -d --remove-orphans" || {
         log_error "Container start failed"
         return 1
     }
@@ -772,21 +865,22 @@ main() {
         echo "  Path:     $DEPLOY_PATH"
         echo ""
         echo -e "${BLUE}Steps that would be executed:${NC}"
-        echo "  1. Backup current deployment (version: $CURRENT_VERSION)"
+        echo "  1. Run MongoDB backup on server"
+        echo "  2. Backup current deployment (version: $CURRENT_VERSION)"
         if [ "$SKIP_BUILD" = false ]; then
-            echo "  2. Build Docker images (version: $NEW_VERSION)"
+            echo "  3. Build Docker images (version: $NEW_VERSION)"
         else
-            echo "  2. Skip build (using existing images)"
+            echo "  3. Skip build (using existing images)"
         fi
-        echo "  3. Deploy via $DEPLOY_METHOD method"
-        echo "  4. Start deployment on server"
+        echo "  4. Deploy via $DEPLOY_METHOD method"
+        echo "  5. Start deployment on server"
         if [ "$SKIP_HEALTHCHECK" = false ]; then
-            echo "  5. Health check verification"
+            echo "  6. Health check verification"
         else
-            echo "  5. Skip health check"
+            echo "  6. Skip health check"
         fi
-        echo "  6. Cleanup old versions"
-        echo "  7. Show deployment summary"
+        echo "  7. Cleanup old versions"
+        echo "  8. Show deployment summary"
         echo ""
         echo -e "${GREEN}Ready to deploy!${NC}"
         echo "Run without --dry-run to execute deployment"
@@ -804,6 +898,7 @@ main() {
     fi
 
     # Execute deployment
+    run_predeploy_backup
     backup_current_deployment
 
     if [ "$DEPLOY_METHOD" = "local" ]; then
