@@ -124,9 +124,12 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest_asyncio.fixture
-async def test_user(clean_db) -> Dict[str, str]:
+async def test_user() -> Dict[str, str]:
     """
     Create a test user and return credentials.
+
+    Note: Removed clean_db dependency to avoid cross-worker interference.
+    Unique usernames prevent collisions without needing global cleanup.
 
     Returns:
         dict with 'email', 'password', 'user_id', 'username'

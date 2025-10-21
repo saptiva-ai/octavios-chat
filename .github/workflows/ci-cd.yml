@@ -321,7 +321,7 @@ jobs:
         with:
           context: ./apps/web
           file: ./apps/web/Dockerfile
-          target: production
+          target: runner
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/copilotos-bridge/web:${{ steps.tags.outputs.VERSION }}
