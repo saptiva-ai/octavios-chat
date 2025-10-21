@@ -106,7 +106,11 @@ const ACCEPTED_FILE_TYPES = [
   "json",
   "ipynb",
 ];
-const MAX_FILE_SIZE_MB = 20;
+
+// Read from environment or fallback to 50MB (matches production)
+const MAX_FILE_SIZE_MB = process.env.NEXT_PUBLIC_MAX_FILE_SIZE_MB
+  ? parseInt(process.env.NEXT_PUBLIC_MAX_FILE_SIZE_MB, 10)
+  : 50;
 const MAX_FILE_COUNT = 5;
 
 const formatFileSize = (bytes: number): string => {
