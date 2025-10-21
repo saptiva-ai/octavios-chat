@@ -397,8 +397,13 @@ jobs:
         run: |
           set -o pipefail
           echo "Starting deployment with version: ${DEPLOY_VERSION}"
-          if [ -z "$REGISTRY_URL" ] || [ -z "$REGISTRY_USER" ] || [ -z "$REGISTRY_TOKEN" ]; then
-            echo "Registry credentials missing. Running TAR deployment directly."
+          missing=()
+          [ -z "$REGISTRY_URL" ] && missing+=("REGISTRY_URL")
+          [ -z "$REGISTRY_USER" ] && missing+=("REGISTRY_USER")
+          [ -z "$REGISTRY_TOKEN" ] && missing+=("REGISTRY_TOKEN")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "Registry credentials missing or empty: ${missing[*]}"
+            echo "Falling back to TAR deployment."
             ./scripts/deploy.sh tar --force
             exit 0
           fi
