@@ -1,6 +1,6 @@
 # Copilotos Bridge Makefile
 # Development-optimized workflow with auto .venv management
-.PHONY: help configure sync-env dev test test-all clean build lint security security-audit install-hooks shell-api shell-web \
+.PHONY: help configure sync-env package dev test test-all clean build lint security security-audit install-hooks shell-api shell-web \
         push-registry push-registry-fast deploy-registry deploy-prod deploy deploy-clean deploy-quick deploy-tar \
         deploy-fast deploy-tar-fast logs-prod logs-api-prod logs-web-prod logs-mongo-prod logs-redis-prod ssh-prod status-prod \
         db-migrate db-backup db-restore db-stats db-collections db-fix-drafts \
@@ -227,6 +227,7 @@ help:
 	@echo "  $(YELLOW)make build$(NC)                Build all images"
 	@echo ""
 	@echo "$(GREEN) ▸ Production Deployment (versionado con rollback):$(NC)"
+	@echo "  $(YELLOW)make package$(NC)            Build tarball (no secrets) for CI/CD"
 	@echo "  $(YELLOW)make deploy-tar$(NC)           Tar deployment (build y transferencia)"
 	@echo "  $(YELLOW)make deploy-fast$(NC)          Tar deployment sin rebuild (usa imagenes existentes)"
 	@echo "  $(YELLOW)make deploy-registry$(NC)      Despliegue desde el registry configurado"
@@ -437,6 +438,32 @@ rebuild-all: ensure-env
 	@$(DOCKER_COMPOSE_DEV) up -d
 	@echo "$(GREEN)   All containers rebuilt and restarted$(NC)"
 	@echo "$(BLUE)    All containers recreated with fresh code and env vars$(NC)"
+
+## Build sanitized deployment package (source only, no secrets)
+package:
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BLUE)▸ Building deployment package$(NC)"
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@set -euo pipefail; \
+		if ! command -v git >/dev/null 2>&1; then \
+			echo "$(RED) git is required to create the package$(NC)"; \
+			exit 1; \
+		fi; \
+		COMMIT=$$(git rev-parse --short HEAD); \
+		if [ -z "$$COMMIT" ]; then \
+			echo "$(RED) Unable to determine git commit$(NC)"; \
+			exit 1; \
+		fi; \
+		TIMESTAMP=$$(date +%Y%m%d-%H%M%S); \
+		BASENAME="$(PROJECT_NAME)-$$COMMIT-$$TIMESTAMP"; \
+		TARFILE="$$BASENAME.tar.gz"; \
+		echo "$(YELLOW) Packaging repository into $$TARFILE$(NC)"; \
+		git archive --format=tar --prefix="$(PROJECT_NAME)/" HEAD | gzip > "$$TARFILE"; \
+		sha256sum "$$TARFILE" > "$$TARFILE.sha256"; \
+		echo "$(GREEN)✔ Package created: $$TARFILE$(NC)"; \
+		echo "$(GREEN)✔ Checksum written to: $$TARFILE.sha256$(NC)"; \
+		echo ""; \
+		echo "$(YELLOW) Next: scp $$TARFILE to the target server or run make deploy-tar$(NC)"
 
 ## Clean Next.js cache and volumes
 ## Removes both host .next directory and Docker anonymous volumes

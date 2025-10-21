@@ -328,6 +328,11 @@ preflight_checks() {
 # VERSION MANAGEMENT
 # ========================================
 generate_version() {
+    if [ -n "${DEPLOY_VERSION:-}" ]; then
+        echo "$DEPLOY_VERSION"
+        return
+    fi
+
     cd "$PROJECT_ROOT"
     local git_sha=$(git log -1 --format="%h")
     local timestamp=$(date +%Y%m%d-%H%M%S)
