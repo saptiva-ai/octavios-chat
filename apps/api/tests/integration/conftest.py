@@ -193,11 +193,14 @@ async def test_user(clean_db) -> Dict[str, str]:
     Returns:
         dict with 'email', 'password', 'user_id', 'username'
     """
+    import uuid
     from src.services.auth_service import register_user
     from src.schemas.user import UserCreate
 
-    username = "Test User"
-    email = "test@example.com"
+    # Generate unique credentials for parallel test execution
+    unique_id = uuid.uuid4().hex[:8]
+    username = f"test-user-{unique_id}"
+    email = f"test-{unique_id}@example.com"
     password = "TestPass123"
 
     # Register user - register_user returns AuthResponse with user field

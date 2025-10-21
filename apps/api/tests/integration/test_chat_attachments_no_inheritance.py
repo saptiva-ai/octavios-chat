@@ -27,8 +27,10 @@ from src.schemas.user import UserCreate
 @pytest_asyncio.fixture
 async def test_user_attachments(clean_db) -> Dict[str, str]:
     """Create a test user for attachment tests and return credentials."""
-    username = "test-attachments"
-    email = "test-attachments@example.com"
+    import uuid
+    unique_id = uuid.uuid4().hex[:8]
+    username = f"test-attachments-{unique_id}"
+    email = f"test-attachments-{unique_id}@example.com"
     password = "Demo1234"
 
     # Register user

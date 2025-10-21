@@ -182,7 +182,71 @@ async def auto_cleanup_for_parallel_tests(initialize_db):
 
 ---
 
-### 5. Workflow Structure - Comentarios Mejorados
+### 5. Unique Test Usernames - Eliminación de Race Conditions
+
+**Archivos:**
+- `apps/api/tests/integration/conftest.py`
+- `apps/api/tests/integration/test_chat_attachments_no_inheritance.py`
+- `apps/api/tests/integration/test_chat_file_context.py`
+
+**Problema:**
+```python
+# ❌ Username hardcodeado causaba colisiones en parallel tests
+@pytest_asyncio.fixture
+async def test_user(clean_db):
+    username = "Test User"  # ❌ Workers múltiples crean el mismo usuario!
+    email = "test@example.com"
+```
+
+**Solución:**
+```python
+# ✅ Username único por test execution
+@pytest_asyncio.fixture
+async def test_user(clean_db):
+    import uuid
+    unique_id = uuid.uuid4().hex[:8]
+    username = f"test-user-{unique_id}"  # ✅ Cada worker usa username diferente
+    email = f"test-{unique_id}@example.com"
+```
+
+**Beneficios:**
+- ✅ Elimina DuplicateKeyError completamente
+- ✅ Cada test worker usa credenciales únicas
+- ✅ No requiere cambios en tests individuales
+- ✅ Funciona con cualquier nivel de paralelismo (-n auto)
+
+---
+
+### 6. Docker Push Temporalmente Deshabilitado
+
+**Archivo:** `.github/workflows/ci-cd.yml`
+
+**Cambio:**
+```yaml
+# Temporalmente deshabilitado hasta configurar permisos GHCR
+- name: Build and push API image
+  with:
+    push: false  # Era: push: true
+```
+
+**Razón:**
+- El repositorio no tiene permisos para pushear a GHCR packages
+- Error 403 Forbidden persistía a pesar de labels OCI
+- Esto es un issue de configuración de GitHub/GHCR, no del código
+
+**Próximos Pasos:**
+1. Configurar permisos del package en GHCR manualmente
+2. Verificar que `copilotos-bridge/api` y `copilotos-bridge/web` existen
+3. Cambiar `push: false` → `push: true` cuando los permisos estén configurados
+
+**Impacto:**
+- ✅ CI valida que el build funciona correctamente
+- ✅ Tests se ejecutan normalmente
+- ⚠️ Las imágenes NO se pushean a GHCR (temporal)
+
+---
+
+### 7. Workflow Structure - Comentarios Mejorados
 
 **Archivo:** `.github/workflows/ci-cd.yml`
 
