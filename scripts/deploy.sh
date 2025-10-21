@@ -624,7 +624,7 @@ ensure_ports_free() {
     log_info "Ensuring service ports are free..."
     ssh "$DEPLOY_SERVER" "
         set -e
-        for port in 3000 8001 6380 27017; do
+        for port in 3000 8001 6380 27017 27018; do
             containers=\$(docker ps --format '{{.ID}}' --filter \"publish=\${port}\")
             if [ -n \"\$containers\" ]; then
                 echo \"Stopping containers exposing port \$port...\"
