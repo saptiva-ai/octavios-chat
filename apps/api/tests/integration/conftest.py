@@ -41,12 +41,12 @@ from src.models.user import User
 from src.core.database import Database
 
 
-@pytest_asyncio.fixture(scope="function", autouse=True)
+@pytest_asyncio.fixture(scope="session", autouse=True)
 async def initialize_db():
-    """Initialize database connection for each test.
+    """Initialize database connection once per test worker.
 
-    This fixture runs once per test to ensure Beanie is initialized in the same event loop.
-    Changed from session to function scope to avoid event loop conflicts.
+    Changed to session scope to share event loop across all tests in a worker.
+    This prevents "Event loop is closed" errors in parallel test execution.
     """
     # Check if already initialized to avoid re-initialization
     try:
