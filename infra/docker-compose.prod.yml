@@ -115,7 +115,7 @@ services:
       # Rate limiting
       - RATE_LIMIT_REQUESTS_PER_MINUTE=200
       - MAX_PROMPT_LENGTH=50000
-      - MAX_UPLOAD_SIZE_MB=25
+      - MAX_FILE_SIZE=52428800  # 50MB in bytes (matches nginx client_max_body_size)
 
       # Streaming
       - STREAM_BACKPRESSURE_MAX=2000
@@ -165,6 +165,7 @@ services:
       - NEXT_PUBLIC_ENABLE_STREAMING=true
       - NEXT_PUBLIC_ENABLE_DEEP_RESEARCH=true
       - NEXT_PUBLIC_DEFAULT_MODEL=SAPTIVA_CORTEX
+      - NEXT_PUBLIC_MAX_FILE_SIZE_MB=50  # Max file upload size (matches backend and nginx)
 
       # Saptiva configuration
       - NEXT_PUBLIC_SAPTIVA_BASE_URL=https://api.saptiva.com

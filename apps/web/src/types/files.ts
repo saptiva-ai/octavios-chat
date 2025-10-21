@@ -101,9 +101,14 @@ export const SUPPORTED_MIME_TYPES = [
 export type SupportedMimeType = (typeof SUPPORTED_MIME_TYPES)[number];
 
 /**
- * Max upload size (10MB)
+ * Max upload size - reads from NEXT_PUBLIC_MAX_FILE_SIZE_MB environment variable
+ * Fallback: 50MB (matches production backend)
  */
-export const MAX_UPLOAD_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_FILE_SIZE_MB = process.env.NEXT_PUBLIC_MAX_FILE_SIZE_MB
+  ? parseInt(process.env.NEXT_PUBLIC_MAX_FILE_SIZE_MB, 10)
+  : 50;
+
+export const MAX_UPLOAD_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024; // Convert MB to bytes
 
 /**
  * Rate limit (5 uploads per minute)
@@ -114,7 +119,7 @@ export const RATE_LIMIT_UPLOADS_PER_MINUTE = 5;
  * User-friendly error messages
  */
 export const FILE_ERROR_MESSAGES: Record<FileErrorCode, string> = {
-  UPLOAD_TOO_LARGE: "El archivo es demasiado grande. Máximo 10 MB.",
+  UPLOAD_TOO_LARGE: `El archivo es demasiado grande. Máximo ${MAX_FILE_SIZE_MB} MB.`,
   UNSUPPORTED_MIME:
     "Tipo de archivo no soportado. Usa PDF, PNG, JPG, GIF o HEIC.",
   EXTRACTION_FAILED: "Error al procesar el archivo. Intenta de nuevo.",
