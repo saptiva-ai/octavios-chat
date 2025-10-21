@@ -12,6 +12,7 @@ from typing import Optional
 import structlog
 from fastapi import HTTPException, UploadFile, status
 
+from ..core.config import get_settings
 from ..core.redis_cache import get_redis_cache
 from ..core.telemetry import (
     increment_pdf_ingest_error,
@@ -28,7 +29,10 @@ from .document_extraction import extract_text_from_file
 
 logger = structlog.get_logger(__name__)
 
-MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB per file (V1 MVP limit)
+# Get max file size from settings (reads from MAX_FILE_SIZE env var)
+# Fallback to 10MB for backwards compatibility
+settings = get_settings()
+MAX_UPLOAD_BYTES = settings.max_file_size
 SUPPORTED_MIME_TYPES = {
     "application/pdf",
     "image/png",
