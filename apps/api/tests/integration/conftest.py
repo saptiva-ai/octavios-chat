@@ -41,12 +41,12 @@ from src.models.user import User
 from src.core.database import Database
 
 
-@pytest_asyncio.fixture(scope="session", autouse=True)
+@pytest_asyncio.fixture(scope="function", autouse=True)
 async def initialize_db():
-    """Initialize database connection once per test worker.
+    """Initialize database connection for each test.
 
-    Changed to session scope to share event loop across all tests in a worker.
-    This prevents "Event loop is closed" errors in parallel test execution.
+    This fixture runs once per test to ensure Beanie is initialized in the same event loop.
+    Changed from session to function scope to avoid event loop conflicts.
     """
     # Check if already initialized to avoid re-initialization
     try:
@@ -124,24 +124,18 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest_asyncio.fixture
-async def test_user() -> Dict[str, str]:
+async def test_user(clean_db) -> Dict[str, str]:
     """
     Create a test user and return credentials.
-
-    Note: Removed clean_db dependency to avoid cross-worker interference.
-    Unique usernames prevent collisions without needing global cleanup.
 
     Returns:
         dict with 'email', 'password', 'user_id', 'username'
     """
-    import uuid
     from src.services.auth_service import register_user
     from src.schemas.user import UserCreate
 
-    # Generate unique credentials for parallel test execution
-    unique_id = uuid.uuid4().hex[:8]
-    username = f"test-user-{unique_id}"
-    email = f"test-{unique_id}@example.com"
+    username = "Test User"
+    email = "test@example.com"
     password = "TestPass123"
 
     # Register user - register_user returns AuthResponse with user field
