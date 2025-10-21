@@ -60,6 +60,66 @@ async def initialize_db():
     # Only close at the very end
 
 
+@pytest_asyncio.fixture(scope="function", autouse=True)
+async def auto_cleanup_for_parallel_tests():
+    """Automatically clean database for ALL integration tests.
+
+    This fixture ensures complete isolation between tests when running in parallel.
+    Runs BEFORE and AFTER each test automatically (autouse=True).
+    """
+    from src.models.user import User
+    from src.models.chat import ChatSession as ChatSessionModel
+    from src.models.document import Document
+    from src.services.cache_service import get_redis_client
+
+    # Clean all collections before test
+    await User.delete_all()
+    await ChatSessionModel.delete_all()
+    await Document.delete_all()
+
+    # Clean Redis cache
+    try:
+        redis_client = await get_redis_client()
+        if redis_client:
+            # Delete all test keys (blacklist, sessions, etc.)
+            cursor = 0
+            while True:
+                cursor, keys = await redis_client.scan(cursor, match="*", count=1000)
+                if keys:
+                    # Filter out system keys if any
+                    test_keys = [k for k in keys if not k.startswith(b'_system')]
+                    if test_keys:
+                        await redis_client.delete(*test_keys)
+                if cursor == 0:
+                    break
+    except Exception:
+        # Redis cleanup is optional - tests can still run without it
+        pass
+
+    yield
+
+    # Clean all collections after test
+    await User.delete_all()
+    await ChatSessionModel.delete_all()
+    await Document.delete_all()
+
+    # Clean Redis again after test
+    try:
+        redis_client = await get_redis_client()
+        if redis_client:
+            cursor = 0
+            while True:
+                cursor, keys = await redis_client.scan(cursor, match="*", count=1000)
+                if keys:
+                    test_keys = [k for k in keys if not k.startswith(b'_system')]
+                    if test_keys:
+                        await redis_client.delete(*test_keys)
+                if cursor == 0:
+                    break
+    except Exception:
+        pass
+
+
 @pytest_asyncio.fixture
 async def clean_db():
     """Clean database and Redis before each test.
