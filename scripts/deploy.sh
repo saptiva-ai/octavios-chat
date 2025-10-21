@@ -584,6 +584,10 @@ deploy_via_registry() {
     log_success "Images pushed to registry"
 
     # Pull on server
+    if ! remote_registry_login; then
+        return 1
+    fi
+
     log_info "Pulling images on server..."
     ssh "$DEPLOY_SERVER" "
         docker pull $REGISTRY_URL/api:$NEW_VERSION
@@ -633,6 +637,24 @@ ensure_ports_free() {
             fi
         done
     " || log_warning "Port cleanup encountered warnings (continuing)"
+}
+
+remote_registry_login() {
+    if ! check_registry_credentials; then
+        return 1
+    fi
+
+    local registry_host
+    registry_host=$(echo "$REGISTRY_URL" | cut -d'/' -f1)
+
+    log_info "Logging into registry on server ($registry_host)..."
+    ssh "$DEPLOY_SERVER" "
+        printf '%s\n' \"$REGISTRY_TOKEN\" | docker login \"$registry_host\" -u \"$REGISTRY_USER\" --password-stdin >/dev/null
+    " || {
+        log_error "Registry login failed on server"
+        return 1
+    }
+    log_success "Registry login successful on server"
 }
 
 start_deployment() {
