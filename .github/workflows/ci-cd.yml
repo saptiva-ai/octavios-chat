@@ -292,6 +292,12 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/copilotos-bridge/api:${{ steps.tags.outputs.VERSION }}
             ghcr.io/${{ github.repository_owner }}/copilotos-bridge/api:${{ steps.tags.outputs.GIT_SHA }}
             ghcr.io/${{ github.repository_owner }}/copilotos-bridge/api:latest
+          build-args: |
+            TORCH_CPU_INDEX_URL=https://download.pytorch.org/whl/cpu
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.tags.outputs.VERSION }}
           cache-from: type=local,src=/tmp/.buildx-cache-api
           cache-to: type=local,dest=/tmp/.buildx-cache-api-new,mode=max
 
@@ -321,6 +327,10 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/copilotos-bridge/web:${{ steps.tags.outputs.VERSION }}
             ghcr.io/${{ github.repository_owner }}/copilotos-bridge/web:${{ steps.tags.outputs.GIT_SHA }}
             ghcr.io/${{ github.repository_owner }}/copilotos-bridge/web:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.tags.outputs.VERSION }}
           cache-from: type=local,src=/tmp/.buildx-cache-web
           cache-to: type=local,dest=/tmp/.buildx-cache-web-new,mode=max
 

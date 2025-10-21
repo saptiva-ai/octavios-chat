@@ -61,11 +61,13 @@ async def initialize_db():
 
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
-async def auto_cleanup_for_parallel_tests():
+async def auto_cleanup_for_parallel_tests(initialize_db):
     """Automatically clean database for ALL integration tests.
 
     This fixture ensures complete isolation between tests when running in parallel.
     Runs BEFORE and AFTER each test automatically (autouse=True).
+
+    Depends on initialize_db to ensure Beanie is initialized before cleanup.
     """
     from src.models.user import User
     from src.models.chat import ChatSession as ChatSessionModel
