@@ -15,6 +15,7 @@ WORKDIR /app
 # DEPENDENCIES STAGE
 # =========================================
 FROM base as deps
+ARG TORCH_CPU_INDEX_URL=https://download.pytorch.org/whl/cpu
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -26,12 +27,16 @@ RUN apt-get update && apt-get install -y \
 
 # Copy and install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir \
+    --index-url ${TORCH_CPU_INDEX_URL} \
+    --extra-index-url https://pypi.org/simple \
+    -r requirements.txt
 
 # =========================================
 # DEVELOPMENT STAGE (includes testing tools)
 # =========================================
 FROM base as development
+ARG TORCH_CPU_INDEX_URL=https://download.pytorch.org/whl/cpu
 
 # Copy installed packages from deps stage
 COPY --from=deps /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
@@ -39,7 +44,10 @@ COPY --from=deps /usr/local/bin /usr/local/bin
 
 # Install development dependencies
 COPY requirements-dev.txt .
-RUN pip install --no-cache-dir -r requirements-dev.txt
+RUN pip install --no-cache-dir \
+    --index-url ${TORCH_CPU_INDEX_URL} \
+    --extra-index-url https://pypi.org/simple \
+    -r requirements-dev.txt
 
 # Install runtime dependencies (MVP-OCR: Added tesseract-ocr for image text extraction)
 RUN apt-get update && apt-get install -y \
