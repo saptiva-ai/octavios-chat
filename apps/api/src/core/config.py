@@ -324,7 +324,11 @@ class Settings(BaseSettings):
         return config
     
     # File Upload & Storage
-    max_file_size: int = Field(default=10485760, description="Max file size in bytes")
+    max_file_size: int = Field(
+        default=10485760,
+        description="Max file size in bytes (default: 10MB, prod: 50MB)",
+        alias="MAX_FILE_SIZE"
+    )
     allowed_file_types: List[str] = Field(
         default=["txt", "md", "pdf", "docx"],
         description="Allowed file types"
