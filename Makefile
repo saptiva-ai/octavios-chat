@@ -28,6 +28,8 @@ DEV_ENV_EXAMPLE := envs/.env.local.example
 PROD_ENV_FILE := envs/.env.prod
 
 # Load developer environment variables for local workflows (best effort)
+# IMPORTANT: Only load .env.prod for deployment targets (deploy-*, push-*, backup-*-prod)
+# For development commands (dev, stop, test, etc.), use .env.local / .env only
 ifneq (,$(wildcard $(DEV_ENV_FALLBACK)))
 	include $(DEV_ENV_FALLBACK)
 endif
@@ -35,9 +37,15 @@ ifneq (,$(wildcard $(DEV_ENV_FILE)))
 	include $(DEV_ENV_FILE)
 endif
 
-# Load production environment variables for deployment commands
-ifneq (,$(wildcard $(PROD_ENV_FILE)))
-	include $(PROD_ENV_FILE)
+# Production env variables ONLY for deployment targets (not dev commands)
+# This prevents PROJECT_NAME conflicts between dev (copilotos) and prod (copilotos-prod)
+ifeq ($(filter deploy% push% backup%-prod restore%-prod,$(MAKECMDGOALS)),)
+	# NOT a deployment command, skip .env.prod
+else
+	# Deployment command detected, load production config
+	ifneq (,$(wildcard $(PROD_ENV_FILE)))
+		include $(PROD_ENV_FILE)
+	endif
 endif
 export
 
@@ -247,6 +255,13 @@ help:
 	@echo "$(GREEN) ▸ Registry Workflow (Advanced):$(NC)"
 	@echo "  $(YELLOW)make push-registry$(NC)        Push images to Docker registry"
 	@echo "  $(YELLOW)make deploy-prod$(NC)          Complete workflow (build+push+guide)"
+	@echo ""
+	@echo "$(GREEN) ▸ Blue/Green Deployment:$(NC)"
+	@echo "  $(YELLOW)make bg-init$(NC)              Initialize blue/green infrastructure"
+	@echo "  $(YELLOW)make bg-status$(NC)            Show current active/idle color"
+	@echo "  $(YELLOW)make bg-switch$(NC)            Switch to idle color (zero-downtime)"
+	@echo "  $(YELLOW)make bg-switch-blue$(NC)       Switch to blue stack"
+	@echo "  $(YELLOW)make bg-switch-green$(NC)      Switch to green stack"
 	@echo ""
 	@echo "$(GREEN) ▸ Maintenance:$(NC)"
 	@echo "  $(YELLOW)make clear-cache$(NC)          Clear server cache (Redis + restart)"
@@ -528,14 +543,32 @@ verify-deps-fix:
 ## Stop all services (dev compose)
 stop:
 	@echo "$(YELLOW) Stopping services...$(NC)"
-	@$(DOCKER_COMPOSE_DEV) down
+	@$(DOCKER_COMPOSE_DEV) down || true
+	@# Fallback: stop any container with 'copilotos' prefix if compose down failed
+	@RUNNING=$$(docker ps --filter "name=copilotos" --format "{{.Names}}" | wc -l); \
+	if [ "$$RUNNING" -gt 0 ]; then \
+		echo "$(YELLOW)  Found $$RUNNING running containers, stopping them directly...$(NC)"; \
+		docker ps --filter "name=copilotos" --format "{{.Names}}" | xargs -r docker stop; \
+		docker ps -a --filter "name=copilotos" --format "{{.Names}}" | xargs -r docker rm; \
+		echo "$(GREEN)✓ Containers stopped and removed$(NC)"; \
+	fi
 	@echo "$(GREEN) Services stopped$(NC)"
 
 ## Stop ALL project containers (including base compose)
 stop-all:
 	@echo "$(YELLOW) Stopping ALL project containers...$(NC)"
-	@cd infra && docker compose down --remove-orphans 2>/dev/null || true
-	@$(DOCKER_COMPOSE_DEV) down --remove-orphans
+	@# Try multiple project names (copilotos, copilotos-prod, infra)
+	@for project in copilotos copilotos-prod infra; do \
+		docker compose -p $$project -f infra/docker-compose.yml down --remove-orphans 2>/dev/null || true; \
+		docker compose -p $$project -f infra/docker-compose.yml -f infra/docker-compose.dev.yml down --remove-orphans 2>/dev/null || true; \
+	done
+	@# Final fallback: force stop any remaining copilotos containers
+	@RUNNING=$$(docker ps --filter "name=copilotos" --format "{{.Names}}" | wc -l); \
+	if [ "$$RUNNING" -gt 0 ]; then \
+		echo "$(YELLOW)  Found $$RUNNING orphaned containers, force stopping...$(NC)"; \
+		docker ps --filter "name=copilotos" --format "{{.Names}}" | xargs -r docker stop; \
+		docker ps -a --filter "name=copilotos" --format "{{.Names}}" | xargs -r docker rm; \
+	fi
 	@echo "$(GREEN) All project containers stopped$(NC)"
 
 ## Restart all services (recreates containers to reload env vars)
@@ -2104,6 +2137,48 @@ obs-clean:
 	@sleep 5
 	@$(DOCKER_COMPOSE_OBS) down -v
 	@echo "$(GREEN)✓ Monitoring data cleaned$(NC)"
+
+# ============================================================================
+# BLUE/GREEN DEPLOYMENT
+# ============================================================================
+# Commands for zero-downtime blue/green deployments
+#
+# Workflow:
+#   1. make bg-init              - One-time setup (creates volumes + data layer)
+#   2. Deploy to idle color      - docker compose -p copilotos-blue up -d
+#   3. make bg-switch            - Auto-switch to idle (health checks + nginx update)
+#   4. Rollback if needed        - make bg-switch (switches back instantly)
+#
+# Documentation: docs/deployment/CI_CD_OPTIMIZATION_SUMMARY.md
+# ============================================================================
+
+## Initialize blue/green deployment infrastructure
+bg-init:
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BLUE)▸ Blue/Green Initialization$(NC)"
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@chmod +x scripts/init-blue-green.sh
+	@./scripts/init-blue-green.sh
+
+## Show blue/green deployment status
+bg-status:
+	@chmod +x scripts/blue-green-switch.sh
+	@./scripts/blue-green-switch.sh --status
+
+## Switch to idle color (auto-detect)
+bg-switch:
+	@chmod +x scripts/blue-green-switch.sh
+	@./scripts/blue-green-switch.sh auto
+
+## Switch to blue stack explicitly
+bg-switch-blue:
+	@chmod +x scripts/blue-green-switch.sh
+	@./scripts/blue-green-switch.sh blue
+
+## Switch to green stack explicitly
+bg-switch-green:
+	@chmod +x scripts/blue-green-switch.sh
+	@./scripts/blue-green-switch.sh green
 
 # ============================================================================
 # UTILITIES
