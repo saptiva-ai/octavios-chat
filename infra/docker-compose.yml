@@ -161,6 +161,7 @@ services:
       target: dev
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api:8001}
+        NEXT_PUBLIC_MAX_FILE_SIZE_MB: ${NEXT_PUBLIC_MAX_FILE_SIZE_MB:-50}
         NODE_ENV: ${NODE_ENV:-development}
         UID: ${UID:-1000}
         GID: ${GID:-1000}

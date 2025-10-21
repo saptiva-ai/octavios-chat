@@ -173,7 +173,11 @@ build_images() {
         docker build -f apps/api/Dockerfile -t infra-api:latest --target production apps/api
 
         log_info "Building Web image..."
-        docker build -f apps/web/Dockerfile -t infra-web:latest --target runner .
+        docker build -f apps/web/Dockerfile \
+            --build-arg NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-http://localhost:8001}" \
+            --build-arg NEXT_PUBLIC_MAX_FILE_SIZE_MB="${NEXT_PUBLIC_MAX_FILE_SIZE_MB:-50}" \
+            -t infra-web:latest \
+            --target runner .
     else
         log_info "Building with --no-cache to ensure latest code..."
 
@@ -181,7 +185,12 @@ build_images() {
         docker build -f apps/api/Dockerfile -t infra-api:latest --target production --no-cache apps/api
 
         log_info "Building Web image..."
-        docker build -f apps/web/Dockerfile -t infra-web:latest --target runner --no-cache .
+        docker build -f apps/web/Dockerfile \
+            --build-arg NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-http://localhost:8001}" \
+            --build-arg NEXT_PUBLIC_MAX_FILE_SIZE_MB="${NEXT_PUBLIC_MAX_FILE_SIZE_MB:-50}" \
+            -t infra-web:latest \
+            --target runner \
+            --no-cache .
     fi
 
     log_success "Images built successfully"

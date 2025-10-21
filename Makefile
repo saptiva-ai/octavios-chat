@@ -128,10 +128,12 @@ help:
 	@echo "  make logs                 View live logs from all services"
 	@echo ""
 	@echo "▲ Common Issue: Code changes not reflected"
-	@echo "  make rebuild-api          Rebuild API with --no-cache"
-	@echo "  make rebuild-web          Rebuild web with --no-cache"
-	@echo "  make rebuild-all          Rebuild every service when env vars change"
-	@echo "  (Use rebuild + docker compose down/up to bypass Docker cache)"
+	@echo "  make reload-env           ♻️  Reload env vars (fast, no rebuild)"
+	@echo "  make reload-env-service   ♻️  Reload env for one service: SERVICE=api"
+	@echo "  make rebuild-api          🔨 Rebuild API with --no-cache"
+	@echo "  make rebuild-web          🔨 Rebuild web with --no-cache"
+	@echo "  make rebuild-all          🔨 Rebuild every service when code changes"
+	@echo "  $(CYAN)Note: Use reload-env after .env changes, rebuild after code changes$(NC)"
 	@echo ""
 	@echo "▸ Development"
 	@echo "  make dev                  Start development stack"
@@ -590,6 +592,36 @@ restart:
 	else \
 		echo "$(YELLOW)  API may need more time. Check: make health$(NC)"; \
 	fi
+
+## Reload environment variables without rebuilding
+#   Use after updating .env file to refresh container environment variables
+#   More efficient than 'make restart' - only recreates containers without down/up cycle
+reload-env:
+	@echo "$(YELLOW)♻️  Reloading environment variables...$(NC)"
+	@$(DOCKER_COMPOSE_DEV) up -d --force-recreate --no-build
+	@echo "$(GREEN)✔ Environment variables reloaded$(NC)"
+	@echo "$(YELLOW)⏳ Waiting for services to be ready...$(NC)"
+	@sleep 5
+	@if curl -sf http://localhost:8001/api/health > /dev/null 2>&1; then \
+		echo "$(GREEN)✔ API is healthy and using new env vars!$(NC)"; \
+		docker exec $(PROJECT_NAME)-api env | grep -E "SAPTIVA_API_KEY=|SAPTIVA_BASE_URL=" | sed 's/\(SAPTIVA_API_KEY=.\{20\}\).*/\1.../' | sed 's/^/  $(CYAN)/' | sed 's/$$/$(NC)/'; \
+	else \
+		echo "$(YELLOW)⚠  API may need more time. Check: make health$(NC)"; \
+	fi
+
+## Reload environment variables for specific service
+#   Usage: make reload-env-service SERVICE=api
+#   Recreates only the specified service with new env vars
+reload-env-service:
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "$(RED)✗ Error: SERVICE not specified$(NC)"; \
+		echo "$(YELLOW)Usage: make reload-env-service SERVICE=api$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)♻️  Reloading environment for $(SERVICE)...$(NC)"
+	@$(DOCKER_COMPOSE_DEV) up -d --force-recreate --no-build $(SERVICE)
+	@echo "$(GREEN)✔ Environment variables reloaded for $(SERVICE)$(NC)"
+	@sleep 3
 
 ## Follow logs from all services
 logs:
