@@ -340,7 +340,85 @@ async def test_user():  # Usernames únicos previenen colisiones
 
 ---
 
-### 9. Workflow Structure - Comentarios Mejorados
+### 9. Initialize DB Fixture - Scope Session para Event Loop
+
+**Archivo:** `apps/api/tests/integration/conftest.py`
+
+**Problema (Commit 311f14e):**
+```python
+# ❌ scope="function" causa event loop conflicts en parallel mode
+@pytest_asyncio.fixture(scope="function", autouse=True)
+async def initialize_db():
+    await Database.connect_to_mongo()
+```
+
+**Error Observado:**
+```
+RuntimeError: Event loop is closed
+```
+
+**Causa Raíz:**
+- En parallel mode, cada worker tiene su propio event loop
+- Con `scope="function"`, se crea conexión nueva para cada test
+- Event loop se cierra prematuramente, pero otros tests intentan usarlo
+- Causa conflicts cuando múltiples tests en el mismo worker intentan acceder DB
+
+**Solución (Este commit):**
+```python
+# ✅ scope="session" comparte event loop entre tests del mismo worker
+@pytest_asyncio.fixture(scope="session", autouse=True)
+async def initialize_db():
+    await Database.connect_to_mongo()
+```
+
+**Beneficios:**
+- ✅ Un solo event loop por worker (no por test)
+- ✅ Elimina "Event loop is closed" errors
+- ✅ Mantiene isolation entre workers
+- ✅ Mejor performance (menos overhead de conexión)
+
+---
+
+### 10. Docker Web Build - Fix Context Path
+
+**Archivo:** `.github/workflows/ci-cd.yml`
+
+**Problema (Commit 311f14e):**
+```yaml
+# ❌ Context apunta solo a apps/web
+- name: Build and push Web image
+  with:
+    context: ./apps/web  # ❌ Dockerfile necesita packages/ y apps/web/
+```
+
+**Error Observado:**
+```
+ERROR: "/apps/web": not found
+ERROR: "/packages": not found
+```
+
+**Causa Raíz:**
+- Web Dockerfile hace `COPY packages/ ./packages/`
+- También copia `COPY apps/web/package.json ./apps/web/`
+- Esas rutas solo existen desde la raíz del proyecto
+- Context `./apps/web` no incluye `packages/` ni `apps/web/`
+
+**Solución (Este commit):**
+```yaml
+# ✅ Context en raíz del proyecto
+- name: Build and push Web image
+  with:
+    context: .  # ✅ Ahora puede acceder a packages/ y apps/
+```
+
+**Beneficios:**
+- ✅ Build de Web completa exitosamente
+- ✅ Acceso a todos los packages necesarios
+- ✅ Mantiene estructura de monorepo correctamente
+
+---
+
+### 11. Workflow Structure - Comentarios Mejorados
 
 **Archivo:** `.github/workflows/ci-cd.yml`
 
