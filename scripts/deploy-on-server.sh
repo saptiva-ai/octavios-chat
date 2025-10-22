@@ -319,7 +319,7 @@ build_images() {
 
     log_info "Building API and Web images..."
 
-    docker compose build $build_flags || {
+    docker compose --env-file ../envs/.env build $build_flags || {
         log_error "Build failed"
         return 1
     }
@@ -336,12 +336,12 @@ deploy_containers() {
     cd "$PROJECT_ROOT/infra"
 
     log_info "Stopping current containers..."
-    docker compose down || {
+    docker compose --env-file ../envs/.env down || {
         log_warning "Stop had warnings (may be first deployment)"
     }
 
     log_info "Starting updated containers..."
-    docker compose up -d || {
+    docker compose --env-file ../envs/.env up -d || {
         log_error "Container start failed"
         return 1
     }
@@ -429,14 +429,14 @@ rollback_to_backup() {
     cd "$PROJECT_ROOT/infra"
 
     log_info "Stopping failed deployment..."
-    docker compose down
+    docker compose --env-file ../envs/.env down
 
     log_info "Restoring backup images..."
     docker tag "octavios-api:$backup_tag" octavios-api:latest
     docker tag "octavios-web:$backup_tag" octavios-web:latest
 
     log_info "Starting previous version..."
-    docker compose up -d
+    docker compose --env-file ../envs/.env up -d
 
     sleep 20
 
