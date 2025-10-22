@@ -266,11 +266,14 @@ services:
 # ========================================
 volumes:
   mongodb_data:
-    driver: local
+    external: true
+    name: copilotos-prod_mongodb_data
   mongodb_config:
-    driver: local
+    external: true
+    name: copilotos-prod_mongodb_config
   redis_data:
-    driver: local
+    external: true
+    name: copilotos-prod_redis_data
   nginx_cache:
     driver: local
   # Next.js build cache volumes to avoid permission issues
