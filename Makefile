@@ -20,7 +20,7 @@ obs-up obs-down obs-logs obs-restart obs-status obs-clean venv-install
 # ============================================================================
 
 # Project defaults
-DEFAULT_PROJECT_DISPLAY_NAME := CopilotOS
+DEFAULT_PROJECT_DISPLAY_NAME := OctavioOS
 DEFAULT_COMPOSE_PROJECT_NAME := octavios
 
 # Environment
