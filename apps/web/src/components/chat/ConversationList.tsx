@@ -455,7 +455,7 @@ export function ConversationList({
         style={{ backgroundColor: "#121A21" }}
       >
         <div className="flex items-center justify-between gap-2 px-3 py-3">
-          {/* Layout: [<] [Historial CopilotOS] [+] */}
+          {/* Layout: [<] [Historial OctaviOS] [+] */}
 
           {/* Botón colapsar - siempre visible en desktop */}
           {onCollapse && (
@@ -505,7 +505,9 @@ export function ConversationList({
               <p className="text-xs uppercase tracking-[0.2em] text-text-muted">
                 Historial
               </p>
-              <h2 className="text-lg font-semibold text-white">CopilotOS</h2>
+              <h2 className="text-lg font-semibold text-white">
+                OctaviOS Chat
+              </h2>
             </div>
           )}
 
@@ -779,7 +781,7 @@ export function ConversationList({
       >
         {isDesktopVariant ? (
           <>
-            {/* Layout Grid: [<] [Historial CopilotOS] [+] */}
+            {/* Layout Grid: [<] [Historial OctaviOS] [+] */}
 
             {/* Botón colapsar - siempre visible */}
             {onCollapse && (
@@ -829,7 +831,9 @@ export function ConversationList({
                 <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted">
                   Historial
                 </p>
-                <h2 className="text-sm font-semibold text-white">CopilotOS</h2>
+                <h2 className="text-sm font-semibold text-white">
+                  OctaviOS Chat
+                </h2>
               </div>
             )}
 
@@ -904,7 +908,9 @@ export function ConversationList({
               <p className="text-xs uppercase tracking-[0.2em] text-text-muted">
                 Historial
               </p>
-              <h2 className="text-lg font-semibold text-white">CopilotOS</h2>
+              <h2 className="text-lg font-semibold text-white">
+                OctaviOS Chat
+              </h2>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {onClose && (
