@@ -237,10 +237,11 @@ backup_data_volumes() {
     # Backup Docker volumes (MongoDB + Redis data)
     log_info "Backing up Docker volumes..."
     if [ -f "$PROJECT_ROOT/scripts/backup-docker-volumes.sh" ]; then
+        # Note: backup-docker-volumes.sh doesn't support --env-file, but inherits
+        # environment variables from parent shell (COMPOSE_PROJECT_NAME, etc.)
         if ! "$PROJECT_ROOT/scripts/backup-docker-volumes.sh" \
             --backup-dir "$backup_dir" \
-            --retention-days 7 \
-            --env-file "$ENV_FILE_PATH"; then
+            --retention-days 7; then
             log_error "Volume backup FAILED"
             log_error "Aborting deployment for data safety"
             exit 1
