@@ -21,10 +21,10 @@ async def test_wrong_password():
     print("")
 
     # Correct connection string format but intentionally wrong password
-    wrong_url = "mongodb://copilotos_user:WrongPassword123@mongodb:27017/copilotos?authSource=admin"
+    wrong_url = "mongodb://octavios_user:WrongPassword123@mongodb:27017/octavios?authSource=admin"
 
     print("🔌 Attempting connection with WRONG password...")
-    print(f"   Username: copilotos_user")
+    print(f"   Username: octavios_user")
     print(f"   Password: WrongPassword123 (intentionally incorrect)")
     print(f"   Host: mongodb:27017")
     print(f"   AuthSource: admin")
@@ -59,9 +59,9 @@ async def test_wrong_password():
         print(f"   error_code: {getattr(e, 'code', None)}")
         print("")
         print("   connection_details:")
-        print("     username: copilotos_user")
+        print("     username: octavios_user")
         print("     host: mongodb:27017")
-        print("     database: copilotos")
+        print("     database: octavios")
         print("     auth_source: admin")
         print("     using_srv: False")
         print("")
@@ -70,7 +70,7 @@ async def test_wrong_password():
         print("     2. Verify MongoDB container initialized with same password")
         print("     3. If password changed, recreate volumes: docker compose down -v")
         print("     4. Check environment variables are loaded: docker compose config")
-        print("     5. Test direct connection: docker exec copilotos-mongodb mongosh -u <user> -p <pass>")
+        print("     5. Test direct connection: docker exec octavios-mongodb mongosh -u <user> -p <pass>")
         print("")
 
         if 'Authentication failed' in str(e):

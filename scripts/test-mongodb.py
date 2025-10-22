@@ -38,7 +38,7 @@ async def test_mongodb_connection():
         print("✅ MongoDB connection successful!")
         
         # Test database access
-        db = client.copilotos
+        db = client.octavios
         
         # Test collection creation and basic operations
         test_collection = db.test_collection
@@ -85,9 +85,9 @@ def print_connection_help():
     print("\n   2. Check if MongoDB is running:")
     print("      docker ps | grep mongodb")
     print("\n   3. View MongoDB logs:")
-    print("      docker logs copilotos-mongodb")
+    print("      docker logs octavios-mongodb")
     print("\n   4. Connect with MongoDB shell:")
-    print("      docker exec -it copilotos-mongodb mongosh -u <username> -p <password>")
+    print("      docker exec -it octavios-mongodb mongosh -u <username> -p <password>")
 
 
 async def main():

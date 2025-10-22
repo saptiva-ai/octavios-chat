@@ -75,10 +75,10 @@ def main():
     print("   echo 'your-secret' | docker secret create mongodb_password -")
     print()
     print("☁️  AWS Secrets Manager Example:")
-    print("   aws secretsmanager create-secret --name 'copilotos/mongodb-password' --secret-string 'your-secret'")
+    print("   aws secretsmanager create-secret --name 'octavios/mongodb-password' --secret-string 'your-secret'")
     print()
     print("🔒 Kubernetes Secrets Example:")
-    print("   kubectl create secret generic copilotos-secrets \\")
+    print("   kubectl create secret generic octavios-secrets \\")
     for key, value in secrets_config.items():
         if value is not None:
             print(f"     --from-literal={key.lower()}='{value}' \\")

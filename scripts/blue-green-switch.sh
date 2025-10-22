@@ -33,8 +33,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DEPLOY_STATE_DIR="${DEPLOY_STATE_DIR:-$PROJECT_ROOT/.deploy}"
 CURRENT_COLOR_FILE="$DEPLOY_STATE_DIR/current_color"
-NGINX_CONFIG="/etc/nginx/sites-available/copilotos"
-NGINX_ENABLED="/etc/nginx/sites-enabled/copilotos"
+NGINX_CONFIG="/etc/nginx/sites-available/octavios"
+NGINX_ENABLED="/etc/nginx/sites-enabled/octavios"
 
 RED="✖ "
 GREEN="✔ "
@@ -86,7 +86,7 @@ get_target_color() {
 # ========================================
 check_stack_health() {
     local color=$1
-    local project="copilotos-$color"
+    local project="octavios-$color"
 
     log_info "Checking health of $color stack..."
 
@@ -127,7 +127,7 @@ check_stack_health() {
 # ========================================
 update_nginx_upstream() {
     local new_color=$1
-    local project="copilotos-$new_color"
+    local project="octavios-$new_color"
 
     log_info "Updating nginx upstream to $new_color..."
 
@@ -148,11 +148,11 @@ update_nginx_upstream() {
 # API port: $api_port
 # Web port: $web_port
 
-upstream copilotos_api {
+upstream octavios_api {
     server 127.0.0.1:$api_port;
 }
 
-upstream copilotos_web {
+upstream octavios_web {
     server 127.0.0.1:$web_port;
 }
 
@@ -163,7 +163,7 @@ server {
 
     # API Backend
     location /api/ {
-        proxy_pass http://copilotos_api;
+        proxy_pass http://octavios_api;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -180,7 +180,7 @@ server {
 
     # Frontend
     location / {
-        proxy_pass http://copilotos_web;
+        proxy_pass http://octavios_web;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -270,7 +270,7 @@ perform_switch() {
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             log_info "Stopping $old_color stack..."
-            docker compose -p "copilotos-$old_color" \
+            docker compose -p "octavios-$old_color" \
                 -f "$PROJECT_ROOT/infra/docker-compose.app.yml" down
             log_success "$old_color stack stopped"
         else
@@ -305,7 +305,7 @@ show_status() {
 
     # Check both stacks
     for color in blue green; do
-        local project="copilotos-$color"
+        local project="octavios-$color"
         local running=$(docker compose -p "$project" -f "$PROJECT_ROOT/infra/docker-compose.app.yml" ps -q 2>/dev/null | wc -l)
 
         echo -n "$color stack:    "

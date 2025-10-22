@@ -72,8 +72,8 @@ delete_demo_user() {
     echo -e "${YELLOW}◆ Please manually clean up the database or use a different username${NC}"
     echo ""
     echo -e "${BLUE}Database cleanup options:${NC}"
-    echo -e "   1. Delete specific user: ${BLUE}docker exec infra-mongodb mongosh -u copilotos_user -p secure_password_change_me --authenticationDatabase admin copilotos --eval \"db.users.deleteOne({username: 'demo_admin'})\"${NC}"
-    echo -e "   2. Drop users collection: ${BLUE}docker exec infra-mongodb mongosh -u copilotos_user -p secure_password_change_me --authenticationDatabase admin copilotos --eval \"db.users.drop()\"${NC}"
+    echo -e "   1. Delete specific user: ${BLUE}docker exec infra-mongodb mongosh -u octavios_user -p secure_password_change_me --authenticationDatabase admin octavios --eval \"db.users.deleteOne({username: 'demo_admin'})\"${NC}"
+    echo -e "   2. Drop users collection: ${BLUE}docker exec infra-mongodb mongosh -u octavios_user -p secure_password_change_me --authenticationDatabase admin octavios --eval \"db.users.drop()\"${NC}"
     echo ""
     return 1
 }

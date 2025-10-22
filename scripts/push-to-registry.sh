@@ -106,14 +106,14 @@ fi
 echo "▸  [2/4] Tagging images..."
 
 # Tag with version
-docker tag copilotos-api:latest "$REGISTRY_URL/api:$VERSION"
-docker tag copilotos-web:latest "$REGISTRY_URL/web:$VERSION"
+docker tag octavios-api:latest "$REGISTRY_URL/api:$VERSION"
+docker tag octavios-web:latest "$REGISTRY_URL/web:$VERSION"
 echo "   ✔ Tagged with version: $VERSION"
 
 # Tag with latest (if on main branch)
 if [ "$GIT_BRANCH" = "main" ]; then
-    docker tag copilotos-api:latest "$REGISTRY_URL/api:latest"
-    docker tag copilotos-web:latest "$REGISTRY_URL/web:latest"
+    docker tag octavios-api:latest "$REGISTRY_URL/api:latest"
+    docker tag octavios-web:latest "$REGISTRY_URL/web:latest"
     echo "   ✔ Tagged with: latest"
 fi
 
@@ -172,7 +172,7 @@ if [ -n "$PROD_SERVER_HOST" ]; then
     echo ""
     echo "▸  Or manually:"
     echo "   ssh ${PROD_SERVER_HOST}"
-    echo "   cd ${PROD_DEPLOY_PATH:-/opt/copilotos-bridge}"
+    echo "   cd ${PROD_DEPLOY_PATH:-/opt/octavios-bridge}"
     echo "   ./scripts/deploy.sh registry --skip-build"
 else
     echo "   Configure PROD_SERVER_HOST in envs/.env.prod first"

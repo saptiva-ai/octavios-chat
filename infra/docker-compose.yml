@@ -13,14 +13,14 @@ services:
   # ========================================
   mongodb:
     image: mongo:7.0
-    container_name: ${COMPOSE_PROJECT_NAME:-copilotos}-mongodb
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-mongodb
     restart: unless-stopped
     env_file:
       - ../envs/.env
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USER:-copilotos_user}
+      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USER:-octavios_user}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD:-secure_password_change_me}
-      MONGO_INITDB_DATABASE: ${MONGODB_DATABASE:-copilotos}
+      MONGO_INITDB_DATABASE: ${MONGODB_DATABASE:-octavios}
     volumes:
       - mongodb_data:/data/db
       - mongodb_config:/data/configdb
@@ -33,14 +33,14 @@ services:
       retries: 3
       start_period: 40s
     networks:
-      - copilotos-network
+      - octavios-network
 
   # ========================================
   # REDIS CACHE
   # ========================================
   redis:
     image: redis:7-alpine
-    container_name: ${COMPOSE_PROJECT_NAME:-copilotos}-redis
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-redis
     restart: unless-stopped
     env_file:
       - ../envs/.env
@@ -61,7 +61,7 @@ services:
     ports:
       - "${REDIS_PORT:-6380}:6379"
     networks:
-      - copilotos-network
+      - octavios-network
 
   # ========================================
   # FASTAPI BACKEND
@@ -71,13 +71,13 @@ services:
       context: ../apps/api
       dockerfile: Dockerfile
       target: production
-    container_name: ${COMPOSE_PROJECT_NAME:-copilotos}-api
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-api
     restart: unless-stopped
     env_file:
       - ../envs/.env
     environment:
       # Base de datos
-      - MONGODB_URL=mongodb://${MONGODB_USER:-copilotos_user}:${MONGODB_PASSWORD:-secure_password_change_me}@mongodb:27017/${MONGODB_DATABASE:-copilotos}?authSource=admin
+      - MONGODB_URL=mongodb://${MONGODB_USER:-octavios_user}:${MONGODB_PASSWORD:-secure_password_change_me}@mongodb:27017/${MONGODB_DATABASE:-octavios}?authSource=admin
       - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_password_change_me}@redis:6379/0
 
       # Autenticación
@@ -124,7 +124,7 @@ services:
       - RATE_LIMIT_PERIOD=${RATE_LIMIT_PERIOD:-60}
 
       # Observabilidad
-      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-copilotos-bridge}
+      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-octavios-bridge}
       - JAEGER_ENDPOINT=${JAEGER_ENDPOINT:-http://localhost:14268/api/traces}
 
     depends_on:
@@ -149,7 +149,7 @@ services:
       start_period: 60s
 
     networks:
-      - copilotos-network
+      - octavios-network
 
   # ========================================
   # NEXT.JS FRONTEND
@@ -165,7 +165,7 @@ services:
         NODE_ENV: ${NODE_ENV:-development}
         UID: ${UID:-1000}
         GID: ${GID:-1000}
-    container_name: ${COMPOSE_PROJECT_NAME:-copilotos}-web
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-web
     restart: unless-stopped
     user: "${UID:-1000}:${GID:-1000}"
     env_file:
@@ -212,14 +212,14 @@ services:
       start_period: 60s
 
     networks:
-      - copilotos-network
+      - octavios-network
 
   # ========================================
   # PRODUCTION EDGE (NGINX)
   # ========================================
   nginx:
     image: nginx:1.25-alpine
-    container_name: ${COMPOSE_PROJECT_NAME:-copilotos}-nginx
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-nginx
     restart: unless-stopped
     ports:
       - "80:80"
@@ -235,7 +235,7 @@ services:
     profiles:
       - production
     networks:
-      - copilotos-network
+      - octavios-network
 
   # ========================================
   # TESTING UTILITIES
@@ -244,7 +244,7 @@ services:
     build:
       context: ..
       dockerfile: tests/Dockerfile.playwright
-    container_name: ${COMPOSE_PROJECT_NAME:-copilotos}-playwright
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-playwright
     environment:
       - PLAYWRIGHT_BASE_URL=http://web:3000
       - API_BASE_URL=http://api:8001
@@ -259,7 +259,7 @@ services:
     profiles:
       - testing
     networks:
-      - copilotos-network
+      - octavios-network
 
 # ========================================
 # VOLUMES
@@ -283,5 +283,5 @@ volumes:
 # NETWORKS
 # ========================================
 networks:
-  copilotos-network:
+  octavios-network:
     driver: bridge

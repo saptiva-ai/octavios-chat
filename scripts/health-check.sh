@@ -58,7 +58,7 @@ check_api_health() {
     fi
 
     # Prometheus metrics
-    if curl -f -s --max-time $TIMEOUT "$API_BASE_URL/api/metrics" | grep -q "copilotos_"; then
+    if curl -f -s --max-time $TIMEOUT "$API_BASE_URL/api/metrics" | grep -q "octavios_"; then
         print_success "Prometheus metrics are being exposed"
     else
         print_warning "Prometheus metrics not found or not responding"
@@ -121,7 +121,7 @@ check_prometheus_targets() {
 
         # Check if our API is being scraped
         local targets_response=$(curl -s --max-time $TIMEOUT "$PROMETHEUS_URL/api/v1/targets")
-        if echo "$targets_response" | grep -q "copilotos-api"; then
+        if echo "$targets_response" | grep -q "octavios-api"; then
             print_success "Copilotos API target found in Prometheus"
         else
             print_warning "Copilotos API target not found in Prometheus"
@@ -137,19 +137,19 @@ check_metrics_data() {
     # Check if we have request metrics
     local metrics_response=$(curl -s --max-time $TIMEOUT "$API_BASE_URL/api/metrics")
 
-    if echo "$metrics_response" | grep -q "copilotos_requests_total"; then
+    if echo "$metrics_response" | grep -q "octavios_requests_total"; then
         print_success "Request metrics are being collected"
     else
         print_warning "Request metrics not found"
     fi
 
-    if echo "$metrics_response" | grep -q "copilotos_research"; then
+    if echo "$metrics_response" | grep -q "octavios_research"; then
         print_success "Research metrics are being collected"
     else
         print_warning "Research metrics not found (may be normal if no research operations have occurred)"
     fi
 
-    if echo "$metrics_response" | grep -q "copilotos_intent_classification"; then
+    if echo "$metrics_response" | grep -q "octavios_intent_classification"; then
         print_success "Intent classification metrics are being collected"
     else
         print_warning "Intent classification metrics not found"

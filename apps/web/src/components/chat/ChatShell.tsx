@@ -189,8 +189,8 @@ function GridChatShell({
             ) : null}
             <div className="flex items-center">
               <Image
-                src="/Saptiva_AI_logo_new.webp"
-                alt="Saptiva AI"
+                src="/OctaviOS_DarkBack2.png"
+                alt="OctaviOS Chat"
                 width={120}
                 height={32}
                 className="h-8 w-auto"
@@ -309,8 +309,8 @@ function LegacyMobileLayout({
         ) : null}
         <div className="flex items-center">
           <Image
-            src="/Saptiva_AI_logo_new.webp"
-            alt="Saptiva AI"
+            src="/OctaviOS_DarkBack2.png"
+            alt="OctaviOS Chat"
             width={100}
             height={28}
             className="h-7 w-auto"

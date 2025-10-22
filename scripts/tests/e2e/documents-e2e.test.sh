@@ -66,12 +66,12 @@ echo "✅ Variables cargadas desde envs/.env"
 
 echo ""
 echo "🐳 Verificando contenedores..."
-if ! docker ps --format '{{.Names}}' | grep -q 'copilotos-mongodb'; then
-  echo "❌ Error: contenedor MongoDB (copilotos-mongodb) no está corriendo"
+if ! docker ps --format '{{.Names}}' | grep -q 'octavios-mongodb'; then
+  echo "❌ Error: contenedor MongoDB (octavios-mongodb) no está corriendo"
   exit 1
 fi
-if ! docker ps --format '{{.Names}}' | grep -q 'copilotos-redis'; then
-  echo "❌ Error: contenedor Redis (copilotos-redis) no está corriendo"
+if ! docker ps --format '{{.Names}}' | grep -q 'octavios-redis'; then
+  echo "❌ Error: contenedor Redis (octavios-redis) no está corriendo"
   exit 1
 fi
 echo "✅ MongoDB y Redis detectados"

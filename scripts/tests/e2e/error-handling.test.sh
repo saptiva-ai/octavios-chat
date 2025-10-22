@@ -110,7 +110,7 @@ read -p "Press ENTER to start retry test (will stop API)..."
 # Stop API
 echo ""
 echo -n "  Stopping API... "
-docker stop copilotos-api > /dev/null 2>&1
+docker stop octavios-api > /dev/null 2>&1
 echo -e "${GREEN}Stopped${NC}"
 
 echo ""
@@ -136,7 +136,7 @@ read -p "Press ENTER when done observing retry behavior..."
 # Restart API
 echo ""
 echo -n "  Restarting API... "
-docker start copilotos-api > /dev/null 2>&1
+docker start octavios-api > /dev/null 2>&1
 sleep 5  # Wait for API to be ready
 echo -e "${GREEN}Started${NC}"
 
@@ -163,7 +163,7 @@ read -p "Press ENTER to start optimistic update test (will stop API)..."
 # Stop API
 echo ""
 echo -n "  Stopping API... "
-docker stop copilotos-api > /dev/null 2>&1
+docker stop octavios-api > /dev/null 2>&1
 echo -e "${GREEN}Stopped${NC}"
 
 echo ""
@@ -188,7 +188,7 @@ read -p "Press ENTER when done testing optimistic updates..."
 # Restart API
 echo ""
 echo -n "  Restarting API... "
-docker start copilotos-api > /dev/null 2>&1
+docker start octavios-api > /dev/null 2>&1
 sleep 5
 echo -e "${GREEN}Started${NC}"
 echo ""
