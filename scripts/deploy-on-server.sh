@@ -35,11 +35,14 @@ NC=""
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Load environment
+# Load environment and save path for passing to subprocesses
+ENV_FILE_PATH=""
 if [ -f "$PROJECT_ROOT/envs/.env.prod" ]; then
     source "$PROJECT_ROOT/envs/.env.prod"
+    ENV_FILE_PATH="$PROJECT_ROOT/envs/.env.prod"
 elif [ -f "$PROJECT_ROOT/envs/.env" ]; then
     source "$PROJECT_ROOT/envs/.env"
+    ENV_FILE_PATH="$PROJECT_ROOT/envs/.env"
 fi
 
 # ========================================
@@ -221,7 +224,8 @@ backup_data_volumes() {
     if [ -f "$PROJECT_ROOT/scripts/backup-mongodb.sh" ]; then
         if ! "$PROJECT_ROOT/scripts/backup-mongodb.sh" \
             --backup-dir "$backup_dir" \
-            --retention-days 7; then
+            --retention-days 7 \
+            --env-file "$ENV_FILE_PATH"; then
             log_error "MongoDB backup FAILED"
             log_error "Aborting deployment for data safety"
             exit 1
@@ -235,7 +239,8 @@ backup_data_volumes() {
     if [ -f "$PROJECT_ROOT/scripts/backup-docker-volumes.sh" ]; then
         if ! "$PROJECT_ROOT/scripts/backup-docker-volumes.sh" \
             --backup-dir "$backup_dir" \
-            --retention-days 7; then
+            --retention-days 7 \
+            --env-file "$ENV_FILE_PATH"; then
             log_error "Volume backup FAILED"
             log_error "Aborting deployment for data safety"
             exit 1
