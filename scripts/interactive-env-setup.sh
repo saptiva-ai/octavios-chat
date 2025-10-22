@@ -106,51 +106,31 @@ sanitize_value() {
     echo "$value" | sed 's/\x1b\[[0-9;]*m//g'
 }
 
-prompt_with_default() {
-    local prompt="$1"
-    local default="$2"
-    local var_name="$3"
-    local secret="${4:-false}"
 
-    # Sanitize the default value to remove any ANSI codes
-    default=$(sanitize_value "$default")
-
-    if [ -n "$default" ]; then
-        if [ "$secret" = "true" ]; then
-            # Don't show full secret, just hint
-            local hint="${default:0:8}...${default: -4}"
-            echo -en "${CYAN}$prompt${NC} ${YELLOW}[current: $hint]${NC}: "
-        else
-            echo -en "${CYAN}$prompt${NC} ${YELLOW}[$default]${NC}: "
-        fi
-    else
-        echo -en "${CYAN}$prompt${NC}: "
-    fi
-
-    read -r input
-    # Sanitize both input and default
-    local result="${input:-$default}"
-    sanitize_value "$result"
-}
 
 prompt_yes_no() {
     local prompt="$1"
     local default="${2:-n}"
 
-    if [ "$default" = "y" ]; then
-        echo -en "${CYAN}$prompt${NC} ${YELLOW}[Y/n]${NC}: "
-    else
-        echo -en "${CYAN}$prompt${NC} ${YELLOW}[y/N]${NC}: "
-    fi
-
-    read -r response
-    response="${response:-$default}"
-
-    if [[ "$response" =~ ^[Yy] ]]; then
+    if (whiptail --title "Confirmation" --yes-button "Yes" --no-button "No" --yesno "$prompt" 10 60);
+    then
         return 0
     else
         return 1
     fi
+
+}
+
+whiptail_input() {
+    local prompt="$1"
+    local default="$2"
+    whiptail --title "Input" --inputbox "$prompt" 10 60 "$default" 3>&1 1>&2 2>&3
+}
+
+whiptail_password() {
+    local prompt="$1"
+    local default="$2"
+    whiptail --title "Password" --passwordbox "$prompt" 10 60 "$default" 3>&1 1>&2 2>&3
 }
 
 # ============================================================================
@@ -224,20 +204,18 @@ echo -e "${BOLD}1. Basic Configuration${NC}"
 echo ""
 
 DEFAULT_PROJECT_DISPLAY_NAME="CopilotOS"
-PROJECT_DISPLAY_NAME=$(prompt_with_default \
+PROJECT_DISPLAY_NAME=$(whiptail_input \
     "Project display name" \
-    "${PROJECT_DISPLAY_NAME:-$DEFAULT_PROJECT_DISPLAY_NAME}" \
-    "PROJECT_DISPLAY_NAME")
+    "${PROJECT_DISPLAY_NAME:-$DEFAULT_PROJECT_DISPLAY_NAME}")
 
 DEFAULT_COMPOSE_SLUG="$COMPOSE_PROJECT_NAME"
 if [ -z "$DEFAULT_COMPOSE_SLUG" ]; then
     DEFAULT_COMPOSE_SLUG="$(slugify_project_name "$PROJECT_DISPLAY_NAME")"
 fi
 
-COMPOSE_PROJECT_NAME_INPUT=$(prompt_with_default \
+COMPOSE_PROJECT_NAME_INPUT=$(whiptail_input \
     "Docker Compose project slug" \
-    "$DEFAULT_COMPOSE_SLUG" \
-    "COMPOSE_PROJECT_NAME")
+    "$DEFAULT_COMPOSE_SLUG")
 
 COMPOSE_PROJECT_NAME=$(slugify_project_name "$COMPOSE_PROJECT_NAME_INPUT")
 if [ "$COMPOSE_PROJECT_NAME" != "$COMPOSE_PROJECT_NAME_INPUT" ]; then
@@ -255,10 +233,9 @@ print_success "Project name set to: $PROJECT_DISPLAY_NAME"
 echo ""
 
 if [ "$ENVIRONMENT" = "production" ]; then
-    DOMAIN=$(prompt_with_default \
+    DOMAIN=$(whiptail_input \
         "Server domain or IP" \
-        "${DOMAIN:-localhost}" \
-        "DOMAIN")
+        "${DOMAIN:-localhost}")
 else
     DOMAIN="localhost"
 fi
@@ -275,25 +252,21 @@ if [ "$ENVIRONMENT" = "production" ]; then
     print_info "These settings are used by deployment scripts (make deploy-*, etc.)"
     echo ""
 
-    PROD_SERVER_IP=$(prompt_with_default \
+    PROD_SERVER_IP=$(whiptail_input \
         "Production server IP address" \
-        "${PROD_SERVER_IP:-$DOMAIN}" \
-        "PROD_SERVER_IP")
+        "${PROD_SERVER_IP:-$DOMAIN}")
 
-    PROD_SERVER_USER=$(prompt_with_default \
+    PROD_SERVER_USER=$(whiptail_input \
         "SSH username for deployment" \
-        "${PROD_SERVER_USER:-$(whoami)}" \
-        "PROD_SERVER_USER")
+        "${PROD_SERVER_USER:-$(whoami)}")
 
-    PROD_DEPLOY_PATH=$(prompt_with_default \
+    PROD_DEPLOY_PATH=$(whiptail_input \
         "Deployment path on server" \
-        "${PROD_DEPLOY_PATH:-/opt/copilotos-bridge}" \
-        "PROD_DEPLOY_PATH")
+        "${PROD_DEPLOY_PATH:-/opt/copilotos-bridge}")
 
-    PROD_BACKUP_DIR=$(prompt_with_default \
+    PROD_BACKUP_DIR=$(whiptail_input \
         "Backup directory on server" \
-        "${PROD_BACKUP_DIR:-/opt/backups/copilotos-production}" \
-        "PROD_BACKUP_DIR")
+        "${PROD_BACKUP_DIR:-/opt/backups/copilotos-production}")
 
     # Constructed values
     PROD_SERVER_HOST="${PROD_SERVER_USER}@${PROD_SERVER_IP}"
@@ -326,10 +299,9 @@ else
     fi
 fi
 
-MONGODB_USER=$(prompt_with_default \
+MONGODB_USER=$(whiptail_input \
     "MongoDB username" \
-    "${MONGODB_USER:-copilotos_user}" \
-    "MONGODB_USER")
+    "${MONGODB_USER:-copilotos_user}")
 
 if [ -z "$REDIS_PASSWORD" ] || [ "$REDIS_PASSWORD" = "redis_password_change_me" ]; then
     print_info "Generating secure Redis password..."
@@ -388,11 +360,9 @@ echo ""
 
 print_warning "SAPTIVA API key is REQUIRED for the application to work."
 while true; do
-    SAPTIVA_API_KEY=$(prompt_with_default \
+    SAPTIVA_API_KEY=$(whiptail_password \
         "SAPTIVA API key" \
-        "${SAPTIVA_API_KEY:-}" \
-        "SAPTIVA_API_KEY" \
-        "true")
+        "${SAPTIVA_API_KEY:-}")
 
     if [ -z "$SAPTIVA_API_KEY" ] || [ "$SAPTIVA_API_KEY" = "your-saptiva-api-key-here" ]; then
         print_error "SAPTIVA API key cannot be empty!"
@@ -407,28 +377,16 @@ while true; do
     fi
 done
 
-SAPTIVA_BASE_URL=$(prompt_with_default \
+SAPTIVA_BASE_URL=$(whiptail_input \
     "SAPTIVA base URL" \
-    "${SAPTIVA_BASE_URL:-https://api.saptiva.com}" \
-    "SAPTIVA_BASE_URL")
+    "${SAPTIVA_BASE_URL:-https://api.saptiva.com}")
 
 echo ""
-print_info "Aletheia is optional (for deep research features)."
-if prompt_yes_no "Do you want to configure Aletheia?"; then
-    ALETHEIA_BASE_URL=$(prompt_with_default \
-        "Aletheia base URL" \
-        "${ALETHEIA_BASE_URL:-https://aletheia.saptiva.ai}" \
-        "ALETHEIA_BASE_URL")
-
-    ALETHEIA_API_KEY=$(prompt_with_default \
-        "Aletheia API key (optional)" \
-        "${ALETHEIA_API_KEY:-}" \
-        "ALETHEIA_API_KEY" \
-        "true")
-else
-    ALETHEIA_BASE_URL="${ALETHEIA_BASE_URL:-https://aletheia.saptiva.ai}"
-    ALETHEIA_API_KEY="${ALETHEIA_API_KEY:-}"
-fi
+# Aletheia configuration skipped by default (deep research features are optional)
+# To enable, manually edit the .env file and set ALETHEIA_BASE_URL and ALETHEIA_API_KEY
+print_info "Aletheia configuration skipped (deep research is optional and disabled by default)."
+ALETHEIA_BASE_URL="${ALETHEIA_BASE_URL:-https://aletheia.saptiva.ai}"
+ALETHEIA_API_KEY="${ALETHEIA_API_KEY:-}"
 
 echo ""
 
@@ -439,10 +397,9 @@ echo -e "${BOLD}5. Frontend Configuration${NC}"
 echo ""
 
 if [ "$ENVIRONMENT" = "production" ]; then
-    NEXT_PUBLIC_API_URL=$(prompt_with_default \
+    NEXT_PUBLIC_API_URL=$(whiptail_input \
         "API URL (frontend will connect to this)" \
-        "http://${DOMAIN}:8001" \
-        "NEXT_PUBLIC_API_URL")
+        "http://${DOMAIN}:8001")
 
     NODE_ENV="production"
 else
@@ -511,8 +468,8 @@ NEXT_TELEMETRY_DISABLED=1
 
 # Feature Flags
 NEXT_PUBLIC_FEATURE_WEB_SEARCH=true
-NEXT_PUBLIC_FEATURE_DEEP_RESEARCH=true
-NEXT_PUBLIC_FEATURE_ADD_FILES=false
+NEXT_PUBLIC_FEATURE_DEEP_RESEARCH=false
+NEXT_PUBLIC_FEATURE_ADD_FILES=true
 NEXT_PUBLIC_FEATURE_GOOGLE_DRIVE=false
 NEXT_PUBLIC_FEATURE_CANVAS=false
 NEXT_PUBLIC_FEATURE_AGENT_MODE=false
@@ -550,13 +507,15 @@ SAPTIVA_MAX_RETRIES=3
 CHAT_DEFAULT_MODEL=Saptiva Turbo
 CHAT_ALLOWED_MODELS=Saptiva Turbo,Saptiva Cortex,Saptiva Ops,Saptiva Coder
 
-# Aletheia (optional)
+# Aletheia (optional - disabled by default)
+# Deep research features require Aletheia API key
+# To enable: set ALETHEIA_API_KEY and DEEP_RESEARCH_KILL_SWITCH=false
 ALETHEIA_BASE_URL=$ALETHEIA_BASE_URL
 ALETHEIA_API_KEY=$ALETHEIA_API_KEY
 ALETHEIA_TIMEOUT=120
 ALETHEIA_MAX_RETRIES=3
 
-# Deep Research Feature Flags
+# Deep Research Feature Flags (disabled by default)
 DEEP_RESEARCH_KILL_SWITCH=true
 DEEP_RESEARCH_ENABLED=false
 DEEP_RESEARCH_AUTO=false
