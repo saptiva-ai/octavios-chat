@@ -97,6 +97,20 @@ cd ~/Proyects/copilotos-bridge
 
 ## 🔒 Phase 4: Production Server Preparation (TODO)
 
+**🎯 Quick Start**: See `QUICK_START_PHASES_4_5.md` for copy-paste commands
+
+### Automated Execution (Recommended)
+```bash
+ssh jf@copilot
+cd ~/copilotos-bridge
+git pull origin main
+./scripts/phase4-server-verification.sh
+```
+
+**Script Output**: Full report saved to `/tmp/pre-migration-verification-YYYYMMDD-HHMMSS/`
+
+### Manual Steps (if needed)
+
 ### 4.1 Connect to Server
 ```bash
 - [ ] ssh jf@copilot → connection successful
@@ -136,6 +150,28 @@ cd ~/copilotos-bridge
 
 ## 💾 Phase 5: Manual Pre-Migration Backup (CRITICAL)
 
+**🎯 Quick Start**: See `QUICK_START_PHASES_4_5.md` for copy-paste commands
+
+### Automated Execution (Recommended)
+```bash
+# Still on production server (ssh jf@copilot)
+cd ~/copilotos-bridge
+./scripts/phase5-manual-backup.sh
+```
+
+**Script Output**:
+- Backup directory: `~/backups/pre-migration-YYYYMMDD-HHMMSS/`
+- Backup location saved to: `/tmp/last_data_backup`
+- Integrity verification: Automatic with size checks
+
+**What gets backed up**:
+- ✓ MongoDB database (mongodump with BSON)
+- ✓ Docker volumes (MongoDB + Redis data)
+- ✓ Environment files (.env.prod)
+- ✓ Container configuration snapshots
+
+### Manual Steps (if needed)
+
 ### 5.1 Create Backup Directory
 ```bash
 - [ ] BACKUP_DIR=~/backups/pre-migration-$(date +%Y%m%d-%H%M%S)
@@ -172,6 +208,19 @@ cd ~/copilotos-bridge
 ```
 
 **⚠️ CHECKPOINT**: Do NOT proceed until all backups are verified!
+
+### Quick Verification
+```bash
+# Verify backup location
+cat /tmp/last_data_backup
+
+# Check backup size (should be > 10MB for production)
+BACKUP_DIR=$(cat /tmp/last_data_backup)
+du -sh $BACKUP_DIR
+
+# Review backup log
+cat $BACKUP_DIR/backup.log
+```
 
 ---
 
