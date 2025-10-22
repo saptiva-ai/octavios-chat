@@ -345,8 +345,9 @@ jobs:
     name: Deploy to Production
     runs-on: ubuntu-latest
     needs: [backend, frontend, backend-integration, integration]
-    # Only deploy on push to main
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # MANUAL DEPLOYMENT ONLY - Use workflow_dispatch for safe migration period
+    # To deploy: Go to Actions tab → Select "CI + CD" workflow → Click "Run workflow"
+    if: github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout code
