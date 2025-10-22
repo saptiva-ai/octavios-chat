@@ -38,6 +38,7 @@ This guide includes:
 **TL;DR - Three commands to start:**
 ```bash
 make setup          # Interactive configuration (project name + API keys)
+make setup-quick    # Non-interactive setup (uses defaults)
 make configure      # Re-run the wizard later without reinstalling deps
 make dev            # Starts all services
 make create-demo-user  # Creates test user (demo/Demo1234)
@@ -47,6 +48,8 @@ make create-demo-user  # Creates test user (demo/Demo1234)
 - Confirm the project display name used across the CLI (defaults to `CopilotOS`).
 - Provide your SAPTIVA API key (required for the platform to respond).
 - Generate secure secrets for MongoDB, Redis, and JWT authentication.
+
+**Note:** `make setup` is interactive. If you are in a non-interactive environment, use `make setup-quick`.
 
 Need to tweak the project name or rotate your SAPTIVA key later? Run `make configure` to re-open the wizard and sync the new values into `envs/.env` safely.
 
@@ -635,6 +638,43 @@ make dev-build
 
 # For future builds
 make rebuild-web
+```
+
+#### Common Issue: Code Changes Not Reflected in Containers?
+
+**Problem:** Docker caches image layers for faster builds. When you modify code or change environment variables, a simple `docker compose up` or `docker restart` won't pick up the changes because:
+
+1. **Docker Build Cache**: Uses cached layers from previous builds
+2. **Restart vs Recreate**: `docker restart` keeps the same container with old code
+3. **Environment Variables**: `restart` doesn't reload env vars from `.env` files
+
+**Solution:**
+
+```bash
+# For code changes in API:
+make rebuild-api      # Builds with --no-cache, then down/up to recreate container
+
+# For env var changes or major updates:
+make rebuild-all      # Rebuilds all containers without cache
+
+# Alternative manual approach:
+docker compose -f infra/docker-compose.yml --env-file envs/.env build --no-cache api
+docker compose -f infra/docker-compose.yml --env-file envs/.env down api
+docker compose -f infra/docker-compose.yml --env-file envs/.env up -d api
+```
+
+**Why `--no-cache` + `down`/`up`?**
+- `--no-cache`: Forces Docker to rebuild all layers (ignores cache)
+- `down` + `up`: Destroys old container and creates fresh one with new code + env vars
+- `restart` alone: Keeps old container, old code, old env vars
+
+**Quick Check:**
+```bash
+# Verify code is synced
+make debug-file-sync
+
+# Check if env vars loaded
+docker exec copilotos-api env | grep YOUR_VAR_NAME
 ```
 
 #### Container Startup Issues

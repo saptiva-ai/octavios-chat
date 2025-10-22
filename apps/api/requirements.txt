@@ -13,7 +13,7 @@ redis>=5.0.1
 # HTTP client
 httpx[http2]>=0.25.2
 aiohttp>=3.9.5
-urllib3>=2.5.0  # Force secure version (fixes CVE-2025-50182, CVE-2025-50181)
+urllib3>=2.2.0  # Force secure version (2.2.x series includes security fixes)
 
 # Authentication
 python-jose[cryptography]>=3.3.0
@@ -44,7 +44,7 @@ sse-starlette>=1.8.2
 # Document processing (V1 - PDF text extraction)
 pypdf>=3.17.0
 pymupdf>=1.24.0  # PDF rasterization for image-only PDFs (scanned documents)
-saptiva-agents>=0.2.2,<0.3  # Saptiva SDK for PDF extraction via Custom Tools
+saptiva-agents>=0.2.3  # Saptiva SDK for PDF extraction via Custom Tools (requires Python 3.10+)
 
 # OCR (MVP-OCR: Image text extraction)
 pytesseract>=0.3.10
