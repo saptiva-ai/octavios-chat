@@ -1,17 +1,19 @@
 # Copilotos Bridge Makefile
 # Development-optimized workflow with auto .venv management
+
 .PHONY: help configure sync-env package dev test test-all clean build lint security security-audit install-hooks shell-api shell-web \
-        push-registry push-registry-fast deploy-registry deploy-prod deploy deploy-clean deploy-quick deploy-tar \
-        deploy-fast deploy-tar-fast logs-prod logs-api-prod logs-web-prod logs-mongo-prod logs-redis-prod ssh-prod status-prod \
-        db-migrate db-backup db-restore db-stats db-collections db-fix-drafts \
-        backup-mongodb-prod restore-mongodb-prod backup-volumes monitor-backups \
-        redis-stats redis-monitor generate-credentials rotate-mongo-password rotate-redis-password reset \
-        debug-containers debug-api debug-models \
-        debug-file-sync debug-endpoints debug-logs-errors debug-network debug-full \
-        troubleshoot resources resources-monitor docker-cleanup docker-cleanup-aggressive \
-        test-sh lint-sh fix-sh audit-tests test-integration test-unit-host \
-        ci-status ci-logs ci-logs-failed ci-watch ci-list ci-rerun ci-jobs \
-        obs-up obs-down obs-logs obs-restart obs-status obs-clean venv-install
+reload-env reload-env-service rebuild-api rebuild-web rebuild-all \
+push-registry push-registry-fast deploy-registry deploy-prod deploy deploy-clean deploy-quick deploy-tar \
+deploy-fast deploy-tar-fast logs-prod logs-api-prod logs-web-prod logs-mongo-prod logs-redis-prod ssh-prod status-prod \
+db-migrate db-backup db-restore db-stats db-collections db-fix-drafts \
+backup-mongodb-prod restore-mongodb-prod backup-volumes monitor-backups \
+redis-stats redis-monitor generate-credentials rotate-mongo-password rotate-redis-password reset \
+debug-containers debug-api debug-models \
+debug-file-sync debug-endpoints debug-logs-errors debug-network debug-full \
+troubleshoot resources resources-monitor docker-cleanup docker-cleanup-aggressive \
+test-sh lint-sh fix-sh audit-tests test-integration test-unit-host \
+ci-status ci-logs ci-logs-failed ci-watch ci-list ci-rerun ci-jobs \
+obs-up obs-down obs-logs obs-restart obs-status obs-clean venv-install
 
 # ============================================================================
 # CONFIGURATION
@@ -31,31 +33,31 @@ PROD_ENV_FILE := envs/.env.prod
 # IMPORTANT: Only load .env.prod for deployment targets (deploy-*, push-*, backup-*-prod)
 # For development commands (dev, stop, test, etc.), use .env.local / .env only
 ifneq (,$(wildcard $(DEV_ENV_FALLBACK)))
-	include $(DEV_ENV_FALLBACK)
+include $(DEV_ENV_FALLBACK)
 endif
 ifneq (,$(wildcard $(DEV_ENV_FILE)))
-	include $(DEV_ENV_FILE)
+include $(DEV_ENV_FILE)
 endif
 
 # Production env variables ONLY for deployment targets (not dev commands)
 # This prevents PROJECT_NAME conflicts between dev (copilotos) and prod (copilotos-prod)
 ifeq ($(filter deploy% push% backup%-prod restore%-prod,$(MAKECMDGOALS)),)
-	# NOT a deployment command, skip .env.prod
+# NOT a deployment command, skip .env.prod
 else
-	# Deployment command detected, load production config
-	ifneq (,$(wildcard $(PROD_ENV_FILE)))
-		include $(PROD_ENV_FILE)
-	endif
+# Deployment command detected, load production config
+ifneq (,$(wildcard $(PROD_ENV_FILE)))
+include $(PROD_ENV_FILE)
+endif
 endif
 export
 
 # Project configuration (fallback to sensible defaults)
 ifeq ($(strip $(PROJECT_DISPLAY_NAME)),)
-	PROJECT_DISPLAY_NAME := $(DEFAULT_PROJECT_DISPLAY_NAME)
+PROJECT_DISPLAY_NAME := $(DEFAULT_PROJECT_DISPLAY_NAME)
 endif
 
 ifeq ($(strip $(COMPOSE_PROJECT_NAME)),)
-	COMPOSE_PROJECT_NAME := $(DEFAULT_COMPOSE_PROJECT_NAME)
+COMPOSE_PROJECT_NAME := $(DEFAULT_COMPOSE_PROJECT_NAME)
 endif
 
 PROJECT_DISPLAY_NAME := $(strip $(PROJECT_DISPLAY_NAME))
@@ -63,7 +65,7 @@ COMPOSE_PROJECT_NAME := $(strip $(COMPOSE_PROJECT_NAME))
 
 PROJECT_NAME := $(shell printf '%s' "$(COMPOSE_PROJECT_NAME)" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$$//; s/-{2,}/-/g')
 ifeq ($(strip $(PROJECT_NAME)),)
-	PROJECT_NAME := $(DEFAULT_COMPOSE_PROJECT_NAME)
+PROJECT_NAME := $(DEFAULT_COMPOSE_PROJECT_NAME)
 endif
 
 COMPOSE_FILE_BASE := infra/docker-compose.yml
@@ -92,7 +94,7 @@ DOCKER_COMPOSE_DEV := $(DOCKER_COMPOSE_BASE) -f $(COMPOSE_FILE_DEV)
 VENV_DIR := .venv
 PYTHON := $(VENV_DIR)/bin/python
 PIP := $(VENV_DIR)/bin/pip
-PYTHON_SYS := python3
+PYTHON_SYS := python3.11  # saptiva-agents requires Python 3.10+
 
 # Shell tooling
 SHELLCHECK ?= shellcheck
@@ -335,14 +337,19 @@ sync-env:
 		echo "$(RED)Error: $(DEV_ENV_FALLBACK) not found. Run $(GREEN)make setup$(RED) first.$(NC)"; \
 		exit 1; \
 	fi
-	@if [ -f $(DEV_ENV_FILE) ]; then \
-		BACKUP="$(DEV_ENV_FILE).backup.$$(date +%Y%m%d_%H%M%S)"; \
-		cp $(DEV_ENV_FILE) $$BACKUP; \
-		echo "$(YELLOW)Backup created: $$BACKUP$(NC)"; \
+	@if [ -f $(DEV_ENV_FILE) ] && [ $(DEV_ENV_FILE) -ef $(DEV_ENV_FALLBACK) ]; then \
+		echo "$(GREEN)✓ $(DEV_ENV_FILE) and $(DEV_ENV_FALLBACK) are the same file (symlink or hardlink)$(NC)"; \
+		echo "$(YELLOW)  No sync needed - files are already identical$(NC)"; \
+	else \
+		if [ -f $(DEV_ENV_FILE) ]; then \
+			BACKUP="$(DEV_ENV_FILE).backup.$$(date +%Y%m%d_%H%M%S)"; \
+			cp $(DEV_ENV_FILE) $$BACKUP; \
+			echo "$(YELLOW)🟡 Backup created: $$BACKUP$(NC)"; \
+		fi; \
+		cp $(DEV_ENV_FALLBACK) $(DEV_ENV_FILE); \
+		chmod 600 $(DEV_ENV_FILE); \
+		echo "$(GREEN)✓ $(DEV_ENV_FILE) synced with $(DEV_ENV_FALLBACK)$(NC)"; \
 	fi
-	@cp $(DEV_ENV_FALLBACK) $(DEV_ENV_FILE)
-	@chmod 600 $(DEV_ENV_FILE)
-	@echo "$(GREEN)$(DEV_ENV_FILE) synced with $(DEV_ENV_FALLBACK)$(NC)"
 
 ## First-time setup: interactive configuration (RECOMMENDED)
 setup: setup-interactive
@@ -452,6 +459,7 @@ rebuild-all: ensure-env
 	@echo "$(YELLOW)Rebuilding all containers without cache...$(NC)"
 	@$(DOCKER_COMPOSE_DEV) build --no-cache
 	@$(DOCKER_COMPOSE_DEV) down
+	@echo "$(YELLOW)Volumes are not deleted by this command. Use 'make clean-volumes' to delete them.$(NC)"
 	@$(DOCKER_COMPOSE_DEV) up -d
 	@echo "$(GREEN)   All containers rebuilt and restarted$(NC)"
 	@echo "$(BLUE)    All containers recreated with fresh code and env vars$(NC)"
@@ -1653,6 +1661,18 @@ clean:
 	@echo "$(YELLOW)Cleaning up containers...$(NC)"
 	@$(DOCKER_COMPOSE_DEV) down --remove-orphans
 	@echo "$(GREEN) Cleanup completed$(NC)"
+
+## Clean including volumes (▲ DATA LOSS)
+clean-volumes:
+	@echo "$(RED)▲  WARNING: This will delete all data!$(NC)"
+	@read -p "Are you sure? [y/N] " -n 1 -r; \
+	echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		$(DOCKER_COMPOSE_DEV) down -v --remove-orphans; \
+		echo "$(GREEN) Volumes cleaned$(NC)"; \
+	else \
+		echo "$(YELLOW)Cancelled$(NC)"; \
+	fi
 
 ## Clean including volumes (▲ DATA LOSS)
 clean-volumes:
