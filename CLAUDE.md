@@ -2,6 +2,21 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Important Rules
+
+### Commit Message Guidelines
+
+**IMPORTANT**: When creating git commits, DO NOT include attribution lines such as:
+- ❌ "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+- ❌ "Co-Authored-By: Claude <noreply@anthropic.com>"
+
+Commit messages should follow conventional commits format without AI attribution:
+```
+type(scope): description
+
+Detailed explanation of changes...
+```
+
 ## Project Overview
 
 **Saptiva OctaviOS Chat** - A production-ready conversational interface for SAPTIVA language models with integrated document review (RAG) capabilities and enterprise-grade security. The architecture combines a Next.js 14 frontend with a FastAPI backend, using MongoDB for persistence and Redis for caching.
