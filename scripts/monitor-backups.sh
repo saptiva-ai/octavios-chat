@@ -103,7 +103,7 @@ echo ""
 MAX_AGE_MINUTES=$((MAX_AGE_HOURS * 60))
 
 # Find recent backups
-RECENT_BACKUPS=$(find "$BACKUP_DIR" -name "copilotos_*.gz" -type f -mmin -${MAX_AGE_MINUTES} 2>/dev/null | wc -l)
+RECENT_BACKUPS=$(find "$BACKUP_DIR" -name "octavios_*.gz" -type f -mmin -${MAX_AGE_MINUTES} 2>/dev/null | wc -l)
 
 if [ "$RECENT_BACKUPS" -eq 0 ]; then
     # CRITICAL: No recent backup found
@@ -111,7 +111,7 @@ if [ "$RECENT_BACKUPS" -eq 0 ]; then
     echo ""
     
     # Find the most recent backup (if any)
-    LATEST_BACKUP=$(find "$BACKUP_DIR" -name "copilotos_*.gz" -type f 2>/dev/null | sort -r | head -1)
+    LATEST_BACKUP=$(find "$BACKUP_DIR" -name "octavios_*.gz" -type f 2>/dev/null | sort -r | head -1)
     
     if [ -n "$LATEST_BACKUP" ]; then
         LATEST_AGE=$(find "$LATEST_BACKUP" -printf '%T@ %p\n' | awk '{print int((systime() - $1) / 3600)} END {print $0 " hours ago"}')
@@ -139,7 +139,7 @@ else
     echo ""
     
     # Show latest backup details
-    LATEST_BACKUP=$(find "$BACKUP_DIR" -name "copilotos_*.gz" -type f -mmin -${MAX_AGE_MINUTES} 2>/dev/null | sort -r | head -1)
+    LATEST_BACKUP=$(find "$BACKUP_DIR" -name "octavios_*.gz" -type f -mmin -${MAX_AGE_MINUTES} 2>/dev/null | sort -r | head -1)
     
     if [ -n "$LATEST_BACKUP" ]; then
         BACKUP_SIZE=$(ls -lh "$LATEST_BACKUP" | awk '{print $5}')
@@ -158,7 +158,7 @@ else
     fi
     
     # Show backup statistics
-    TOTAL_BACKUPS=$(find "$BACKUP_DIR" -name "copilotos_*.gz" -type f 2>/dev/null | wc -l)
+    TOTAL_BACKUPS=$(find "$BACKUP_DIR" -name "octavios_*.gz" -type f 2>/dev/null | wc -l)
     TOTAL_SIZE=$(du -sh "$BACKUP_DIR" 2>/dev/null | awk '{print $1}')
     
     log_info "Backup statistics:"

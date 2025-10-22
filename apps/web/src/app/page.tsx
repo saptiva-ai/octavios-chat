@@ -1,23 +1,23 @@
-'use client'
+"use client";
 
-import Image from 'next/image'
-import Link from 'next/link'
+import Image from "next/image";
+import Link from "next/link";
 
 export default function HomePage() {
-  const primaryCtaHref = '/login'
-  const primaryCtaLabel = 'Iniciar sesión'
-  const secondaryCtaHref = '/register'
-  const secondaryCtaLabel = 'Crear cuenta'
+  const primaryCtaHref = "/login";
+  const primaryCtaLabel = "Iniciar sesión";
+  const secondaryCtaHref = "/register";
+  const secondaryCtaLabel = "Crear cuenta";
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-x-hidden bg-bg px-4 py-12 text-text">
       <div className="mx-auto flex w-full max-w-md flex-col items-center text-center">
-        {/* Logo Saptiva */}
+        {/* Logo OctaviOS */}
         <div className="mb-12 flex flex-col items-center">
           <div className="relative h-48 w-48">
             <Image
-              src="/Saptiva_AI_logo_new.webp"
-              alt="Saptiva AI"
+              src="/OctaviOS_DarkBack2.png"
+              alt="OctaviOS Chat"
               fill
               priority
               sizes="192px"
@@ -31,14 +31,14 @@ export default function HomePage() {
           <Link
             href={primaryCtaHref}
             className="inline-flex items-center justify-center rounded-lg bg-primary px-8 py-3.5 text-base font-semibold text-white shadow-sm transition-colors duration-200 hover:bg-primary-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-            aria-label="Iniciar sesión en Saptiva Copilot"
+            aria-label="Iniciar sesión en OctaviOS Chat"
           >
             {primaryCtaLabel}
           </Link>
           <Link
             href={secondaryCtaHref}
             className="inline-flex items-center justify-center rounded-lg border border-border bg-surface px-8 py-3.5 text-base font-medium text-text shadow-sm transition-colors duration-200 hover:bg-surface-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-            aria-label="Crear cuenta en Saptiva Copilot"
+            aria-label="Crear cuenta en OctaviOS Chat"
           >
             {secondaryCtaLabel}
           </Link>
@@ -52,5 +52,5 @@ export default function HomePage() {
         </footer>
       </div>
     </div>
-  )
+  );
 }

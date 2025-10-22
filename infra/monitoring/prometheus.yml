@@ -4,7 +4,7 @@ global:
 
 scrape_configs:
   # FastAPI application metrics
-  - job_name: 'copilotos-api'
+  - job_name: 'octavios-api'
     static_configs:
       - targets: ['api:8001']
     metrics_path: '/api/metrics'

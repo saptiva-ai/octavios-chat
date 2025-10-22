@@ -103,7 +103,7 @@ printf 'Creating a fresh backup is mandatory before deploying.\n'
 read -r -p "Have you already created the latest production backup? (y/N) " backup_confirm
 if [[ ! "${backup_confirm}" =~ ^[Yy]$ ]]; then
   printf '\nRun on production:\n'
-  printf '  cd ~/copilotos-bridge\n'
+  printf '  cd ~/octavios-bridge\n'
   printf '  source envs/.env.prod\n'
   printf '  make backup-mongodb-prod\n\n'
   read -r -p "Press Enter to continue once the backup is done..." _

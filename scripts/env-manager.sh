@@ -135,7 +135,7 @@ switch_environment() {
     echo -e "${GREEN}Switched to $target_env environment${NC}"
 
     # Restart services if they're running
-    if docker ps | grep -q "copilotos-"; then
+    if docker ps | grep -q "octavios-"; then
         echo -e "${YELLOW}Restarting services...${NC}"
         make restart > /dev/null 2>&1 || echo -e "${YELLOW}Could not restart services automatically${NC}"
     fi

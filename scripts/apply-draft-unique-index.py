@@ -21,7 +21,7 @@ async def apply_unique_index():
     mongodb_url = os.getenv('MONGODB_URL')
     if not mongodb_url:
         # Fallback a configuración local por defecto
-        mongodb_url = "mongodb://copilotos_user:secure_password_change_me@localhost:27017/copilotos?authSource=admin"
+        mongodb_url = "mongodb://octavios_user:secure_password_change_me@localhost:27017/octavios?authSource=admin"
         print(f"⚠️  MONGODB_URL no configurada, usando default: {mongodb_url}")
 
     print(f"📡 Conectando a MongoDB...")
@@ -33,7 +33,7 @@ async def apply_unique_index():
         # Extraer nombre de base de datos de la URL
         db_name = mongodb_url.split('/')[-1].split('?')[0]
         if not db_name:
-            db_name = 'copilotos'
+            db_name = 'octavios'
 
         db = client[db_name]
         collection = db['chat_sessions']

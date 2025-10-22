@@ -1,7 +1,7 @@
 {
   "name": "copilotos-bridge",
   "version": "0.1.0",
-  "description": "Copilot OS — Chat UI + Aletheia Deep Research",
+  "description": "OctaviOS Chat — Conversational AI with Document Review",
   "private": true,
   "type": "module",
   "scripts": {

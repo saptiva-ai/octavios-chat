@@ -11,7 +11,7 @@ YELLOW="▲ "
 BLUE="▸ "
 NC=""
 
-PROJECT_NAME=${COMPOSE_PROJECT_NAME:-copilotos}
+PROJECT_NAME=${COMPOSE_PROJECT_NAME:-octavios}
 
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BLUE}Copilotos Bridge Quick Diagnostic${NC}"
@@ -123,7 +123,7 @@ fi
 # 5. Database Collections
 # ============================================================================
 echo -e "${YELLOW}5. Checking Database Collections...${NC}"
-DB_COLLECTIONS=$(docker exec ${PROJECT_NAME}-mongodb mongosh copilotos \
+DB_COLLECTIONS=$(docker exec ${PROJECT_NAME}-mongodb mongosh octavios \
     --eval "db.getCollectionNames().forEach(function(c) { print(c + ':' + db[c].countDocuments({})); })" \
     --quiet 2>/dev/null || echo "")
 

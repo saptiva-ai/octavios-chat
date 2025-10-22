@@ -20,9 +20,9 @@ fi
 
 OLD_PASSWORD="$1"
 NEW_PASSWORD="$2"
-MONGO_USER="${MONGODB_USER:-copilotos_prod_user}"
-MONGO_DATABASE="${MONGODB_DATABASE:-copilotos}"
-CONTAINER_NAME="${COMPOSE_PROJECT_NAME:-copilotos}-mongodb"
+MONGO_USER="${MONGODB_USER:-octavios_prod_user}"
+MONGO_DATABASE="${MONGODB_DATABASE:-octavios}"
+CONTAINER_NAME="${COMPOSE_PROJECT_NAME:-octavios}-mongodb"
 
 echo "▸ Rotación de credenciales MongoDB"
 echo "════════════════════════════════════"

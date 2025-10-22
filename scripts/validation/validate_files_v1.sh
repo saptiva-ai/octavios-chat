@@ -316,7 +316,7 @@ test_environment_config() {
     if [ $TESTS_PASSED -gt 0 ]; then
         success "Variables de entorno funcionando correctamente (inferido de tests previos)"
         info "Variables soportadas:"
-        info "  - FILES_ROOT (default: /tmp/copilotos_documents)"
+        info "  - FILES_ROOT (default: /tmp/octavios_documents)"
         info "  - FILES_TTL_DAYS (default: 7)"
         info "  - FILES_QUOTA_MB_PER_USER (default: 500, no implementado aún)"
         info "  - Compatibilidad legacy: DOCUMENTS_STORAGE_ROOT, DOCUMENTS_TTL_HOURS"
@@ -333,7 +333,7 @@ test_nginx_sse_config() {
     info "Verificando que location /api/files/events/ esté configurado..."
 
     # Buscar archivo de configuración Nginx
-    NGINX_CONF="/home/jazielflo/Proyects/copilotos-bridge/infra/nginx/nginx.conf"
+    NGINX_CONF="/home/jazielflo/Proyects/octavios-bridge/infra/nginx/nginx.conf"
 
     if [ -f "$NGINX_CONF" ]; then
         if grep -q "location.*\/api\/files\/events\/" "$NGINX_CONF"; then
@@ -376,26 +376,26 @@ test_prometheus_metrics() {
     success "Endpoint /api/metrics disponible"
 
     # Verificar métricas específicas de files
-    if echo "$METRICS" | grep -q "copilotos_pdf_ingest_seconds"; then
+    if echo "$METRICS" | grep -q "octavios_pdf_ingest_seconds"; then
         success "Métrica files_ingest_seconds encontrada"
     else
         warn "Métrica files_ingest_seconds no encontrada"
     fi
 
-    if echo "$METRICS" | grep -q "copilotos_pdf_ingest_errors_total"; then
+    if echo "$METRICS" | grep -q "octavios_pdf_ingest_errors_total"; then
         success "Métrica files_errors_total encontrada"
     else
         warn "Métrica files_errors_total no encontrada"
     fi
 
-    if echo "$METRICS" | grep -q "copilotos_tool_invocations_total"; then
+    if echo "$METRICS" | grep -q "octavios_tool_invocations_total"; then
         success "Métrica tool_invocations_total encontrada"
     else
         warn "Métrica tool_invocations_total no encontrada"
     fi
 
     info "Ejemplo de métricas:"
-    echo "$METRICS" | grep "copilotos_pdf\|copilotos_tool" | head -5
+    echo "$METRICS" | grep "octavios_pdf\|octavios_tool" | head -5
 }
 
 # Test 9: Verificar idempotencia

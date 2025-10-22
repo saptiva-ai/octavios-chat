@@ -101,20 +101,20 @@ echo -e "${BLUE}Creating required secrets...${NC}"
 echo
 
 # Create all required secrets
-create_secret "copilotos_mongodb_password" "MongoDB password for copilotos_user" "generate"
-create_secret "copilotos_redis_password" "Redis password" "generate"
-create_secret "copilotos_jwt_secret_key" "JWT signing secret key" "generate"
-create_secret "copilotos_secret_key" "Application secret key" "generate"
-create_secret "copilotos_saptiva_api_key" "SAPTIVA API key" "manual"
-create_secret "copilotos_mongo_root_password" "MongoDB root password" "generate"
+create_secret "octavios_mongodb_password" "MongoDB password for octavios_user" "generate"
+create_secret "octavios_redis_password" "Redis password" "generate"
+create_secret "octavios_jwt_secret_key" "JWT signing secret key" "generate"
+create_secret "octavios_secret_key" "Application secret key" "generate"
+create_secret "octavios_saptiva_api_key" "SAPTIVA API key" "manual"
+create_secret "octavios_mongo_root_password" "MongoDB root password" "generate"
 
 echo
 echo -e "${GREEN}◆ All secrets have been created successfully!${NC}"
 echo
 
 echo -e "${BLUE}Next steps:${NC}"
-echo "1. Deploy using: docker stack deploy -c docker-compose.secure.yml copilotos"
-echo "2. Monitor logs: docker service logs -f copilotos_api"
+echo "1. Deploy using: docker stack deploy -c docker-compose.secure.yml octavios"
+echo "2. Monitor logs: docker service logs -f octavios_api"
 echo "3. Check health: docker service ls"
 echo
 
