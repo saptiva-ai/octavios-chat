@@ -75,7 +75,7 @@ slugify_project_name() {
     # Replace non-alphanumeric characters with hyphen and normalize the result
     slug="$(echo "$slug" | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$$//; s/-{2,}/-/g')"
     if [ -z "$slug" ]; then
-        slug="copilotos"
+        slug="octavios"
     fi
     echo "$slug"
 }
@@ -287,12 +287,12 @@ if [ "$ENVIRONMENT" = "production" ]; then
 
     PROD_DEPLOY_PATH=$(prompt_with_default \
         "Deployment path on server" \
-        "${PROD_DEPLOY_PATH:-/opt/copilotos-bridge}" \
+        "${PROD_DEPLOY_PATH:-/opt/octavios-bridge}" \
         "PROD_DEPLOY_PATH")
 
     PROD_BACKUP_DIR=$(prompt_with_default \
         "Backup directory on server" \
-        "${PROD_BACKUP_DIR:-/opt/backups/copilotos-production}" \
+        "${PROD_BACKUP_DIR:-/opt/backups/octavios-production}" \
         "PROD_BACKUP_DIR")
 
     # Constructed values
@@ -328,7 +328,7 @@ fi
 
 MONGODB_USER=$(prompt_with_default \
     "MongoDB username" \
-    "${MONGODB_USER:-copilotos_user}" \
+    "${MONGODB_USER:-octavios_user}" \
     "MONGODB_USER")
 
 if [ -z "$REDIS_PASSWORD" ] || [ "$REDIS_PASSWORD" = "redis_password_change_me" ]; then
@@ -523,7 +523,7 @@ NEXT_PUBLIC_FEATURE_MIC=false
 # ============================================================================
 MONGODB_USER=$MONGODB_USER
 MONGODB_PASSWORD=$MONGODB_PASSWORD
-MONGODB_DATABASE=copilotos
+MONGODB_DATABASE=octavios
 MONGODB_PORT=27017
 
 REDIS_PASSWORD=$REDIS_PASSWORD
@@ -577,7 +577,7 @@ ALLOWED_HOSTS=["localhost","127.0.0.1","$DOMAIN","web","api"]
 # ============================================================================
 # OBSERVABILITY
 # ============================================================================
-OTEL_SERVICE_NAME=copilotos-bridge-$ENVIRONMENT
+OTEL_SERVICE_NAME=octavios-bridge-$ENVIRONMENT
 OTEL_ENABLED=false
 JAEGER_ENDPOINT=http://localhost:14268/api/traces
 

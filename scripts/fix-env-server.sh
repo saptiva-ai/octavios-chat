@@ -25,7 +25,7 @@ fi
 # Detectar directorio
 if [ ! -d "envs" ]; then
     echo "❌ Error: Ejecuta este script desde el directorio raíz del proyecto"
-    echo "   cd /home/jf/copilotos-bridge && bash scripts/fix-env-server.sh"
+    echo "   cd /home/jf/octavios-bridge && bash scripts/fix-env-server.sh"
     exit 1
 fi
 
@@ -266,7 +266,7 @@ else
     echo "Siguiente paso:"
     echo "  1. Validar: bash scripts/validate-env-server.sh"
     echo "  2. Rebuild imagen web (desde máquina local):"
-    echo "     cd /home/jazielflo/Proyects/copilotos-bridge"
+    echo "     cd /home/jazielflo/Proyects/octavios-bridge"
     echo "     make deploy-tar"
     echo ""
 fi

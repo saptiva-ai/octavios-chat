@@ -37,7 +37,7 @@
 #
 # Environment (from envs/.env.prod):
 #   PROD_SERVER_HOST   SSH target (user@ip)
-#   PROD_DEPLOY_PATH   Remote path (/opt/copilotos-bridge)
+#   PROD_DEPLOY_PATH   Remote path (/opt/octavios-bridge)
 #   REGISTRY_URL       Docker registry (ghcr.io/...)
 
 set -e
@@ -54,7 +54,7 @@ BLUE="▸ "
 NC=""
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEPLOY_HOME="$HOME/.copilotos-deploy"
+DEPLOY_HOME="$HOME/.octavios-deploy"
 VERSIONS_DIR="$DEPLOY_HOME/versions"
 BACKUP_DIR="$DEPLOY_HOME/backups"
 
@@ -69,9 +69,9 @@ fi
 
 # Variables with fallbacks
 DEPLOY_SERVER="${DEPLOY_SERVER:-${PROD_SERVER_HOST:-}}"
-DEPLOY_PATH="${DEPLOY_PATH:-${PROD_DEPLOY_PATH:-/opt/copilotos-bridge}}"
+DEPLOY_PATH="${DEPLOY_PATH:-${PROD_DEPLOY_PATH:-/opt/octavios-bridge}}"
 PROD_DOMAIN="${PROD_DOMAIN:-localhost}"
-REGISTRY_URL="${REGISTRY_URL:-ghcr.io/saptiva-ai/copilotos-bridge}"
+REGISTRY_URL="${REGISTRY_URL:-ghcr.io/saptiva-ai/octavios-bridge}"
 REGISTRY_USER="${REGISTRY_USER:-}"
 REGISTRY_TOKEN="${REGISTRY_TOKEN:-}"
 
@@ -157,7 +157,7 @@ Examples:
 Configuration:
   Set in envs/.env.prod:
     PROD_SERVER_HOST=user@server-ip
-    PROD_DEPLOY_PATH=/opt/copilotos-bridge
+    PROD_DEPLOY_PATH=/opt/octavios-bridge
     REGISTRY_URL=ghcr.io/org/repo
 
 EOF
@@ -210,7 +210,7 @@ validate_config() {
         echo ""
         echo "Configure in envs/.env.prod:"
         echo "  PROD_SERVER_HOST=user@server-ip"
-        echo "  PROD_DEPLOY_PATH=/opt/copilotos-bridge"
+        echo "  PROD_DEPLOY_PATH=/opt/octavios-bridge"
         echo ""
         echo "Or run: make setup-interactive-prod"
         exit 1
@@ -238,16 +238,16 @@ preflight_checks() {
     if [ "$SKIP_BUILD" = true ] && [ -z "$SPECIFIC_VERSION" ]; then
         log_info "Checking Docker images exist (--skip-build mode)..."
 
-        if ! docker image inspect "copilotos-api:$NEW_VERSION" >/dev/null 2>&1; then
-            log_error "Image not found: copilotos-api:$NEW_VERSION"
+        if ! docker image inspect "octavios-api:$NEW_VERSION" >/dev/null 2>&1; then
+            log_error "Image not found: octavios-api:$NEW_VERSION"
             echo "  Remove --skip-build flag or build images first"
             ((errors++))
         else
             log_success "API image exists: $NEW_VERSION"
         fi
 
-        if ! docker image inspect "copilotos-web:$NEW_VERSION" >/dev/null 2>&1; then
-            log_error "Image not found: copilotos-web:$NEW_VERSION"
+        if ! docker image inspect "octavios-web:$NEW_VERSION" >/dev/null 2>&1; then
+            log_error "Image not found: octavios-web:$NEW_VERSION"
             echo "  Remove --skip-build flag or build images first"
             ((errors++))
         else
@@ -258,11 +258,11 @@ preflight_checks() {
     # Check 2: Detect existing COMPOSE_PROJECT_NAME on server
     log_info "Detecting running containers on server..."
     local running_containers=$(ssh "$DEPLOY_SERVER" \
-        "docker ps --filter 'name=copilotos' --format '{{.Names}}' | head -1" 2>/dev/null || echo "")
+        "docker ps --filter 'name=octavios' --format '{{.Names}}' | head -1" 2>/dev/null || echo "")
 
     if [ -n "$running_containers" ]; then
         # Extract project name by removing service name (last component after last dash)
-        # Example: copilotos-prod-web -> copilotos-prod
+        # Example: octavios-prod-web -> octavios-prod
         local detected_project=$(echo "$running_containers" | sed 's/-[^-]*$//')
         log_success "Detected project name: $detected_project"
 
@@ -460,7 +460,7 @@ backup_current_deployment() {
     log_info "Current version: $CURRENT_VERSION"
 
     # Backup running images
-    local running=$(ssh "$DEPLOY_SERVER" "docker ps -q --filter 'name=copilotos-api' | wc -l")
+    local running=$(ssh "$DEPLOY_SERVER" "docker ps -q --filter 'name=octavios-api' | wc -l")
 
     if [ "$running" -eq 0 ]; then
         log_warning "No containers running - skipping backup"
@@ -469,8 +469,8 @@ backup_current_deployment() {
 
     log_info "Creating backup tags..."
     ssh "$DEPLOY_SERVER" "
-        docker tag copilotos-api:latest copilotos-api:backup-$CURRENT_VERSION 2>/dev/null || true
-        docker tag copilotos-web:latest copilotos-web:backup-$CURRENT_VERSION 2>/dev/null || true
+        docker tag octavios-api:latest octavios-api:backup-$CURRENT_VERSION 2>/dev/null || true
+        docker tag octavios-web:latest octavios-web:backup-$CURRENT_VERSION 2>/dev/null || true
     " || log_warning "Backup tagging failed (non-critical)"
 
     log_success "Backup created: backup-$CURRENT_VERSION"
@@ -491,16 +491,16 @@ build_images() {
 
     log_info "Building API image..."
     docker build -f apps/api/Dockerfile \
-        -t "copilotos-api:$NEW_VERSION" \
-        -t "copilotos-api:latest" \
+        -t "octavios-api:$NEW_VERSION" \
+        -t "octavios-api:latest" \
         --target production \
         --no-cache \
         apps/api
 
     log_info "Building Web image..."
     docker build -f apps/web/Dockerfile \
-        -t "copilotos-web:$NEW_VERSION" \
-        -t "copilotos-web:latest" \
+        -t "octavios-web:$NEW_VERSION" \
+        -t "octavios-web:latest" \
         --target runner \
         --no-cache \
         .
@@ -518,13 +518,13 @@ deploy_via_tar() {
 
     # Export
     log_info "Exporting API image..."
-    docker save "copilotos-api:$NEW_VERSION" "copilotos-api:latest" | \
+    docker save "octavios-api:$NEW_VERSION" "octavios-api:latest" | \
         gzip > "api-${NEW_VERSION}.tar.gz"
     local api_size=$(du -h "api-${NEW_VERSION}.tar.gz" | cut -f1)
     log_success "API: $api_size"
 
     log_info "Exporting Web image..."
-    docker save "copilotos-web:$NEW_VERSION" "copilotos-web:latest" | \
+    docker save "octavios-web:$NEW_VERSION" "octavios-web:latest" | \
         gzip > "web-${NEW_VERSION}.tar.gz"
     local web_size=$(du -h "web-${NEW_VERSION}.tar.gz" | cut -f1)
     log_success "Web: $web_size"
@@ -568,10 +568,10 @@ deploy_via_registry() {
 
     # Push to registry
     log_info "Tagging for registry: $REGISTRY_URL"
-    docker tag "copilotos-api:$NEW_VERSION" "$REGISTRY_URL/api:$NEW_VERSION"
-    docker tag "copilotos-api:latest" "$REGISTRY_URL/api:latest"
-    docker tag "copilotos-web:$NEW_VERSION" "$REGISTRY_URL/web:$NEW_VERSION"
-    docker tag "copilotos-web:latest" "$REGISTRY_URL/web:latest"
+    docker tag "octavios-api:$NEW_VERSION" "$REGISTRY_URL/api:$NEW_VERSION"
+    docker tag "octavios-api:latest" "$REGISTRY_URL/api:latest"
+    docker tag "octavios-web:$NEW_VERSION" "$REGISTRY_URL/web:$NEW_VERSION"
+    docker tag "octavios-web:latest" "$REGISTRY_URL/web:latest"
 
     log_info "Pushing images to registry..."
     docker push "$REGISTRY_URL/api:$NEW_VERSION" || {
@@ -592,8 +592,8 @@ deploy_via_registry() {
     ssh "$DEPLOY_SERVER" "
         docker pull $REGISTRY_URL/api:$NEW_VERSION
         docker pull $REGISTRY_URL/web:$NEW_VERSION
-        docker tag $REGISTRY_URL/api:$NEW_VERSION copilotos-api:latest
-        docker tag $REGISTRY_URL/web:$NEW_VERSION copilotos-web:latest
+        docker tag $REGISTRY_URL/api:$NEW_VERSION octavios-api:latest
+        docker tag $REGISTRY_URL/web:$NEW_VERSION octavios-web:latest
     " || {
         log_error "Pull failed on server"
         return 1
@@ -744,7 +744,7 @@ rollback_to_previous() {
 
     # Check backup exists
     local backup_exists=$(ssh "$DEPLOY_SERVER" \
-        "docker images -q copilotos-api:backup-$CURRENT_VERSION" || echo "")
+        "docker images -q octavios-api:backup-$CURRENT_VERSION" || echo "")
 
     if [ -z "$backup_exists" ]; then
         log_error "Backup images not found for $CURRENT_VERSION"
@@ -758,8 +758,8 @@ rollback_to_previous() {
 
     log_info "Restoring backup images..."
     ssh "$DEPLOY_SERVER" "
-        docker tag copilotos-api:backup-$CURRENT_VERSION copilotos-api:latest
-        docker tag copilotos-web:backup-$CURRENT_VERSION copilotos-web:latest
+        docker tag octavios-api:backup-$CURRENT_VERSION octavios-api:latest
+        docker tag octavios-web:backup-$CURRENT_VERSION octavios-web:latest
     "
 
     log_info "Starting previous version..."
@@ -790,9 +790,9 @@ cleanup_old_versions() {
 
     log_info "Cleaning old Docker images (keeping last 5)..."
     ssh "$DEPLOY_SERVER" "
-        docker images 'copilotos-api' --format '{{.Repository}}:{{.Tag}}' | \
+        docker images 'octavios-api' --format '{{.Repository}}:{{.Tag}}' | \
             grep -v latest | grep -v backup | tail -n +6 | xargs -r docker rmi 2>/dev/null || true
-        docker images 'copilotos-web' --format '{{.Repository}}:{{.Tag}}' | \
+        docker images 'octavios-web' --format '{{.Repository}}:{{.Tag}}' | \
             grep -v latest | grep -v backup | tail -n +6 | xargs -r docker rmi 2>/dev/null || true
     " 2>/dev/null || log_warning "Cleanup had warnings (non-critical)"
 
@@ -823,7 +823,7 @@ show_deployment_summary() {
     echo ""
     echo -e "${BLUE}Running containers:${NC}"
     ssh "$DEPLOY_SERVER" \
-        "docker ps --format '  {{.Names}}\t{{.Status}}' --filter 'name=copilotos'" || true
+        "docker ps --format '  {{.Names}}\t{{.Status}}' --filter 'name=octavios'" || true
 
     echo ""
     echo -e "${YELLOW}Next steps:${NC}"

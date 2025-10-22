@@ -233,7 +233,7 @@ check_infrastructure() {
     echo ""
 
     echo -e "${YELLOW}Checking Docker containers on remote...${NC}"
-    local container_status=$(timeout 20 ssh "$PROD_USER@$PROD_HOST" "docker ps --format 'table {{.Names}}\t{{.Status}}' | grep copilotos" 2>/dev/null || echo "ERROR")
+    local container_status=$(timeout 20 ssh "$PROD_USER@$PROD_HOST" "docker ps --format 'table {{.Names}}\t{{.Status}}' | grep octavios" 2>/dev/null || echo "ERROR")
 
     if [[ "$container_status" != "ERROR" ]]; then
         echo -e "${GREEN}Containers running:${NC}"
@@ -277,7 +277,7 @@ echo "CPU Load: $(uptime | awk -F'load average:' '{print $2}')"
 echo ""
 
 echo "▸ Docker Status:"
-docker ps --filter "name=copilotos" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "Docker not available"
+docker ps --filter "name=octavios" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "Docker not available"
 echo ""
 
 echo "▸ Network Ports:"
@@ -285,7 +285,7 @@ netstat -tlnp 2>/dev/null | grep -E ':(3000|8001|80|443)' || ss -tlnp | grep -E 
 echo ""
 
 echo "▸ Project Files:"
-DEPLOY_PATH="${PROD_DEPLOY_PATH:-/opt/copilotos-bridge}"
+DEPLOY_PATH="${PROD_DEPLOY_PATH:-/opt/octavios-bridge}"
 if [ -d "$DEPLOY_PATH" ]; then
     echo "✔ Project directory exists"
     echo "Latest commit: $(cd $DEPLOY_PATH && git log --oneline -1 2>/dev/null || echo 'Git info not available')"

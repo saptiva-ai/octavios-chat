@@ -14,10 +14,10 @@
 #   --help             Show this help message
 #
 # Environment Variables:
-#   MONGODB_USER       MongoDB username (default: copilotos_user)
+#   MONGODB_USER       MongoDB username (default: octavios_user)
 #   MONGODB_PASSWORD   MongoDB password (required)
-#   MONGODB_DATABASE   Database name (default: copilotos)
-#   COMPOSE_PROJECT_NAME Project name for container detection (default: copilotos-prod)
+#   MONGODB_DATABASE   Database name (default: octavios)
+#   COMPOSE_PROJECT_NAME Project name for container detection (default: octavios-prod)
 
 set -e
 
@@ -30,10 +30,10 @@ NC=""
 BACKUP_FILE=""
 DROP_DATABASE=false
 DRY_RUN=false
-MONGODB_USER="${MONGODB_USER:-copilotos_user}"
+MONGODB_USER="${MONGODB_USER:-octavios_user}"
 MONGODB_PASSWORD="${MONGODB_PASSWORD:-}"
-MONGODB_DATABASE="${MONGODB_DATABASE:-copilotos}"
-COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-copilotos-prod}"
+MONGODB_DATABASE="${MONGODB_DATABASE:-octavios}"
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-octavios-prod}"
 CONTAINER_NAME=""
 
 # Parse arguments

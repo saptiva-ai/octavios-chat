@@ -22,7 +22,7 @@ BLUE="▸ "
 NC=""
 BACKUP_DIR="${HOME}/backups/docker-volumes"
 RETENTION_DAYS=30
-COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-copilotos-prod}"
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-octavios-prod}"
 VOLUMES_TO_BACKUP=""
 
 # Parse arguments

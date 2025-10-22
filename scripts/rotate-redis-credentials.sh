@@ -19,7 +19,7 @@ if [ "$#" -ne 1 ]; then
 fi
 
 NEW_PASSWORD="$1"
-CONTAINER_NAME="${COMPOSE_PROJECT_NAME:-copilotos}-redis"
+CONTAINER_NAME="${COMPOSE_PROJECT_NAME:-octavios}-redis"
 
 echo "▸ Rotación de credenciales Redis"
 echo "════════════════════════════════════"

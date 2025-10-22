@@ -65,8 +65,8 @@ def create_app() -> FastAPI:
     settings = get_settings()
 
     app = FastAPI(
-        title="Copilot OS API",
-        description="API for chat and deep research using Aletheia orchestrator",
+        title="OctaviOS Chat API",
+        description="Conversational AI API with document review capabilities powered by SAPTIVA models",
         version="0.1.0",
         docs_url="/docs" if settings.debug else None,
         redoc_url="/redoc" if settings.debug else None,

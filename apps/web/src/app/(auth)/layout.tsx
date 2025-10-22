@@ -1,16 +1,16 @@
-import Image from 'next/image'
-import type { ReactNode } from 'react'
+import Image from "next/image";
+import type { ReactNode } from "react";
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-bg text-text">
       <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col items-center justify-center gap-10 px-4">
-        {/* Logo Saptiva */}
+        {/* Logo OctaviOS */}
         <div className="flex flex-col items-center">
           <div className="relative h-48 w-48">
             <Image
-              src="/Saptiva_AI_logo_new.webp"
-              alt="Saptiva AI"
+              src="/OctaviOS_DarkBack2.png"
+              alt="OctaviOS Chat"
               fill
               priority
               sizes="192px"
@@ -19,10 +19,8 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        <div className="w-full max-w-md">
-          {children}
-        </div>
+        <div className="w-full max-w-md">{children}</div>
       </div>
     </div>
-  )
+  );
 }

@@ -16,7 +16,7 @@ scrape_configs:
         refresh_interval: 5s
         filters:
           - name: label
-            values: ["com.docker.compose.project=copilotos-bridge"]
+            values: ["com.docker.compose.project=octavios-bridge"]
 
     relabel_configs:
       # Container name as label
@@ -28,7 +28,7 @@ scrape_configs:
       - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
         target_label: 'service'
 
-      # Only copilotos-bridge containers
+      # Only octavios-bridge containers
       - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
-        regex: 'copilotos-bridge'
+        regex: 'octavios-bridge'
         action: keep
