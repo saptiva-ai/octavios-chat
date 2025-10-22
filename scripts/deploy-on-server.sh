@@ -201,6 +201,77 @@ backup_current_state() {
 }
 
 # ========================================
+# BACKUP DATA VOLUMES
+# ========================================
+backup_data_volumes() {
+    step "Step 2b/7: Backup Data Volumes (MongoDB + Redis)"
+
+    if [ "$SKIP_BACKUP" = true ]; then
+        log_warning "Skipping data volume backup (--skip-backup flag)"
+        return 0
+    fi
+
+    local backup_dir="$HOME/backups/pre-deploy-$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$backup_dir"
+
+    log_info "Creating comprehensive data backup at: $backup_dir"
+
+    # Backup MongoDB using mongodump
+    log_info "Backing up MongoDB database..."
+    if [ -f "$PROJECT_ROOT/scripts/backup-mongodb.sh" ]; then
+        if ! "$PROJECT_ROOT/scripts/backup-mongodb.sh" \
+            --backup-dir "$backup_dir" \
+            --retention-days 7; then
+            log_error "MongoDB backup FAILED"
+            log_error "Aborting deployment for data safety"
+            exit 1
+        fi
+    else
+        log_warning "backup-mongodb.sh not found - skipping MongoDB backup"
+    fi
+
+    # Backup Docker volumes (MongoDB + Redis data)
+    log_info "Backing up Docker volumes..."
+    if [ -f "$PROJECT_ROOT/scripts/backup-docker-volumes.sh" ]; then
+        if ! "$PROJECT_ROOT/scripts/backup-docker-volumes.sh" \
+            --backup-dir "$backup_dir" \
+            --retention-days 7; then
+            log_error "Volume backup FAILED"
+            log_error "Aborting deployment for data safety"
+            exit 1
+        fi
+    else
+        log_warning "backup-docker-volumes.sh not found - skipping volume backup"
+    fi
+
+    # Verify backups were created
+    log_info "Verifying backup integrity..."
+
+    local backup_size=$(du -sh "$backup_dir" 2>/dev/null | cut -f1)
+    if [ -z "$backup_size" ] || [ "$backup_size" = "0" ]; then
+        log_error "Backup verification FAILED: directory empty or missing"
+        log_error "Aborting deployment for data safety"
+        exit 1
+    fi
+
+    # Check minimum backup size (at least 100KB to ensure something was backed up)
+    local backup_bytes=$(du -sb "$backup_dir" 2>/dev/null | cut -f1)
+    local min_size=102400  # 100KB minimum
+    if [ "$backup_bytes" -lt "$min_size" ]; then
+        log_error "Backup verification FAILED: size too small ($backup_size)"
+        log_error "Expected at least 100KB, got $backup_size"
+        log_error "Aborting deployment for data safety"
+        exit 1
+    fi
+
+    # Save backup location for potential restore
+    echo "$backup_dir" > /tmp/last_data_backup
+
+    log_success "Data backups complete: $backup_dir ($backup_size)"
+    log_info "Backup location saved to /tmp/last_data_backup for emergency restore"
+}
+
+# ========================================
 # GIT UPDATE
 # ========================================
 update_code() {
@@ -425,11 +496,12 @@ main() {
     if [ "$FORCE" != true ]; then
         echo ""
         echo -e "${YELLOW}This will:${NC}"
-        echo "  1. Backup current images"
-        echo "  2. Pull latest code from git"
-        echo "  3. Build new Docker images"
-        echo "  4. Redeploy all containers"
-        echo "  5. Verify health"
+        echo "  1. Backup current images (code)"
+        echo "  2. Backup data volumes (MongoDB + Redis)"
+        echo "  3. Pull latest code from git"
+        echo "  4. Build new Docker images"
+        echo "  5. Redeploy all containers"
+        echo "  6. Verify health"
         echo ""
         read -p "Proceed with deployment? (y/N) " -n 1 -r
         echo
@@ -441,6 +513,7 @@ main() {
 
     # Execute deployment
     backup_current_state
+    backup_data_volumes
     update_code
     build_images || {
         log_error "Build failed - deployment aborted"
