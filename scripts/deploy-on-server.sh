@@ -86,10 +86,10 @@ Options:
 
 Example:
   # From your local machine:
-  ssh user@server 'cd /opt/copilotos-bridge && ./scripts/deploy-on-server.sh'
+  ssh user@server 'cd /opt/octavios-bridge && ./scripts/deploy-on-server.sh'
 
   # Or directly on server:
-  cd /opt/copilotos-bridge
+  cd /opt/octavios-bridge
   ./scripts/deploy-on-server.sh
 
 Safety Features:
@@ -173,7 +173,7 @@ backup_current_state() {
     local backup_tag="backup-$(date +%Y%m%d-%H%M%S)"
 
     # Check if containers are running
-    local running=$(docker ps -q --filter 'name=copilotos' | wc -l)
+    local running=$(docker ps -q --filter 'name=octavios' | wc -l)
 
     if [ "$running" -eq 0 ]; then
         log_warning "No containers running - skipping image backup"
@@ -183,14 +183,14 @@ backup_current_state() {
     log_info "Creating backup of current images..."
 
     # Backup API image
-    if docker images copilotos-api:latest -q 2>/dev/null | grep -q .; then
-        docker tag copilotos-api:latest "copilotos-api:$backup_tag"
+    if docker images octavios-api:latest -q 2>/dev/null | grep -q .; then
+        docker tag octavios-api:latest "octavios-api:$backup_tag"
         log_success "API image backed up: $backup_tag"
     fi
 
     # Backup Web image
-    if docker images copilotos-web:latest -q 2>/dev/null | grep -q .; then
-        docker tag copilotos-web:latest "copilotos-web:$backup_tag"
+    if docker images octavios-web:latest -q 2>/dev/null | grep -q .; then
+        docker tag octavios-web:latest "octavios-web:$backup_tag"
         log_success "Web image backed up: $backup_tag"
     fi
 
@@ -350,8 +350,8 @@ rollback_to_backup() {
     log_warning "Rolling back to: $backup_tag"
 
     # Check backup images exist
-    if ! docker images "copilotos-api:$backup_tag" -q 2>/dev/null | grep -q .; then
-        log_error "Backup image not found: copilotos-api:$backup_tag"
+    if ! docker images "octavios-api:$backup_tag" -q 2>/dev/null | grep -q .; then
+        log_error "Backup image not found: octavios-api:$backup_tag"
         return 1
     fi
 
@@ -361,8 +361,8 @@ rollback_to_backup() {
     docker compose down
 
     log_info "Restoring backup images..."
-    docker tag "copilotos-api:$backup_tag" copilotos-api:latest
-    docker tag "copilotos-web:$backup_tag" copilotos-web:latest
+    docker tag "octavios-api:$backup_tag" octavios-api:latest
+    docker tag "octavios-web:$backup_tag" octavios-web:latest
 
     log_info "Starting previous version..."
     docker compose up -d
@@ -399,7 +399,7 @@ show_summary() {
 
     echo ""
     echo -e "${BLUE}Running containers:${NC}"
-    docker ps --format '  {{.Names}}\t{{.Status}}' --filter 'name=copilotos'
+    docker ps --format '  {{.Names}}\t{{.Status}}' --filter 'name=octavios'
 
     echo ""
     echo -e "${BLUE}Health status:${NC}"

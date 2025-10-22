@@ -3,38 +3,38 @@
 # ============================================================================
 
 groups:
-  - name: copilotos-bridge-alerts
+  - name: octavios-bridge-alerts
     rules:
       # ========================================================================
       # HIGH PRIORITY ALERTS
       # ========================================================================
 
       - alert: HighErrorRate
-        expr: (rate(copilotos_errors_total[5m]) / rate(copilotos_requests_total[5m])) * 100 > 5
+        expr: (rate(octavios_errors_total[5m]) / rate(octavios_requests_total[5m])) * 100 > 5
         for: 2m
         labels:
           severity: critical
-          service: copilotos-bridge
+          service: octavios-bridge
         annotations:
           summary: "High error rate detected"
           description: "Error rate is {{ $value }}% over the last 5 minutes"
 
       - alert: APIDown
-        expr: up{job="copilotos-api"} == 0
+        expr: up{job="octavios-api"} == 0
         for: 1m
         labels:
           severity: critical
-          service: copilotos-bridge
+          service: octavios-bridge
         annotations:
           summary: "API service is down"
           description: "Copilotos Bridge API has been down for more than 1 minute"
 
       - alert: HighResponseTime
-        expr: histogram_quantile(0.95, rate(copilotos_request_duration_seconds_bucket[5m])) > 5
+        expr: histogram_quantile(0.95, rate(octavios_request_duration_seconds_bucket[5m])) > 5
         for: 3m
         labels:
           severity: warning
-          service: copilotos-bridge
+          service: octavios-bridge
         annotations:
           summary: "High response time detected"
           description: "95th percentile response time is {{ $value }}s"
@@ -44,7 +44,7 @@ groups:
       # ========================================================================
 
       - alert: ResearchOperationFailing
-        expr: rate(copilotos_research_duration_seconds_count{success="false"}[10m]) > 0.1
+        expr: rate(octavios_research_duration_seconds_count{success="false"}[10m]) > 0.1
         for: 5m
         labels:
           severity: warning
@@ -54,7 +54,7 @@ groups:
           description: "Research failure rate is {{ $value }} operations per second"
 
       - alert: LowResearchQuality
-        expr: copilotos_research_quality_score < 0.6
+        expr: octavios_research_quality_score < 0.6
         for: 10m
         labels:
           severity: warning
@@ -64,7 +64,7 @@ groups:
           description: "Research quality score is {{ $value }} for research type {{ $labels.research_type }}"
 
       - alert: SlowResearchOperations
-        expr: histogram_quantile(0.95, rate(copilotos_research_duration_seconds_bucket[10m])) > 300
+        expr: histogram_quantile(0.95, rate(octavios_research_duration_seconds_bucket[10m])) > 300
         for: 5m
         labels:
           severity: warning
@@ -78,7 +78,7 @@ groups:
       # ========================================================================
 
       - alert: HighAmbiguousClassifications
-        expr: (rate(copilotos_intent_classification_total{intent_type="Ambiguous"}[10m]) / rate(copilotos_intent_classification_total[10m])) * 100 > 30
+        expr: (rate(octavios_intent_classification_total{intent_type="Ambiguous"}[10m]) / rate(octavios_intent_classification_total[10m])) * 100 > 30
         for: 10m
         labels:
           severity: warning
@@ -88,7 +88,7 @@ groups:
           description: "{{ $value }}% of intent classifications are ambiguous"
 
       - alert: LowClassificationConfidence
-        expr: (rate(copilotos_intent_classification_total{confidence_level="low"}[10m]) / rate(copilotos_intent_classification_total[10m])) * 100 > 20
+        expr: (rate(octavios_intent_classification_total{confidence_level="low"}[10m]) / rate(octavios_intent_classification_total[10m])) * 100 > 20
         for: 10m
         labels:
           severity: warning
@@ -102,21 +102,21 @@ groups:
       # ========================================================================
 
       - alert: HighActiveConnections
-        expr: copilotos_active_connections > 100
+        expr: octavios_active_connections > 100
         for: 5m
         labels:
           severity: warning
-          service: copilotos-bridge
+          service: octavios-bridge
         annotations:
           summary: "High number of active connections"
           description: "{{ $value }} active connections detected"
 
       - alert: MemoryUsageHigh
-        expr: copilotos_memory_usage_bytes{type="rss"} > 1073741824  # 1GB
+        expr: octavios_memory_usage_bytes{type="rss"} > 1073741824  # 1GB
         for: 5m
         labels:
           severity: warning
-          service: copilotos-bridge
+          service: octavios-bridge
         annotations:
           summary: "High memory usage"
           description: "Memory usage is {{ $value | humanize1024 }}"
@@ -126,7 +126,7 @@ groups:
       # ========================================================================
 
       - alert: ExternalAPIHighErrorRate
-        expr: (rate(copilotos_external_api_calls_total{status="error"}[5m]) / rate(copilotos_external_api_calls_total[5m])) * 100 > 10
+        expr: (rate(octavios_external_api_calls_total{status="error"}[5m]) / rate(octavios_external_api_calls_total[5m])) * 100 > 10
         for: 3m
         labels:
           severity: warning
@@ -136,7 +136,7 @@ groups:
           description: "{{ $value }}% error rate for {{ $labels.service }} API"
 
       - alert: ExternalAPISlowResponse
-        expr: histogram_quantile(0.95, rate(copilotos_external_api_duration_seconds_bucket[5m])) > 30
+        expr: histogram_quantile(0.95, rate(octavios_external_api_duration_seconds_bucket[5m])) > 30
         for: 5m
         labels:
           severity: warning
@@ -150,7 +150,7 @@ groups:
       # ========================================================================
 
       - alert: LowCacheHitRate
-        expr: (rate(copilotos_cache_operations_total{hit="hit"}[10m]) / rate(copilotos_cache_operations_total[10m])) * 100 < 70
+        expr: (rate(octavios_cache_operations_total{hit="hit"}[10m]) / rate(octavios_cache_operations_total[10m])) * 100 < 70
         for: 10m
         labels:
           severity: warning
@@ -164,7 +164,7 @@ groups:
       # ========================================================================
 
       - alert: HighRateLimitHits
-        expr: rate(copilotos_rate_limit_hits_total[5m]) > 1
+        expr: rate(octavios_rate_limit_hits_total[5m]) > 1
         for: 5m
         labels:
           severity: warning

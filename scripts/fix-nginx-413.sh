@@ -50,7 +50,7 @@ echo ""
 # ============================================================================
 # 2. BUSCAR CONFIGURACIÓN DE COPILOTOS.SAPTIVA.COM
 # ============================================================================
-echo "Buscando configuración de copilotos.saptiva.com..."
+echo "Buscando configuración de octavios.saptiva.com..."
 
 SITE_CONFIG=""
 FOUND_IN=""
@@ -58,7 +58,7 @@ FOUND_IN=""
 # Buscar en sites-enabled (Debian/Ubuntu)
 if [ -d "/etc/nginx/sites-enabled" ]; then
     for site in /etc/nginx/sites-enabled/*; do
-        if [ -f "$site" ] && grep -q "copilotos\.saptiva\.com\|server_name.*saptiva" "$site" 2>/dev/null; then
+        if [ -f "$site" ] && grep -q "octavios\.saptiva\.com\|server_name.*saptiva" "$site" 2>/dev/null; then
             SITE_CONFIG="$site"
             FOUND_IN="sites-enabled"
             break
@@ -69,7 +69,7 @@ fi
 # Buscar en conf.d (CentOS/RHEL)
 if [ -z "$SITE_CONFIG" ] && [ -d "/etc/nginx/conf.d" ]; then
     for conf in /etc/nginx/conf.d/*.conf; do
-        if [ -f "$conf" ] && grep -q "copilotos\.saptiva\.com\|server_name.*saptiva" "$conf" 2>/dev/null; then
+        if [ -f "$conf" ] && grep -q "octavios\.saptiva\.com\|server_name.*saptiva" "$conf" 2>/dev/null; then
             SITE_CONFIG="$conf"
             FOUND_IN="conf.d"
             break
@@ -79,14 +79,14 @@ fi
 
 # Buscar en nginx.conf principal
 if [ -z "$SITE_CONFIG" ] && [ -f "/etc/nginx/nginx.conf" ]; then
-    if grep -q "copilotos\.saptiva\.com\|server_name.*saptiva" /etc/nginx/nginx.conf 2>/dev/null; then
+    if grep -q "octavios\.saptiva\.com\|server_name.*saptiva" /etc/nginx/nginx.conf 2>/dev/null; then
         SITE_CONFIG="/etc/nginx/nginx.conf"
         FOUND_IN="nginx.conf"
     fi
 fi
 
 if [ -z "$SITE_CONFIG" ]; then
-    echo -e "${YELLOW}⚠${NC} No se encontró configuración específica de copilotos.saptiva.com"
+    echo -e "${YELLOW}⚠${NC} No se encontró configuración específica de octavios.saptiva.com"
     echo ""
     echo "Buscando 'default' o primera configuración disponible..."
 

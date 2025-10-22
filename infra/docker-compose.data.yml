@@ -9,8 +9,8 @@
 #
 # Usage:
 #   # Primera vez (crear volúmenes)
-#   docker volume create copilotos-data-mongodb
-#   docker volume create copilotos-data-redis
+#   docker volume create octavios-data-mongodb
+#   docker volume create octavios-data-redis
 #
 #   # Levantar capa de datos
 #   docker compose -f infra/docker-compose.data.yml up -d
@@ -24,17 +24,17 @@ services:
   # ========================================
   mongodb:
     image: mongo:7.0
-    container_name: copilotos-data-mongodb
+    container_name: octavios-data-mongodb
     restart: unless-stopped
     env_file:
       - ../envs/.env.prod
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USER:-copilotos_user}
+      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USER:-octavios_user}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD:-secure_password_change_me}
-      MONGO_INITDB_DATABASE: ${MONGODB_DATABASE:-copilotos}
+      MONGO_INITDB_DATABASE: ${MONGODB_DATABASE:-octavios}
     volumes:
-      - copilotos-data-mongodb:/data/db
-      - copilotos-data-mongodb-config:/data/configdb
+      - octavios-data-mongodb:/data/db
+      - octavios-data-mongodb-config:/data/configdb
     ports:
       - "27017:27017"  # Puerto fijo, no variable
     healthcheck:
@@ -44,14 +44,14 @@ services:
       retries: 3
       start_period: 40s
     networks:
-      - copilotos-data
+      - octavios-data
 
   # ========================================
   # REDIS CACHE (SHARED DATA)
   # ========================================
   redis:
     image: redis:7-alpine
-    container_name: copilotos-data-redis
+    container_name: octavios-data-redis
     restart: unless-stopped
     env_file:
       - ../envs/.env.prod
@@ -62,7 +62,7 @@ services:
       --maxmemory ${REDIS_MAX_MEMORY:-512mb}
       --maxmemory-policy allkeys-lru
     volumes:
-      - copilotos-data-redis:/data
+      - octavios-data-redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
       interval: 30s
@@ -72,23 +72,23 @@ services:
     ports:
       - "6379:6379"  # Puerto fijo, no variable
     networks:
-      - copilotos-data
+      - octavios-data
 
 # ========================================
 # VOLÚMENES EXTERNOS (PERSISTEN ENTRE DEPLOYS)
 # ========================================
 volumes:
-  copilotos-data-mongodb:
+  octavios-data-mongodb:
     external: true
-  copilotos-data-mongodb-config:
+  octavios-data-mongodb-config:
     external: true
-  copilotos-data-redis:
+  octavios-data-redis:
     external: true
 
 # ========================================
 # RED COMPARTIDA (BLUE/GREEN SE CONECTAN AQUÍ)
 # ========================================
 networks:
-  copilotos-data:
-    name: copilotos-data-network
+  octavios-data:
+    name: octavios-data-network
     driver: bridge

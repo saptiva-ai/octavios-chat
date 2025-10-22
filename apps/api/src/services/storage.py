@@ -46,7 +46,7 @@ def _default_storage_root() -> Path:
     root_env = os.getenv("FILES_ROOT") or os.getenv("DOCUMENTS_STORAGE_ROOT")  # fallback for compat
     if root_env:
         return Path(root_env).expanduser().resolve()
-    return Path(tempfile.gettempdir()) / "copilotos_documents"
+    return Path(tempfile.gettempdir()) / "octavios_documents"
 
 
 def _default_ttl_seconds() -> int:

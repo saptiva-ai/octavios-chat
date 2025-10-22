@@ -87,9 +87,9 @@ echo -e "${BLUE}3. File Permissions Check${NC}"
 echo "------------------------------"
 
 # Check for world-readable secret files
-if [ -d "/etc/copilotos/secrets" ]; then
+if [ -d "/etc/octavios/secrets" ]; then
     check_violation "World-readable secret files" \
-        "find /etc/copilotos/secrets -type f \\( -perm -004 -o -perm -040 \\)" \
+        "find /etc/octavios/secrets -type f \\( -perm -004 -o -perm -040 \\)" \
         0
 fi
 

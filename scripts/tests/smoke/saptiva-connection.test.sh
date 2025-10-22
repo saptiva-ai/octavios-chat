@@ -67,7 +67,7 @@ echo ""
 # Test 4: Check SAPTIVA_API_KEY in container
 echo "⛨ Checking SAPTIVA_API_KEY in container..."
 if command -v docker &> /dev/null; then
-    API_KEY=$(docker exec copilotos-api printenv SAPTIVA_API_KEY 2>/dev/null || echo "")
+    API_KEY=$(docker exec octavios-api printenv SAPTIVA_API_KEY 2>/dev/null || echo "")
     if [ -n "$API_KEY" ] && [ "$API_KEY" != "blank" ]; then
         echo "✔ SAPTIVA_API_KEY is configured (length: ${#API_KEY})"
         echo ""
@@ -114,7 +114,7 @@ else
     if command -v docker &> /dev/null; then
         echo ""
         echo "▸ Recent API logs:"
-        docker logs copilotos-api --tail 20 | grep -i "saptiva\|error" || echo "No relevant logs found"
+        docker logs octavios-api --tail 20 | grep -i "saptiva\|error" || echo "No relevant logs found"
     fi
 
     exit 1

@@ -4,7 +4,7 @@
 # ========================================
 # Para usar en servidor: 34.42.214.246
 # Usuario: jf
-# Path: /home/jf/copilotos-bridge
+# Path: /home/jf/octavios-bridge
 
 set -e
 
@@ -37,7 +37,7 @@ error() {
 
 # Verificar que estamos en el directorio correcto
 if [ ! -f "package.json" ] || [ ! -d "apps" ]; then
-    error "No estás en el directorio del proyecto copilotos-bridge"
+    error "No estás en el directorio del proyecto octavios-bridge"
 fi
 
 log "Verificando prerrequisitos..."
@@ -119,15 +119,15 @@ success "Servicios existentes detenidos"
 
 # Crear directorios de datos
 log "Preparando directorios de datos..."
-sudo mkdir -p /opt/copilotos-bridge/data/mongodb
-sudo mkdir -p /opt/copilotos-bridge/data/redis
-sudo mkdir -p /opt/copilotos-bridge/logs
-sudo mkdir -p /opt/copilotos-bridge/backups
+sudo mkdir -p /opt/octavios-bridge/data/mongodb
+sudo mkdir -p /opt/octavios-bridge/data/redis
+sudo mkdir -p /opt/octavios-bridge/logs
+sudo mkdir -p /opt/octavios-bridge/backups
 
 # Establecer permisos
-sudo chown -R 999:999 /opt/copilotos-bridge/data/mongodb
-sudo chown -R 999:999 /opt/copilotos-bridge/data/redis
-sudo chmod -R 755 /opt/copilotos-bridge/data
+sudo chown -R 999:999 /opt/octavios-bridge/data/mongodb
+sudo chown -R 999:999 /opt/octavios-bridge/data/redis
+sudo chmod -R 755 /opt/octavios-bridge/data
 
 success "Directorios preparados"
 

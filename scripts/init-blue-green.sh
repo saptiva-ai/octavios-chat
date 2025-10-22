@@ -43,7 +43,7 @@ echo ""
 # ========================================
 log_info "Step 1/4: Creating external Docker volumes..."
 
-for volume in copilotos-data-mongodb copilotos-data-mongodb-config copilotos-data-redis; do
+for volume in octavios-data-mongodb octavios-data-mongodb-config octavios-data-redis; do
     if docker volume inspect "$volume" >/dev/null 2>&1; then
         log_warning "Volume $volume already exists (skipping)"
     else
@@ -78,11 +78,11 @@ docker compose -f infra/docker-compose.data.yml up -d
 
 # Esperar a que estén saludables
 log_info "Waiting for MongoDB..."
-timeout 60 bash -c 'until docker exec copilotos-data-mongodb mongosh --eval "db.runCommand({ ping: 1 })" >/dev/null 2>&1; do sleep 2; done'
+timeout 60 bash -c 'until docker exec octavios-data-mongodb mongosh --eval "db.runCommand({ ping: 1 })" >/dev/null 2>&1; do sleep 2; done'
 log_success "MongoDB is ready"
 
 log_info "Waiting for Redis..."
-timeout 30 bash -c 'until docker exec copilotos-data-redis redis-cli ping >/dev/null 2>&1; do sleep 2; done'
+timeout 30 bash -c 'until docker exec octavios-data-redis redis-cli ping >/dev/null 2>&1; do sleep 2; done'
 log_success "Redis is ready"
 
 # ========================================
@@ -107,7 +107,7 @@ docker compose -f infra/docker-compose.data.yml ps
 echo ""
 log_info "Next steps:"
 echo "  1. Deploy first stack:"
-echo "     docker compose -p copilotos-blue -f infra/docker-compose.app.yml up -d"
+echo "     docker compose -p octavios-blue -f infra/docker-compose.app.yml up -d"
 echo ""
 echo "  2. Check health:"
 echo "     ./scripts/blue-green-switch.sh --status"
