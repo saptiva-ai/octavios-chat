@@ -44,7 +44,7 @@ fi
 # Use environment variables with fallback to legacy defaults
 # Priority: PROD_SERVER_HOST > DEPLOY_SERVER > fallback
 DEPLOY_SERVER="${DEPLOY_SERVER:-${PROD_SERVER_HOST:-your-ssh-user@your-server-ip-here}}"
-DEPLOY_PATH="${DEPLOY_PATH:-${PROD_DEPLOY_PATH:-/opt/copilotos-bridge}}"
+DEPLOY_PATH="${DEPLOY_PATH:-${PROD_DEPLOY_PATH:-/opt/octavios-bridge}}"
 PROD_DOMAIN="${PROD_DOMAIN:-your-domain.com}"
 
 # Validate configuration
@@ -201,14 +201,14 @@ tag_images() {
     step "Step 2/6: Tagging Images"
 
     # Docker compose creates images with project name prefix (infra-*)
-    # But uses them with compose service names (copilotos-*)
+    # But uses them with compose service names (octavios-*)
     # We need both tags for compatibility
 
-    log_info "Tagging infra-api:latest -> copilotos-api:latest"
-    docker tag infra-api:latest copilotos-api:latest
+    log_info "Tagging infra-api:latest -> octavios-api:latest"
+    docker tag infra-api:latest octavios-api:latest
 
-    log_info "Tagging infra-web:latest -> copilotos-web:latest"
-    docker tag infra-web:latest copilotos-web:latest
+    log_info "Tagging infra-web:latest -> octavios-web:latest"
+    docker tag infra-web:latest octavios-web:latest
 
     log_success "Images tagged correctly"
 }
@@ -221,27 +221,27 @@ export_images() {
 
     if [ "$PARALLEL" = true ]; then
         log_info "Exporting images in parallel..."
-        docker save copilotos-api:latest | gzip > copilotos-api.tar.gz &
+        docker save octavios-api:latest | gzip > octavios-api.tar.gz &
         API_PID=$!
-        docker save copilotos-web:latest | gzip > copilotos-web.tar.gz &
+        docker save octavios-web:latest | gzip > octavios-web.tar.gz &
         WEB_PID=$!
 
         wait $API_PID
-        API_SIZE=$(ls -lh copilotos-api.tar.gz | awk '{print $5}')
+        API_SIZE=$(ls -lh octavios-api.tar.gz | awk '{print $5}')
         log_success "API exported: $API_SIZE"
 
         wait $WEB_PID
-        WEB_SIZE=$(ls -lh copilotos-web.tar.gz | awk '{print $5}')
+        WEB_SIZE=$(ls -lh octavios-web.tar.gz | awk '{print $5}')
         log_success "Web exported: $WEB_SIZE"
     else
         log_info "Exporting API image (this may take 1-2 minutes)..."
-        docker save copilotos-api:latest | gzip > copilotos-api.tar.gz
-        API_SIZE=$(ls -lh copilotos-api.tar.gz | awk '{print $5}')
+        docker save octavios-api:latest | gzip > octavios-api.tar.gz
+        API_SIZE=$(ls -lh octavios-api.tar.gz | awk '{print $5}')
         log_success "API exported: $API_SIZE"
 
         log_info "Exporting Web image (this may take 2-3 minutes)..."
-        docker save copilotos-web:latest | gzip > copilotos-web.tar.gz
-        WEB_SIZE=$(ls -lh copilotos-web.tar.gz | awk '{print $5}')
+        docker save octavios-web:latest | gzip > octavios-web.tar.gz
+        WEB_SIZE=$(ls -lh octavios-web.tar.gz | awk '{print $5}')
         log_success "Web exported: $WEB_SIZE"
     fi
 }
@@ -255,7 +255,7 @@ transfer_images() {
     log_info "Transferring to $DEPLOY_SERVER:$DEPLOY_PATH..."
     log_info "This may take 3-5 minutes depending on connection..."
 
-    scp copilotos-api.tar.gz copilotos-web.tar.gz "$DEPLOY_SERVER:$DEPLOY_PATH/"
+    scp octavios-api.tar.gz octavios-web.tar.gz "$DEPLOY_SERVER:$DEPLOY_PATH/"
 
     log_success "Transfer completed"
 }
@@ -276,13 +276,13 @@ load_images() {
     ssh "$DEPLOY_SERVER" "cd $DEPLOY_PATH/infra && docker compose down"
 
     log_info "Removing old images..."
-    ssh "$DEPLOY_SERVER" "docker rmi copilotos-web:latest copilotos-api:latest 2>/dev/null || true"
+    ssh "$DEPLOY_SERVER" "docker rmi octavios-web:latest octavios-api:latest 2>/dev/null || true"
 
     log_info "Loading new images (this may take 2-3 minutes)..."
     ssh "$DEPLOY_SERVER" "
         cd $DEPLOY_PATH && \
-        gunzip -c copilotos-api.tar.gz | docker load && \
-        gunzip -c copilotos-web.tar.gz | docker load
+        gunzip -c octavios-api.tar.gz | docker load && \
+        gunzip -c octavios-web.tar.gz | docker load
     "
 
     log_success "Images loaded successfully"
@@ -297,10 +297,10 @@ start_containers() {
 version: '3.8'
 services:
   api:
-    image: copilotos-api:latest
+    image: octavios-api:latest
     build: {}
   web:
-    image: copilotos-web:latest
+    image: octavios-web:latest
     build: {}
 EOF
 "
@@ -322,15 +322,15 @@ EOF
         log_success "API is healthy"
     else
         log_error "API health check failed: $HEALTH_STATUS"
-        log_warning "Check logs with: ssh $DEPLOY_SERVER 'docker logs copilotos-prod-api'"
+        log_warning "Check logs with: ssh $DEPLOY_SERVER 'docker logs octavios-prod-api'"
     fi
 
     # Verify web container is using production build (no webpack dev warnings)
     log_info "Verifying Web is using production build..."
-    WEB_LOGS=$(ssh "$DEPLOY_SERVER" "docker logs copilotos-prod-web 2>&1 | tail -5")
+    WEB_LOGS=$(ssh "$DEPLOY_SERVER" "docker logs octavios-prod-web 2>&1 | tail -5")
     if echo "$WEB_LOGS" | grep -q "webpack"; then
         log_error "Web is running in development mode!"
-        log_warning "Check logs with: ssh $DEPLOY_SERVER 'docker logs copilotos-prod-web'"
+        log_warning "Check logs with: ssh $DEPLOY_SERVER 'docker logs octavios-prod-web'"
     else
         log_success "Web is running in production mode"
     fi
@@ -342,10 +342,10 @@ cleanup() {
 
     log_info "Removing local tar files..."
     cd "$TEMP_DIR"
-    rm -f copilotos-api.tar.gz copilotos-web.tar.gz
+    rm -f octavios-api.tar.gz octavios-web.tar.gz
 
     log_info "Removing server tar files..."
-    ssh "$DEPLOY_SERVER" "cd $DEPLOY_PATH && rm -f copilotos-*.tar.gz"
+    ssh "$DEPLOY_SERVER" "cd $DEPLOY_PATH && rm -f octavios-*.tar.gz"
 
     log_success "Cleanup completed"
 }
@@ -376,13 +376,13 @@ show_summary() {
 
     echo ""
     echo -e "${BLUE}Running containers:${NC}"
-    ssh "$DEPLOY_SERVER" "docker ps --format '  {{.Names}}\t{{.Status}}' | grep copilotos"
+    ssh "$DEPLOY_SERVER" "docker ps --format '  {{.Names}}\t{{.Status}}' | grep octavios"
     echo ""
     echo -e "${YELLOW}Next steps:${NC}"
     echo "  1. Clear cache: make clear-cache"
     echo "  2. Test the application: https://$PROD_DOMAIN"
     echo "  3. Hard refresh browser: Ctrl+Shift+R (or Cmd+Shift+R)"
-    echo "  4. Monitor logs: ssh $DEPLOY_SERVER 'docker logs -f copilotos-api'"
+    echo "  4. Monitor logs: ssh $DEPLOY_SERVER 'docker logs -f octavios-api'"
     echo ""
 }
 

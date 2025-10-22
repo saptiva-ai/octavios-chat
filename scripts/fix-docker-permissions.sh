@@ -77,7 +77,7 @@ docker-compose down web 2>/dev/null || true
 
 # Remove old images to force rebuild
 echo "   Removing old images..."
-docker rmi copilotos-web 2>/dev/null || true
+docker rmi octavios-web 2>/dev/null || true
 docker rmi infra-web 2>/dev/null || true
 
 # Build with no cache to ensure clean build

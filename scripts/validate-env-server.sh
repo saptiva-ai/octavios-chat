@@ -19,7 +19,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 # Detectar si estamos en el directorio correcto
 if [ ! -d "infra" ] || [ ! -d "envs" ]; then
     echo "❌ Error: Ejecuta este script desde el directorio raíz del proyecto"
-    echo "   cd /home/jf/copilotos-bridge && bash scripts/validate-env-server.sh"
+    echo "   cd /home/jf/octavios-bridge && bash scripts/validate-env-server.sh"
     exit 1
 fi
 
@@ -214,7 +214,7 @@ fi
 echo -e "\n${BLUE}[6/7]${NC} Verificando imágenes Docker..."
 
 # Determinar nombres de contenedores según COMPOSE_PROJECT_NAME
-PROJECT_NAME=$(grep -oP '^COMPOSE_PROJECT_NAME=\K.*' "$ENV_FILE" 2>/dev/null | tr -d '"' || echo "copilotos")
+PROJECT_NAME=$(grep -oP '^COMPOSE_PROJECT_NAME=\K.*' "$ENV_FILE" 2>/dev/null | tr -d '"' || echo "octavios")
 
 check_image() {
     local image_name=$1

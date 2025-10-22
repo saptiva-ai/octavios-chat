@@ -80,9 +80,9 @@ if [ -d "/etc/nginx" ]; then
                 echo ""
                 echo "  📄 $SITE_NAME"
 
-                # Verificar si es para copilotos.saptiva.com
-                if grep -q "copilotos\.saptiva\.com\|server_name.*saptiva" "$site" 2>/dev/null; then
-                    echo -e "    ${GREEN}✓${NC} Configuración para copilotos.saptiva.com"
+                # Verificar si es para octavios.saptiva.com
+                if grep -q "octavios\.saptiva\.com\|server_name.*saptiva" "$site" 2>/dev/null; then
+                    echo -e "    ${GREEN}✓${NC} Configuración para octavios.saptiva.com"
 
                     # Buscar client_max_body_size
                     SITE_LIMIT=$(grep "client_max_body_size" "$site" 2>/dev/null || echo "")
@@ -253,10 +253,10 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${YELLOW}🔧 ACCIONES RECOMENDADAS${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-if [ -f "/etc/nginx/sites-enabled/copilotos" ] || grep -rl "copilotos\.saptiva\.com" /etc/nginx/ 2>/dev/null | grep -q .; then
+if [ -f "/etc/nginx/sites-enabled/octavios" ] || grep -rl "octavios\.saptiva\.com" /etc/nginx/ 2>/dev/null | grep -q .; then
     echo ""
     echo "1. Actualizar nginx del sistema:"
-    echo "   sudo nano /etc/nginx/sites-enabled/copilotos"
+    echo "   sudo nano /etc/nginx/sites-enabled/octavios"
     echo ""
     echo "   Agregar dentro del bloque 'server':"
     echo "   ${CYAN}client_max_body_size 50M;${NC}"
@@ -269,8 +269,8 @@ if [ -f "/etc/nginx/sites-enabled/copilotos" ] || grep -rl "copilotos\.saptiva\.
     echo ""
 elif [ -d "/etc/nginx" ]; then
     echo ""
-    echo "1. Buscar configuración de copilotos.saptiva.com:"
-    echo "   grep -rl 'copilotos' /etc/nginx/"
+    echo "1. Buscar configuración de octavios.saptiva.com:"
+    echo "   grep -rl 'octavios' /etc/nginx/"
     echo ""
     echo "2. Editar el archivo encontrado y agregar:"
     echo "   ${CYAN}client_max_body_size 50M;${NC}"

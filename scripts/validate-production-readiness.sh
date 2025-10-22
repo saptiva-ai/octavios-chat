@@ -171,7 +171,7 @@ check_services_running() {
     section_header "5. Services Status"
 
     local services=("mongodb" "redis" "api")
-    local project_name="${COMPOSE_PROJECT_NAME:-copilotos}"
+    local project_name="${COMPOSE_PROJECT_NAME:-octavios}"
 
     for service in "${services[@]}"; do
         local container_name="${project_name}-${service}"
@@ -196,8 +196,8 @@ check_services_health() {
     fi
 
     # Check MongoDB
-    if docker ps --format '{{.Names}}' | grep -q "copilotos-mongodb"; then
-        if docker exec copilotos-mongodb mongosh --eval "db.adminCommand('ping')" > /dev/null 2>&1; then
+    if docker ps --format '{{.Names}}' | grep -q "octavios-mongodb"; then
+        if docker exec octavios-mongodb mongosh --eval "db.adminCommand('ping')" > /dev/null 2>&1; then
             log_success "MongoDB is responding"
         else
             log_warning "MongoDB is not responding"
@@ -205,8 +205,8 @@ check_services_health() {
     fi
 
     # Check Redis
-    if docker ps --format '{{.Names}}' | grep -q "copilotos-redis"; then
-        if docker exec copilotos-redis redis-cli ping > /dev/null 2>&1; then
+    if docker ps --format '{{.Names}}' | grep -q "octavios-redis"; then
+        if docker exec octavios-redis redis-cli ping > /dev/null 2>&1; then
             log_success "Redis is responding"
         else
             log_warning "Redis is not responding"
@@ -223,9 +223,9 @@ check_credential_sync() {
     fi
 
     # Check MongoDB credentials
-    if docker ps --format '{{.Names}}' | grep -q "copilotos-mongodb"; then
+    if docker ps --format '{{.Names}}' | grep -q "octavios-mongodb"; then
         local env_mongo_pass=$(grep "^MONGODB_PASSWORD=" envs/.env | cut -d= -f2)
-        local container_mongo_pass=$(docker inspect copilotos-mongodb --format='{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep "MONGO_INITDB_ROOT_PASSWORD=" | cut -d= -f2)
+        local container_mongo_pass=$(docker inspect octavios-mongodb --format='{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep "MONGO_INITDB_ROOT_PASSWORD=" | cut -d= -f2)
 
         if [ -n "$env_mongo_pass" ] && [ -n "$container_mongo_pass" ]; then
             if [ "$env_mongo_pass" == "$container_mongo_pass" ]; then
@@ -242,11 +242,11 @@ check_credential_sync() {
     fi
 
     # Check Redis credentials
-    if docker ps --format '{{.Names}}' | grep -q "copilotos-redis"; then
+    if docker ps --format '{{.Names}}' | grep -q "octavios-redis"; then
         local env_redis_pass=$(grep "^REDIS_PASSWORD=" envs/.env | cut -d= -f2)
 
         if [ -n "$env_redis_pass" ]; then
-            if docker exec copilotos-redis redis-cli -a "$env_redis_pass" PING 2>/dev/null | grep -q "PONG"; then
+            if docker exec octavios-redis redis-cli -a "$env_redis_pass" PING 2>/dev/null | grep -q "PONG"; then
                 log_success "Redis password is synchronized between .env and container"
             else
                 log_error "Redis password MISMATCH between .env and container!"
@@ -280,8 +280,8 @@ check_backup_capability() {
     fi
 
     # Check if mongodump is available in MongoDB container
-    if docker ps --format '{{.Names}}' | grep -q "copilotos-mongodb"; then
-        if docker exec copilotos-mongodb which mongodump > /dev/null 2>&1; then
+    if docker ps --format '{{.Names}}' | grep -q "octavios-mongodb"; then
+        if docker exec octavios-mongodb which mongodump > /dev/null 2>&1; then
             log_success "mongodump tool is available for backups"
         else
             log_error "mongodump tool is NOT available"

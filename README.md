@@ -1,4 +1,4 @@
-# Saptiva CopilotOS
+# Saptiva OctaviOS Chat
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Docker](https://img.shields.io/badge/Docker-20.10+-blue.svg)](https://www.docker.com/)
@@ -6,11 +6,11 @@
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
 [![Security](https://img.shields.io/badge/Security-Enterprise-red.svg)](#security-architecture)
 
-Copiloto provides a production-ready conversational interface for SAPTIVA language models with integrated deep-research orchestration and enterprise-grade security.
+OctaviOS Chat provides a production-ready conversational interface for SAPTIVA language models with integrated deep-research orchestration and enterprise-grade security.
 
 ## Overview
 
-Copilotos Bridge delivers a ChatGPT-style experience tailored to SAPTIVA deployments while preserving the observability, governance, and hardening requirements of enterprise environments.
+OctaviOS Bridge delivers a ChatGPT-style experience tailored to SAPTIVA deployments while preserving the observability, governance, and hardening requirements of enterprise environments.
 
 ### Key Features
 - Chat workspace with model selector, conversation history, streaming responses, and keyboard shortcuts.
@@ -45,7 +45,7 @@ make create-demo-user  # Creates test user (demo/Demo1234)
 ```
 
 **During `make setup` you will:**
-- Confirm the project display name used across the CLI (defaults to `CopilotOS`).
+- Confirm the project display name used across the CLI (defaults to `OctaviOS Chat`).
 - Provide your SAPTIVA API key (required for the platform to respond).
 - Generate secure secrets for MongoDB, Redis, and JWT authentication.
 
@@ -98,7 +98,7 @@ Then visit: http://localhost:3000
 ## Project Structure
 
 ```
-copilotos-bridge/
+octavios-bridge/
 ├── apps/
 │   ├── web/                # Next.js frontend application
 │   │   ├── deployment/     # Standalone Docker build assets
@@ -210,7 +210,7 @@ flowchart TB
   subgraph Data["Persistence"]
     Mongo[("MongoDB\nBeanie ODM\nDocuments + Chat")]
     Redis[("Redis\nCaching · Rate limits\nDoc text cache")]
-    TempFS["Filesystem\n/tmp/copilotos_documents/\n(Temp PDFs)"]
+    TempFS["Filesystem\n/tmp/octavios_documents/\n(Temp PDFs)"]
   end
 
   subgraph External["External AI & Search"]
@@ -500,7 +500,7 @@ sequenceDiagram
     User->>Web: Attach PDF (optional)
     Web->>Upload: Validate file (type, size)
     Upload->>DocAPI: POST /documents/upload
-    DocAPI->>TempFS: Save to /tmp/copilotos_documents/
+    DocAPI->>TempFS: Save to /tmp/octavios_documents/
     DocAPI->>DocAPI: Extract text with pypdf
     DocAPI->>Cache: SETEX doc:text:{id} 3600 {text}
     DocAPI->>DB: Save Document metadata
@@ -547,8 +547,8 @@ sequenceDiagram
 ### Environment Setup
 
 ```bash
-git clone https://github.com/saptiva-ai/copilotos-bridge
-cd copilotos-bridge
+git clone https://github.com/saptiva-ai/octavios-bridge
+cd octavios-bridge
 make setup                # Creates env files, installs dependencies, prepares .venv
 make dev                  # Starts web, API, MongoDB, and Redis containers
 make create-demo-user     # Seeds demo credentials for local testing
@@ -685,8 +685,8 @@ docker ps -a
 
 # View service logs
 make logs
-docker logs copilotos-api
-docker logs copilotos-web
+docker logs octavios-api
+docker logs octavios-web
 
 # Restart services
 make restart
@@ -732,30 +732,30 @@ grep JWT_SECRET_KEY envs/.env.local
 #### MongoDB Connection Problems
 ```bash
 # Check MongoDB service
-docker logs copilotos-mongodb
+docker logs octavios-mongodb
 make shell-db
 
 # Test connectivity
-docker exec copilotos-mongodb mongosh \
-  "mongodb://copilotos_user:password@localhost:27017/copilotos?authSource=admin"
+docker exec octavios-mongodb mongosh \
+  "mongodb://octavios_user:password@localhost:27017/octavios?authSource=admin"
 
 # Reset database
-docker volume rm copilotos_mongodb_data
+docker volume rm octavios_mongodb_data
 make dev
 ```
 
 #### Redis Connection Issues
 ```bash
 # Check Redis service
-docker logs copilotos-redis
+docker logs octavios-redis
 make shell-redis
 
 # Test connectivity
-docker exec copilotos-redis redis-cli \
+docker exec octavios-redis redis-cli \
   -a "your-redis-password" ping
 
 # Clear Redis cache
-docker exec copilotos-redis redis-cli \
+docker exec octavios-redis redis-cli \
   -a "your-redis-password" FLUSHALL
 ```
 
@@ -767,14 +767,14 @@ docker exec copilotos-redis redis-cli \
 curl http://localhost:8001/api/health
 
 # Check API logs
-docker logs copilotos-api
+docker logs octavios-api
 
 # Test internal connectivity
-docker exec copilotos-web curl http://api:8001/api/health
+docker exec octavios-web curl http://api:8001/api/health
 
 # Verify port bindings
-docker port copilotos-api
-docker port copilotos-web
+docker port octavios-api
+docker port octavios-web
 ```
 
 ## Frontend Build Issues
@@ -842,13 +842,13 @@ print(response.json()["content"])
 #### Verify Saptiva API Configuration
 ```bash
 # Check API key is loaded in container
-docker exec copilotos-api printenv | grep SAPTIVA_API_KEY
+docker exec octavios-api printenv | grep SAPTIVA_API_KEY
 
 # Test models endpoint (public, no auth required)
 curl http://localhost:8001/api/models
 
 # Check API logs for Saptiva errors
-docker logs copilotos-api | grep -i saptiva
+docker logs octavios-api | grep -i saptiva
 ```
 
 #### Common Saptiva API Issues
@@ -930,7 +930,7 @@ docker compose -f infra/docker-compose.yml --env-file envs/.env up -d api
 make debug-file-sync
 
 # Check if env vars loaded
-docker exec copilotos-api env | grep YOUR_VAR_NAME
+docker exec octavios-api env | grep YOUR_VAR_NAME
 ```
 
 ## System Prompts Architecture
@@ -1270,7 +1270,7 @@ sequenceDiagram
     F->>F: Validates type & size (max 30MB)
     F->>API: POST /api/documents
 
-    API->>TempFS: Save to /tmp/copilotos_documents/
+    API->>TempFS: Save to /tmp/octavios_documents/
     API->>DS: process_document(file, storage_key)
 
     Note over DS,pypdf: Strategy 1: Try pypdf (free, local)
@@ -1349,7 +1349,7 @@ sequenceDiagram
     F->>F: Validates: maxSize=30MB, type
     F->>API: POST /api/documents
 
-    API->>TempFS: Save to /tmp/copilotos_documents/
+    API->>TempFS: Save to /tmp/octavios_documents/
     API->>DS: process_document(image_file, storage_key)
 
     DS->>DS: Detect mimetype: image/*
@@ -1447,7 +1447,7 @@ flowchart LR
   subgraph Prod["Production"]
     Nginx["Nginx reverse proxy\nTLS + routing"]
     WebProd["Standalone web image\n(Dockerfile.local)"]
-    ApiProd["copilotos-api service\n(compose profile)"]
+    ApiProd["octavios-api service\n(compose profile)"]
     MongoProd[("Managed MongoDB / Atlas")]
     RedisProd[("Managed Redis")]
   end
@@ -1766,7 +1766,7 @@ docker-compose up -d mongodb redis api
 
 ```bash
 # Start web service
-cd /opt/copilotos-bridge/infra
+cd /opt/octavios-bridge/infra
 docker-compose --profile production up -d web
 
 # Start nginx reverse proxy
@@ -1783,7 +1783,7 @@ docker-compose ps
 sudo apt install nginx certbot python3-certbot-nginx
 
 # Create Nginx configuration
-sudo tee /etc/nginx/sites-available/copilotos > /dev/null << 'EOF'
+sudo tee /etc/nginx/sites-available/octavios > /dev/null << 'EOF'
 server {
     server_name your-domain.com;
 
@@ -1852,10 +1852,10 @@ server {
 EOF
 
 # Replace your-domain.com with actual domain
-sudo sed -i 's/your-domain.com/actual-domain.com/g' /etc/nginx/sites-available/copilotos
+sudo sed -i 's/your-domain.com/actual-domain.com/g' /etc/nginx/sites-available/octavios
 
 # Enable site
-sudo ln -s /etc/nginx/sites-available/copilotos /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/octavios /etc/nginx/sites-enabled/
 sudo nginx -t
 sudo systemctl reload nginx
 
@@ -1886,7 +1886,7 @@ curl -vI https://your-domain.com 2>&1 | grep -A 2 "SSL certificate"
 
 ```bash
 # 1. Prepare update
-cd /opt/copilotos-bridge
+cd /opt/octavios-bridge
 git pull origin main
 
 # 2. Test configuration
@@ -1894,7 +1894,7 @@ git pull origin main
 
 # 3. Build new images with versioning
 docker-compose --profile production build --no-cache
-docker tag copilotos-web:latest copilotos-web:backup
+docker tag octavios-web:latest octavios-web:backup
 
 # 4. Rolling update
 docker-compose --profile production up -d --no-deps web
@@ -1905,7 +1905,7 @@ curl -f https://your-domain.com/api/health
 
 # 6. Rollback if needed (only if health check fails)
 # docker-compose --profile production stop web
-# docker tag copilotos-web:backup copilotos-web:latest
+# docker tag octavios-web:backup octavios-web:latest
 # docker-compose --profile production up -d web
 ```
 
@@ -1919,8 +1919,8 @@ docker-compose logs -f --tail=100
 docker stats --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}\t{{.BlockIO}}"
 
 # Database health
-docker exec copilotos-mongodb mongosh --eval "db.runCommand('ping')"
-docker exec copilotos-redis redis-cli -a "$REDIS_PASSWORD" ping
+docker exec octavios-mongodb mongosh --eval "db.runCommand('ping')"
+docker exec octavios-redis redis-cli -a "$REDIS_PASSWORD" ping
 
 # Storage monitoring
 df -h
@@ -1941,12 +1941,12 @@ docker-compose ps
 docker-compose logs api web nginx
 
 # Network connectivity
-docker exec copilotos-web curl -f http://api:8001/api/health
-docker exec copilotos-api curl -f http://mongodb:27017
+docker exec octavios-web curl -f http://api:8001/api/health
+docker exec octavios-api curl -f http://mongodb:27017
 
 # Database debugging
-docker exec -it copilotos-mongodb mongosh
-docker exec -it copilotos-redis redis-cli -a "$REDIS_PASSWORD"
+docker exec -it octavios-mongodb mongosh
+docker exec -it octavios-redis redis-cli -a "$REDIS_PASSWORD"
 
 # Performance monitoring
 htop

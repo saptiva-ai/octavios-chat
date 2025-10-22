@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-# Ejecuta los tests de documentos dentro del contenedor copilotos-api.
+# Ejecuta los tests de documentos dentro del contenedor octavios-api.
 
 set -euo pipefail
 IFS=$'\n\t'
 
-CONTAINER_NAME="copilotos-api"
+CONTAINER_NAME="octavios-api"
 
 echo "🧪 Ejecutando tests E2E de documentos en contenedor..."
 echo ""

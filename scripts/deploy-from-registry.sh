@@ -3,13 +3,13 @@
 # Usage: ./scripts/deploy-from-registry.sh ▸
 #
 # Environment variables:
-#   REGISTRY_URL     - Docker registry URL (default: ghcr.io/jazielflo/copilotos-bridge)
+#   REGISTRY_URL     - Docker registry URL (default: ghcr.io/jazielflo/octavios-bridge)
 #   SKIP_HEALTH      - Skip health check (default: false)
 
 set -e
 
 # Configuration
-REGISTRY_URL="${REGISTRY_URL:-ghcr.io/jazielflo/copilotos-bridge}"
+REGISTRY_URL="${REGISTRY_URL:-ghcr.io/jazielflo/octavios-bridge}"
 VERSION="${1:-latest}"
 SKIP_HEALTH="${SKIP_HEALTH:-false}"
 
@@ -30,8 +30,8 @@ echo ""
 
 # Step 2: Tag for local use
 echo "▸  [2/5] Tagging images for local deployment..."
-docker tag "$REGISTRY_URL/api:$VERSION" copilotos-api:latest
-docker tag "$REGISTRY_URL/web:$VERSION" copilotos-web:latest
+docker tag "$REGISTRY_URL/api:$VERSION" octavios-api:latest
+docker tag "$REGISTRY_URL/web:$VERSION" octavios-web:latest
 echo "✔ Images tagged"
 echo ""
 
@@ -81,10 +81,10 @@ echo "║  ✔ Deployment Complete!                                      ║"
 echo "╚═══════════════════════════════════════════════════════════════╝"
 echo ""
 echo "▸ Container Status:"
-docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep copilotos || docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep octavios || docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 echo ""
 echo "▸ Quick Commands:"
-echo "   View logs:    docker logs -f copilotos-api"
+echo "   View logs:    docker logs -f octavios-api"
 echo "   Health check: curl http://localhost:8001/api/health | jq '.'"
 echo "   Stop:         cd infra && docker compose down"
 echo "   Rollback:     ./scripts/deploy-from-registry.sh <previous-version>"

@@ -19,7 +19,7 @@ BLUE="▸ "
 NC=""
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEPLOY_HOME="$HOME/.copilotos-deploy"
+DEPLOY_HOME="$HOME/.octavios-deploy"
 
 # Load environment
 if [ -f "$PROJECT_ROOT/envs/.env.prod" ]; then
@@ -27,7 +27,7 @@ if [ -f "$PROJECT_ROOT/envs/.env.prod" ]; then
 fi
 
 DEPLOY_SERVER="${DEPLOY_SERVER:-${PROD_SERVER_HOST:-}}"
-DEPLOY_PATH="${DEPLOY_PATH:-${PROD_DEPLOY_PATH:-/opt/copilotos-bridge}}"
+DEPLOY_PATH="${DEPLOY_PATH:-${PROD_DEPLOY_PATH:-/opt/octavios-bridge}}"
 
 log_info() { echo -e "${BLUE}ℹ${NC} $1"; }
 log_success() { echo -e "${GREEN}✔${NC} $1"; }
@@ -113,7 +113,7 @@ execute_rollback() {
 
     # Check if backup exists
     local backup_api=$(ssh "$DEPLOY_SERVER" \
-        "docker images -q copilotos-api:backup-$target_version" || echo "")
+        "docker images -q octavios-api:backup-$target_version" || echo "")
 
     if [ -z "$backup_api" ]; then
         log_error "Backup not found for version: $target_version"
@@ -133,8 +133,8 @@ execute_rollback() {
     # Restore backup
     log_info "Restoring backup images..."
     ssh "$DEPLOY_SERVER" "
-        docker tag copilotos-api:backup-$target_version copilotos-api:latest
-        docker tag copilotos-web:backup-$target_version copilotos-web:latest
+        docker tag octavios-api:backup-$target_version octavios-api:latest
+        docker tag octavios-web:backup-$target_version octavios-web:latest
     " || {
         log_error "Failed to restore backup images"
         exit 1

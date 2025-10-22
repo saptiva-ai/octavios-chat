@@ -74,7 +74,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(copilotos_requests_total[1m])",
+          "expr": "rate(octavios_requests_total[1m])",
           "refId": "A"
         }
       ],
@@ -141,7 +141,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, rate(copilotos_request_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.95, rate(octavios_request_duration_seconds_bucket[5m]))",
           "refId": "A"
         }
       ],
@@ -208,7 +208,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(copilotos_requests_total{status=~\"5..\"}[5m]) / rate(copilotos_requests_total[5m])",
+          "expr": "rate(octavios_requests_total{status=~\"5..\"}[5m]) / rate(octavios_requests_total[5m])",
           "refId": "A"
         }
       ],
@@ -266,7 +266,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(copilotos_requests_total[5m]))",
+          "expr": "sum(rate(octavios_requests_total[5m]))",
           "refId": "A"
         }
       ],
@@ -353,7 +353,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.50, rate(copilotos_request_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.50, rate(octavios_request_duration_seconds_bucket[5m]))",
           "legendFormat": "P50",
           "refId": "A"
         },
@@ -362,7 +362,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, rate(copilotos_request_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.95, rate(octavios_request_duration_seconds_bucket[5m]))",
           "legendFormat": "P95",
           "refId": "B"
         },
@@ -371,7 +371,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, rate(copilotos_request_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.99, rate(octavios_request_duration_seconds_bucket[5m]))",
           "legendFormat": "P99",
           "refId": "C"
         }
@@ -459,7 +459,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(copilotos_requests_total{status=~\"2..\"}[1m])",
+          "expr": "rate(octavios_requests_total{status=~\"2..\"}[1m])",
           "legendFormat": "2xx",
           "refId": "A"
         },
@@ -468,7 +468,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(copilotos_requests_total{status=~\"4..\"}[1m])",
+          "expr": "rate(octavios_requests_total{status=~\"4..\"}[1m])",
           "legendFormat": "4xx",
           "refId": "B"
         },
@@ -477,7 +477,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(copilotos_requests_total{status=~\"5..\"}[1m])",
+          "expr": "rate(octavios_requests_total{status=~\"5..\"}[1m])",
           "legendFormat": "5xx",
           "refId": "C"
         }
@@ -489,7 +489,7 @@
   "refresh": "10s",
   "schemaVersion": 38,
   "style": "dark",
-  "tags": ["copilotos", "api", "fastapi"],
+  "tags": ["octavios", "api", "fastapi"],
   "templating": {
     "list": []
   },
@@ -500,7 +500,7 @@
   "timepicker": {},
   "timezone": "",
   "title": "Copilotos Bridge API",
-  "uid": "copilotos-api",
+  "uid": "octavios-api",
   "version": 0,
   "weekStart": ""
 }

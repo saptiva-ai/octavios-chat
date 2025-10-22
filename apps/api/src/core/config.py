@@ -284,7 +284,7 @@ class Settings(BaseSettings):
     log_format: str = Field(default="json", description="Log format")
     
     # OpenTelemetry
-    otel_service_name: str = Field(default="copilotos-api", description="OTel service name")
+    otel_service_name: str = Field(default="octavios-api", description="OTel service name")
     otel_exporter_otlp_endpoint: str = Field(
         default="", description="OTel OTLP endpoint"
     )
@@ -334,7 +334,7 @@ class Settings(BaseSettings):
         description="Allowed file types"
     )
     files_root: str = Field(
-        default="/tmp/copilotos_documents",
+        default="/tmp/octavios_documents",
         description="Root directory for file storage (configurable per environment)",
         alias="FILES_ROOT"
     )

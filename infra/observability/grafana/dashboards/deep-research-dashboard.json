@@ -111,7 +111,7 @@
       },
       "targets": [
         {
-          "expr": "rate(copilotos_research_requests_total[5m])",
+          "expr": "rate(octavios_research_requests_total[5m])",
           "interval": "",
           "legendFormat": "Research Requests - {{intent_type}}",
           "refId": "A"
@@ -176,7 +176,7 @@
       "pluginVersion": "9.0.0",
       "targets": [
         {
-          "expr": "copilotos_research_quality_score",
+          "expr": "octavios_research_quality_score",
           "interval": "",
           "legendFormat": "Quality Score - {{research_type}}",
           "refId": "A"
@@ -246,7 +246,7 @@
       },
       "targets": [
         {
-          "expr": "copilotos_intent_classification_total",
+          "expr": "octavios_intent_classification_total",
           "interval": "",
           "legendFormat": "{{intent_type}} - {{confidence_level}}",
           "refId": "A"
@@ -331,13 +331,13 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, rate(copilotos_research_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.95, rate(octavios_research_duration_seconds_bucket[5m]))",
           "interval": "",
           "legendFormat": "95th percentile - {{research_phase}}",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.50, rate(copilotos_research_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.50, rate(octavios_research_duration_seconds_bucket[5m]))",
           "interval": "",
           "legendFormat": "50th percentile - {{research_phase}}",
           "refId": "B"
@@ -435,7 +435,7 @@
       },
       "targets": [
         {
-          "expr": "rate(copilotos_requests_total[5m])",
+          "expr": "rate(octavios_requests_total[5m])",
           "interval": "",
           "legendFormat": "{{method}} {{endpoint}} - {{status_code}}",
           "refId": "A"
@@ -500,13 +500,13 @@
       "pluginVersion": "9.0.0",
       "targets": [
         {
-          "expr": "copilotos_active_connections",
+          "expr": "octavios_active_connections",
           "interval": "",
           "legendFormat": "Active Connections",
           "refId": "A"
         },
         {
-          "expr": "copilotos_active_user_sessions",
+          "expr": "octavios_active_user_sessions",
           "interval": "",
           "legendFormat": "Active Sessions",
           "refId": "B"
@@ -591,7 +591,7 @@
       },
       "targets": [
         {
-          "expr": "rate(copilotos_errors_total[5m])",
+          "expr": "rate(octavios_errors_total[5m])",
           "interval": "",
           "legendFormat": "{{error_type}} - {{endpoint}}",
           "refId": "A"
@@ -689,7 +689,7 @@
       },
       "targets": [
         {
-          "expr": "rate(copilotos_external_api_calls_total[5m])",
+          "expr": "rate(octavios_external_api_calls_total[5m])",
           "interval": "",
           "legendFormat": "{{service}} {{endpoint}} - {{status}}",
           "refId": "A"
@@ -774,7 +774,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, rate(copilotos_external_api_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.95, rate(octavios_external_api_duration_seconds_bucket[5m]))",
           "interval": "",
           "legendFormat": "95th percentile - {{service}} {{endpoint}}",
           "refId": "A"
@@ -788,7 +788,7 @@
   "schemaVersion": 36,
   "style": "dark",
   "tags": [
-    "copilotos",
+    "octavios",
     "deep-research",
     "observability"
   ],
@@ -802,7 +802,7 @@
   "timepicker": {},
   "timezone": "",
   "title": "Copilotos Bridge - Deep Research Dashboard",
-  "uid": "copilotos-deep-research",
+  "uid": "octavios-deep-research",
   "version": 1,
   "weekStart": ""
 }
