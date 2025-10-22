@@ -9,15 +9,21 @@
 ## ✅ Phase 1: Local Preparation (COMPLETED ✓)
 
 - [x] Migración local completada y testeada
-- [x] Contenedores octavios-* funcionando localmente  
+- [x] Contenedores octavios-* funcionando localmente
 - [x] Sistema de backups automáticos implementado
 - [x] Scripts validados y documentados
 - [x] Workflow de GitHub Actions actualizado
 - [x] Tests de backups pasando (scripts/test-backup-system.sh)
 - [x] Archivos `.env.example` actualizados
 - [x] CLAUDE.md documentado
+- [x] Auto-deploy deshabilitado (manual workflow_dispatch)
+- [x] UI branding actualizado (CopilotOS → OctaviOS Chat)
 
-**Commit**: 9ff759d (feat: add automatic data backups)  
+**Commits**:
+- 9ff759d (feat: add automatic data backups)
+- 456a83f (fix(ci-cd): change deployment to manual-only trigger)
+- 8c4031a (chore(web): update branding from CopilotOS to OctaviOS Chat)
+
 **Branch**: develop
 
 ---
@@ -72,8 +78,14 @@ cd ~/Proyects/copilotos-bridge
 # Esperar a que GitHub Actions termine
 - [ ] Ir a github.com/tu-repo/actions
 - [ ] Verificar que workflow pasó (✓ green check)
-- [ ] Revisar logs de deployment si se disparó
+- [ ] Confirmar que tests pasaron (backend, frontend, integration)
 ```
+
+**⚠️ IMPORTANTE - Auto-Deploy Deshabilitado**:
+- ✅ El job `deploy_tar` ahora requiere trigger MANUAL (`workflow_dispatch`)
+- ✅ Push a main ejecutará SOLO tests, NO deployment
+- ✅ Deployment se ejecutará manualmente después de backups verificados
+- Commit: 456a83f (fix(ci-cd): change deployment to manual-only trigger)
 
 ---
 
