@@ -227,6 +227,10 @@ jobs:
 
       - name: Start services
         run: |
+          # Create external volumes required by docker-compose.yml
+          docker volume create copilotos-prod_mongodb_data
+          docker volume create copilotos-prod_mongodb_config
+          docker volume create copilotos-prod_redis_data
           docker compose -f infra/docker-compose.yml up -d --wait
           sleep 10
 
