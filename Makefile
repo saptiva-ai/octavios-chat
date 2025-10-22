@@ -244,6 +244,7 @@ help:
 	@echo "  $(YELLOW)make deploy-fast$(NC)          Tar deployment sin rebuild (usa imagenes existentes)"
 	@echo "  $(YELLOW)make deploy-registry$(NC)      Despliegue desde el registry configurado"
 	@echo "  $(YELLOW)make deploy-prod$(NC)          Build + push al registry y despliegue remoto"
+	@echo "  $(GREEN)make deploy-safe$(NC)          🔒 Deployment con backups automáticos (RECOMENDADO)"
 	@echo "  $(YELLOW)make deploy-status$(NC)        Revisar estado del servidor"
 	@echo ""
 	@echo "$(GREEN) ▸ Rollback & Recovery:$(NC)"
@@ -1779,6 +1780,40 @@ deploy: deploy-tar
 deploy-clean: deploy-tar
 deploy-quick: deploy-fast
 deploy-tar-fast: deploy-fast
+
+## Safe deployment with comprehensive pre-deploy backups
+deploy-safe:
+	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(GREEN)🔒 Safe Deployment with Automatic Backups$(NC)"
+	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@echo "$(BLUE)This deployment includes:$(NC)"
+	@echo "  ✓ Docker image backups (code rollback)"
+	@echo "  ✓ MongoDB backup (mongodump)"
+	@echo "  ✓ Redis volume backup (tar)"
+	@echo "  ✓ Backup integrity verification"
+	@echo "  ✓ Automatic rollback on failure"
+	@echo ""
+	@if [ -z "$(PROD_SERVER_HOST)" ] || [ "$(PROD_SERVER_HOST)" = "your-ssh-user@your-server-ip-here" ]; then \
+		echo "$(RED)▲ ERROR: Production server not configured$(NC)"; \
+		echo ""; \
+		echo "Configure in envs/.env.prod or run:"; \
+		echo "  $(GREEN)make setup-interactive-prod$(NC)"; \
+		echo ""; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)▸ Executing safe deployment on: $(PROD_SERVER_HOST)$(NC)"
+	@echo ""
+	@ssh $(PROD_SERVER_HOST) 'cd $(PROD_DEPLOY_PATH) && ./scripts/deploy-on-server.sh'
+	@echo ""
+	@echo "$(GREEN)✅ Safe deployment complete!$(NC)"
+	@echo ""
+	@echo "$(BLUE)Backups location on server:$(NC)"
+	@echo "  ~/backups/pre-deploy-YYYYMMDD-HHMMSS/"
+	@echo ""
+	@echo "$(BLUE)To rollback if needed:$(NC)"
+	@echo "  ssh $(PROD_SERVER_HOST) 'cd $(PROD_DEPLOY_PATH) && cat /tmp/last_data_backup'"
+	@echo ""
 
 ## Rollback to previous version (automatic)
 rollback:

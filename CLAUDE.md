@@ -572,12 +572,39 @@ ARG NEXT_PUBLIC_MAX_FILE_SIZE_MB=50
 3. **Backup production database** (if updating existing deployment):
    ```bash
    make backup-mongodb-prod
+   make backup-volumes
    ```
 
-### Deployment Process (Recommended: Tar Method)
+### Deployment Process
+
+#### Option 1: Safe Deployment (RECOMMENDED - with automatic backups)
 
 ```bash
-# 1. Build and deploy in one command
+# Deploy with comprehensive automatic backups
+make deploy-safe
+
+# This command:
+# - Creates automatic backups of Docker images (code)
+# - Creates automatic backups of MongoDB data (mongodump)
+# - Creates automatic backups of Redis volumes (tar)
+# - Verifies backup integrity before proceeding
+# - Deploys containers on production server
+# - Performs health checks
+# - Automatic rollback on failure
+
+# Backup location on server: ~/backups/pre-deploy-YYYYMMDD-HHMMSS/
+```
+
+**Key benefits**:
+- ✅ Impossible to forget backups (automatic)
+- ✅ Aborts deployment if backup fails (data safety)
+- ✅ Complete rollback capability (code + data)
+- ✅ Backup integrity verification
+
+#### Option 2: Tar Deployment (without automatic data backups)
+
+```bash
+# Build and deploy in one command
 make deploy-tar
 
 # Behind the scenes:
@@ -587,6 +614,9 @@ make deploy-tar
 # - Loads images on server
 # - Recreates containers with new images
 # - Verifies health checks
+
+# Note: Only backs up Docker images, NOT data volumes
+# For data safety, use make deploy-safe instead
 
 # 2. Verify deployment
 make ssh-prod
@@ -608,6 +638,64 @@ curl https://your-domain.com/api/health
 
 # Test frontend
 curl https://your-domain.com
+```
+
+### Automatic Backup System
+
+**Architecture**: All production deployments now include automatic pre-deploy backups by default.
+
+**What gets backed up**:
+1. **Docker Images** (code) - `docker tag` snapshot for instant rollback
+2. **MongoDB Data** - `mongodump` with BSON export + compression
+3. **Redis Volumes** - `tar` snapshot of data directory
+4. **Backup metadata** - Saved to `/tmp/last_data_backup` for recovery
+
+**Backup triggers**:
+```bash
+# Automatic (via make deploy-safe or scripts/deploy-on-server.sh)
+make deploy-safe  # Triggers backups automatically
+
+# Manual (for extra safety before migration)
+make backup-mongodb-prod
+make backup-volumes
+```
+
+**Backup location**: `~/backups/pre-deploy-YYYYMMDD-HHMMSS/` on production server
+
+**Retention policy**:
+- Pre-deploy backups: 7 days (configurable via `--retention-days`)
+- Minimum 3 most recent backups always kept
+- Automatic cleanup on next deployment
+
+**Integrity verification**:
+- Minimum size check (100KB threshold)
+- File existence validation
+- Deployment aborts if backup fails (safety first)
+
+**Restore procedure**:
+```bash
+# On production server
+ssh jf@copilot
+
+# Find latest backup
+cat /tmp/last_data_backup
+# Output: /home/jf/backups/pre-deploy-20251021-143022
+
+# Restore MongoDB
+cd ~/copilotos-bridge
+./scripts/restore-mongodb.sh --backup-dir <backup-path>
+
+# Restore Docker images (automatic via rollback)
+./scripts/deploy-on-server.sh  # Failed deploy triggers auto-rollback
+```
+
+**Skip backups** (for testing or when you know data won't change):
+```bash
+# On production server directly
+./scripts/deploy-on-server.sh --skip-backup
+
+# Warning: Use --skip-backup ONLY when absolutely necessary
+# You lose data recovery capability!
 ```
 
 ## Observability
