@@ -1,4 +1,4 @@
-# Copilotos Bridge Makefile
+# OctaviOS Bridge Makefile
 # Development-optimized workflow with auto .venv management
 .PHONY: help configure sync-env package dev test test-all clean build lint security security-audit install-hooks shell-api shell-web \
         push-registry push-registry-fast deploy-registry deploy-prod deploy deploy-clean deploy-quick deploy-tar \
@@ -19,7 +19,7 @@
 
 # Project defaults
 DEFAULT_PROJECT_DISPLAY_NAME := CopilotOS
-DEFAULT_COMPOSE_PROJECT_NAME := copilotos
+DEFAULT_COMPOSE_PROJECT_NAME := octavios
 
 # Environment
 DEV_ENV_FILE := envs/.env
@@ -38,7 +38,7 @@ ifneq (,$(wildcard $(DEV_ENV_FILE)))
 endif
 
 # Production env variables ONLY for deployment targets (not dev commands)
-# This prevents PROJECT_NAME conflicts between dev (copilotos) and prod (copilotos-prod)
+# This prevents PROJECT_NAME conflicts between dev (octavios) and prod (octavios-prod)
 ifeq ($(filter deploy% push% backup%-prod restore%-prod,$(MAKECMDGOALS)),)
 	# NOT a deployment command, skip .env.prod
 else
@@ -74,8 +74,8 @@ COMPOSE_FILE_DEV := infra/docker-compose.dev.yml
 PROD_SERVER_IP ?= your-server-ip-here
 PROD_SERVER_USER ?= your-ssh-user
 PROD_SERVER_HOST ?= $(PROD_SERVER_USER)@$(PROD_SERVER_IP)
-PROD_DEPLOY_PATH ?= /opt/copilotos-bridge
-PROD_BACKUP_DIR ?= /opt/backups/copilotos-production
+PROD_DEPLOY_PATH ?= /opt/octavios-bridge
+PROD_BACKUP_DIR ?= /opt/backups/octavios-production
 
 # Legacy variable support (backward compatibility)
 DEPLOY_SERVER ?= $(PROD_SERVER_HOST)
@@ -545,16 +545,22 @@ verify-deps-fix:
 ## Stop all services (dev compose)
 stop:
 	@echo "$(YELLOW) Stopping services...$(NC)"
-	@$(DOCKER_COMPOSE_DEV) down || true
+	@$(DOCKER_COMPOSE_DEV) down 2>&1 || true
 	@# Fallback: stop any container with 'copilotos' prefix if compose down failed
-	@RUNNING=$$(docker ps --filter "name=copilotos" --format "{{.Names}}" | wc -l); \
+	@RUNNING=$$(docker ps --filter "name=copilotos" --format "{{.Names}}" 2>/dev/null | wc -l); \
 	if [ "$$RUNNING" -gt 0 ]; then \
 		echo "$(YELLOW)  Found $$RUNNING running containers, stopping them directly...$(NC)"; \
-		docker ps --filter "name=copilotos" --format "{{.Names}}" | xargs -r docker stop; \
-		docker ps -a --filter "name=copilotos" --format "{{.Names}}" | xargs -r docker rm; \
-		echo "$(GREEN)✓ Containers stopped and removed$(NC)"; \
+		docker ps --filter "name=copilotos" --format "{{.Names}}" | xargs -r docker stop 2>&1; \
+		docker ps -a --filter "name=copilotos" --format "{{.Names}}" | xargs -r docker rm 2>&1; \
 	fi
-	@echo "$(GREEN) Services stopped$(NC)"
+	@# Verify all containers are stopped
+	@REMAINING=$$(docker ps -a --filter "name=copilotos" --format "{{.Names}}" 2>/dev/null | wc -l); \
+	if [ "$$REMAINING" -eq 0 ]; then \
+		echo "$(GREEN) Services stopped successfully$(NC)"; \
+	else \
+		echo "$(RED)⚠ Warning: $$REMAINING containers still present$(NC)"; \
+		docker ps -a --filter "name=copilotos" --format "table {{.Names}}\t{{.Status}}"; \
+	fi
 
 ## Stop ALL project containers (including base compose)
 stop-all:

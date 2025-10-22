@@ -32,7 +32,7 @@ fi
 
 # Use environment variables with fallback to legacy defaults
 DEPLOY_SERVER="${DEPLOY_SERVER:-${PROD_SERVER_HOST:-your-ssh-user@your-server-ip-here}}"
-DEPLOY_PATH="${DEPLOY_PATH:-${PROD_DEPLOY_PATH:-/opt/copilotos-bridge}}"
+DEPLOY_PATH="${DEPLOY_PATH:-${PROD_DEPLOY_PATH:-/opt/octavios-bridge}}"
 
 # Validate configuration
 if [ "$DEPLOY_SERVER" = "your-ssh-user@your-server-ip-here" ]; then
@@ -77,7 +77,7 @@ fi
 
 # Flush Redis cache
 log_info "Flushing Redis cache..."
-FLUSH_RESULT=$(ssh "$DEPLOY_SERVER" "docker exec copilotos-redis redis-cli -a '$REDIS_PASSWORD' FLUSHALL 2>&1 | grep OK" || echo "")
+FLUSH_RESULT=$(ssh "$DEPLOY_SERVER" "docker exec octavios-redis redis-cli -a '$REDIS_PASSWORD' FLUSHALL 2>&1 | grep OK" || echo "")
 
 if [ -n "$FLUSH_RESULT" ]; then
     log_success "Redis cache cleared"
@@ -87,12 +87,12 @@ else
 fi
 
 # Verify cache is empty
-DBSIZE=$(ssh "$DEPLOY_SERVER" "docker exec copilotos-redis redis-cli -a '$REDIS_PASSWORD' DBSIZE 2>/dev/null | tail -1")
+DBSIZE=$(ssh "$DEPLOY_SERVER" "docker exec octavios-redis redis-cli -a '$REDIS_PASSWORD' DBSIZE 2>/dev/null | tail -1")
 log_info "Redis DBSIZE: $DBSIZE"
 
 # Restart web container to clear Next.js internal cache
 log_info "Restarting web container..."
-ssh "$DEPLOY_SERVER" "docker restart copilotos-web" > /dev/null
+ssh "$DEPLOY_SERVER" "docker restart octavios-web" > /dev/null
 
 log_success "Web container restarted"
 
@@ -101,7 +101,7 @@ log_info "Waiting for web container to be healthy..."
 sleep 8
 
 # Check container status
-CONTAINER_STATUS=$(ssh "$DEPLOY_SERVER" "docker ps --filter name=copilotos-web --format '{{.Status}}'" 2>/dev/null)
+CONTAINER_STATUS=$(ssh "$DEPLOY_SERVER" "docker ps --filter name=octavios-web --format '{{.Status}}'" 2>/dev/null)
 log_info "Container status: $CONTAINER_STATUS"
 
 echo ""

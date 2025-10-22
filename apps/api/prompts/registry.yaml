@@ -3,7 +3,7 @@
 # Descripción: Configuración centralizada de system prompts y parámetros por modelo
 
 version: v1
-copilot_name: CopilotOS
+copilot_name: OctaviOS Chat
 org_name: Saptiva
 
 # Modelos configurados

@@ -93,7 +93,7 @@ GRAFANA_ADMIN_PASSWORD={secrets_dict['GRAFANA_ADMIN_PASSWORD']}
 #    export SAPTIVA_API_KEY="your-real-api-key"
 #
 # 3. For Kubernetes:
-#    kubectl create secret generic copilotos-secrets \\
+#    kubectl create secret generic octavios-secrets \\
 #      --from-literal=mongodb-password="{secrets_dict['MONGODB_PASSWORD']}" \\
 #      --from-literal=redis-password="{secrets_dict['REDIS_PASSWORD']}" \\
 #      --from-literal=jwt-secret-key="{secrets_dict['JWT_SECRET_KEY']}" \\

@@ -43,7 +43,7 @@ async def create_demo_user():
         print("✅ MongoDB connection successful!")
 
         # Get database
-        db = client.copilotos
+        db = client.octavios
         users_collection = db.users
 
         # Check if user already exists

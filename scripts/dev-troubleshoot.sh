@@ -11,7 +11,7 @@ YELLOW="▲ "
 BLUE="▸ "
 NC=""
 
-PROJECT_NAME=${COMPOSE_PROJECT_NAME:-copilotos}
+PROJECT_NAME=${COMPOSE_PROJECT_NAME:-octavios}
 
 show_help() {
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"

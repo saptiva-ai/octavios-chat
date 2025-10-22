@@ -14,10 +14,10 @@
 #   --help              Show this help message
 #
 # Environment Variables:
-#   MONGODB_USER       MongoDB username (default: copilotos_user)
+#   MONGODB_USER       MongoDB username (default: octavios_user)
 #   MONGODB_PASSWORD   MongoDB password (required)
-#   MONGODB_DATABASE   Database name (default: copilotos)
-#   COMPOSE_PROJECT_NAME Project name for container detection (default: copilotos-prod)
+#   MONGODB_DATABASE   Database name (default: octavios)
+#   COMPOSE_PROJECT_NAME Project name for container detection (default: octavios-prod)
 #
 # This script is referenced in the post-mortem: docs/POST-MORTEM-DATA-LOSS-2025-10-09.md
 
@@ -33,10 +33,10 @@ NC=""
 # Default configuration
 BACKUP_DIR="${HOME}/backups/mongodb"
 RETENTION_DAYS=30
-MONGODB_USER="${MONGODB_USER:-copilotos_user}"
+MONGODB_USER="${MONGODB_USER:-octavios_user}"
 MONGODB_PASSWORD="${MONGODB_PASSWORD:-}"
-MONGODB_DATABASE="${MONGODB_DATABASE:-copilotos}"
-COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-copilotos-prod}"
+MONGODB_DATABASE="${MONGODB_DATABASE:-octavios}"
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-octavios-prod}"
 CONTAINER_NAME=""
 ENV_FILE=""
 
@@ -76,9 +76,9 @@ if [ -n "$ENV_FILE" ]; then
         echo -e "${BLUE}[$(date '+%Y-%m-%d %H:%M:%S')]${NC} Loading environment from: $ENV_FILE"
         source "$ENV_FILE"
         # Re-apply defaults after sourcing in case they weren't set
-        MONGODB_USER="${MONGODB_USER:-copilotos_user}"
-        MONGODB_DATABASE="${MONGODB_DATABASE:-copilotos}"
-        COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-copilotos-prod}"
+        MONGODB_USER="${MONGODB_USER:-octavios_user}"
+        MONGODB_DATABASE="${MONGODB_DATABASE:-octavios}"
+        COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-octavios-prod}"
     else
         echo -e "${RED}[$(date '+%Y-%m-%d %H:%M:%S')]${NC} Environment file not found: $ENV_FILE"
         exit 1
@@ -133,7 +133,7 @@ fi
 
 # Generate backup filename with timestamp
 DATE=$(date +%Y%m%d_%H%M%S)
-BACKUP_FILE="copilotos_${DATE}.gz"
+BACKUP_FILE="octavios_${DATE}.gz"
 BACKUP_PATH="$BACKUP_DIR/$BACKUP_FILE"
 
 log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -190,7 +190,7 @@ log_success "Backup size: $BACKUP_SIZE"
 log_info "Applying retention policy (keeping last $RETENTION_DAYS days)..."
 DELETED_COUNT=0
 
-find "$BACKUP_DIR" -name "copilotos_*.gz" -type f -mtime +${RETENTION_DAYS} -print | while read -r old_backup; do
+find "$BACKUP_DIR" -name "octavios_*.gz" -type f -mtime +${RETENTION_DAYS} -print | while read -r old_backup; do
     if rm "$old_backup"; then
         DELETED_COUNT=$((DELETED_COUNT + 1))
         log_info "Deleted old backup: $(basename "$old_backup")"
@@ -218,7 +218,7 @@ echo "  ▸ Location:  $BACKUP_DIR"
 echo "  ◆ Log:       $LOG_FILE"
 echo ""
 log_info "Recent backups:"
-ls -lht "$BACKUP_DIR"/copilotos_*.gz 2>/dev/null | head -5 | awk '{print "  " $9 " (" $5 ", " $6 " " $7 " " $8 ")"}'
+ls -lht "$BACKUP_DIR"/octavios_*.gz 2>/dev/null | head -5 | awk '{print "  " $9 " (" $5 ", " $6 " " $7 " " $8 ")"}'
 echo ""
 log_info "To restore this backup, run:"
 echo "  ./scripts/restore-mongodb.sh --backup-file $BACKUP_PATH"

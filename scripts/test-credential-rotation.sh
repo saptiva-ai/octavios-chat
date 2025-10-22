@@ -122,11 +122,11 @@ test_user_login() {
 
 count_users() {
     MONGO_PASS=$(grep MONGODB_PASSWORD envs/.env | cut -d= -f2)
-    USER_COUNT=$(docker exec copilotos-mongodb mongosh admin \
-        -u copilotos_prod_user \
+    USER_COUNT=$(docker exec octavios-mongodb mongosh admin \
+        -u octavios_prod_user \
         -p "$MONGO_PASS" \
         --quiet \
-        --eval "db.getSiblingDB('copilotos').users.countDocuments({})" 2>/dev/null | tail -1)
+        --eval "db.getSiblingDB('octavios').users.countDocuments({})" 2>/dev/null | tail -1)
 
     echo "$USER_COUNT"
 }
@@ -135,11 +135,11 @@ verify_user_exists() {
     log_info "Verifying test user exists in database..."
 
     MONGO_PASS=$(grep MONGODB_PASSWORD envs/.env | cut -d= -f2)
-    USER_COUNT=$(docker exec copilotos-mongodb mongosh admin \
-        -u copilotos_prod_user \
+    USER_COUNT=$(docker exec octavios-mongodb mongosh admin \
+        -u octavios_prod_user \
         -p "$MONGO_PASS" \
         --quiet \
-        --eval "db.getSiblingDB('copilotos').users.countDocuments({username: '$TEST_USER'})" 2>/dev/null | tail -1)
+        --eval "db.getSiblingDB('octavios').users.countDocuments({username: '$TEST_USER'})" 2>/dev/null | tail -1)
 
     if [ "$USER_COUNT" -gt 0 ]; then
         log_success "User exists in database"
@@ -184,11 +184,11 @@ create_test_conversation() {
 
 count_conversations() {
     MONGO_PASS=$(grep MONGODB_PASSWORD envs/.env | cut -d= -f2)
-    CONV_COUNT=$(docker exec copilotos-mongodb mongosh admin \
-        -u copilotos_prod_user \
+    CONV_COUNT=$(docker exec octavios-mongodb mongosh admin \
+        -u octavios_prod_user \
         -p "$MONGO_PASS" \
         --quiet \
-        --eval "db.getSiblingDB('copilotos').conversations.countDocuments({})" 2>/dev/null | tail -1)
+        --eval "db.getSiblingDB('octavios').conversations.countDocuments({})" 2>/dev/null | tail -1)
 
     echo "$CONV_COUNT"
 }
@@ -207,7 +207,7 @@ check_services_health() {
     fi
 
     # Check MongoDB
-    if docker exec copilotos-mongodb mongosh --eval "db.runCommand('ping')" > /dev/null 2>&1; then
+    if docker exec octavios-mongodb mongosh --eval "db.runCommand('ping')" > /dev/null 2>&1; then
         log_success "MongoDB is healthy"
     else
         log_error "MongoDB is NOT healthy"
@@ -215,7 +215,7 @@ check_services_health() {
     fi
 
     # Check Redis
-    if docker exec copilotos-redis redis-cli ping > /dev/null 2>&1; then
+    if docker exec octavios-redis redis-cli ping > /dev/null 2>&1; then
         log_success "Redis is healthy"
     else
         log_error "Redis is NOT healthy"
@@ -229,16 +229,16 @@ test_backup_creation() {
     log_info "Testing backup creation..."
 
     # Create backup directory
-    mkdir -p /tmp/copilotos-test-backups
+    mkdir -p /tmp/octavios-test-backups
 
     # Create backup using mongodump
-    BACKUP_FILE="/tmp/copilotos-test-backups/test-backup-$(date +%Y%m%d-%H%M%S).archive"
+    BACKUP_FILE="/tmp/octavios-test-backups/test-backup-$(date +%Y%m%d-%H%M%S).archive"
 
-    docker exec copilotos-mongodb mongodump \
-        --uri="mongodb://copilotos_prod_user:$(grep MONGODB_PASSWORD envs/.env | cut -d= -f2)@localhost:27017/copilotos?authSource=admin" \
+    docker exec octavios-mongodb mongodump \
+        --uri="mongodb://octavios_prod_user:$(grep MONGODB_PASSWORD envs/.env | cut -d= -f2)@localhost:27017/octavios?authSource=admin" \
         --archive=/tmp/backup.archive > /dev/null 2>&1
 
-    docker cp copilotos-mongodb:/tmp/backup.archive "$BACKUP_FILE"
+    docker cp octavios-mongodb:/tmp/backup.archive "$BACKUP_FILE"
 
     if [ -f "$BACKUP_FILE" ]; then
         BACKUP_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
@@ -261,11 +261,11 @@ test_backup_restore() {
     fi
 
     # Copy backup to container
-    docker cp "$backup_file" copilotos-mongodb:/tmp/restore.archive
+    docker cp "$backup_file" octavios-mongodb:/tmp/restore.archive
 
     # Restore
-    docker exec copilotos-mongodb mongorestore \
-        --uri="mongodb://copilotos_prod_user:$(grep MONGODB_PASSWORD envs/.env | cut -d= -f2)@localhost:27017/copilotos?authSource=admin" \
+    docker exec octavios-mongodb mongorestore \
+        --uri="mongodb://octavios_prod_user:$(grep MONGODB_PASSWORD envs/.env | cut -d= -f2)@localhost:27017/octavios?authSource=admin" \
         --archive=/tmp/restore.archive \
         --drop > /dev/null 2>&1
 
@@ -362,8 +362,8 @@ if ./scripts/rotate-mongo-credentials.sh "$OLD_MONGO_PASS" "$NEW_MONGO_PASS"; th
     #
     # See: README.md "Lessons Learned" section for full explanation
     log_info "Recreating API container with new credentials (down + up, NOT restart)..."
-    docker compose -p copilotos -f infra/docker-compose.yml -f infra/docker-compose.dev.yml down api
-    docker compose -p copilotos -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up -d api
+    docker compose -p octavios -f infra/docker-compose.yml -f infra/docker-compose.dev.yml down api
+    docker compose -p octavios -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up -d api
     sleep 5
 
     wait_for_api || exit 1
@@ -428,13 +428,13 @@ if ./scripts/rotate-redis-credentials.sh "$NEW_REDIS_PASS"; then
     #
     # DIAGNOSIS WAS:
     # 1. grep REDIS_PASSWORD envs/.env  → showed NEW password
-    # 2. docker inspect copilotos-redis  → showed OLD password
+    # 2. docker inspect octavios-redis  → showed OLD password
     # 3. Mismatch! → Credential desynchronization
     #
     # FIX: Recreate containers to reload env vars from .env
     log_info "Recreating Redis and API containers with new credentials (down + up, NOT restart)..."
-    docker compose -p copilotos -f infra/docker-compose.yml -f infra/docker-compose.dev.yml down redis api
-    docker compose -p copilotos -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up -d redis api
+    docker compose -p octavios -f infra/docker-compose.yml -f infra/docker-compose.dev.yml down redis api
+    docker compose -p octavios -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up -d redis api
     sleep 5
 
     wait_for_api || exit 1
@@ -484,7 +484,7 @@ test_backup_restore "$BACKUP_FILE" || exit 1
 # After a backup restore, we just need to restart the API to reconnect to MongoDB.
 # We're NOT changing environment variables, so 'restart' is fine here.
 # If we WERE changing credentials, we'd need 'down' + 'up' like above.
-docker compose -p copilotos -f infra/docker-compose.yml -f infra/docker-compose.dev.yml restart api
+docker compose -p octavios -f infra/docker-compose.yml -f infra/docker-compose.dev.yml restart api
 sleep 5
 wait_for_api || exit 1
 
