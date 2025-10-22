@@ -127,9 +127,9 @@ jobs:
         ports:
           - 27018:27017
         env:
-          MONGO_INITDB_ROOT_USERNAME: copilotos_user
+          MONGO_INITDB_ROOT_USERNAME: octavios_user
           MONGO_INITDB_ROOT_PASSWORD: test_password
-          MONGO_INITDB_DATABASE: copilotos
+          MONGO_INITDB_DATABASE: octavios
         options: >-
           --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'"
           --health-interval 10s
@@ -166,9 +166,9 @@ jobs:
       - name: Configure environment for tests
         run: |
           cat > ../../envs/.env << EOF
-          MONGODB_USER=copilotos_user
+          MONGODB_USER=octavios_user
           MONGODB_PASSWORD=test_password
-          MONGODB_DATABASE=copilotos
+          MONGODB_DATABASE=octavios
           JWT_SECRET_KEY=$(openssl rand -base64 64)
           SECRET_KEY=$(openssl rand -hex 32)
           JWT_ACCESS_TOKEN_EXPIRE_MINUTES=60
