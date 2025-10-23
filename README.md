@@ -59,8 +59,99 @@ Need to tweak the project name or rotate your SAPTIVA key later? Run `make confi
 - The deployment script now triggers a remote MongoDB backup, validates registry secrets, logs into GHCR on the server, and force-frees the core service ports (3000/8001/6380/27017) before recreating containers, so rollouts are safer even cuando toca usar el fallback TAR.
 
 **Troubleshooting the quick start**
-- If `make dev` fails with `port is already allocated`, an older stack is still running. Stop any previous compose projects with `make stop-all` before retrying.
-- If the API container flips to `unhealthy` with a MongoDB authentication error, remove stale database volumes (`make clean-all`, destructive) so the new credentials from `make setup` take effect.
+
+### Issue: Port Already Allocated (MongoDB/Redis)
+
+**Symptom:** `make dev` fails with error:
+```
+Error: Bind for 0.0.0.0:27017 failed: port is already allocated
+```
+
+**Cause:** Another project's MongoDB/Redis container is using the same port (27017 for MongoDB, 6379 for Redis).
+
+**Quick Fix (Stop Previous Project):**
+```bash
+# Option 1: Stop ALL Docker containers
+docker stop $(docker ps -q)
+
+# Option 2: Stop specific project containers (if you know the project name)
+docker compose -f infra/docker-compose.yml down
+
+# Then restart your current project
+make dev
+```
+
+**Complete Solution (Multiple Projects):**
+
+If you're working with multiple projects that use MongoDB/Redis:
+
+1. **Check what's using the ports:**
+   ```bash
+   # See which containers are using the ports
+   docker ps | grep mongo
+   docker ps | grep redis
+
+   # Or check port allocation
+   lsof -i :27017  # MongoDB
+   lsof -i :6379   # Redis
+   ```
+
+2. **Stop only the conflicting project:**
+   ```bash
+   # List all running projects
+   docker ps --format "table {{.Names}}\t{{.Ports}}"
+
+   # Stop specific project (replace 'oldproject' with actual name)
+   docker stop oldproject-mongodb oldproject-redis oldproject-api oldproject-web
+   docker rm oldproject-mongodb oldproject-redis oldproject-api oldproject-web
+   ```
+
+3. **Start your new project:**
+   ```bash
+   make dev
+   ```
+
+**Prevention (Best Practices):**
+- **Always stop the previous project** before starting a new one:
+  ```bash
+  # In previous project directory
+  make down  # or: docker compose down
+
+  # Then in new project directory
+  make dev
+  ```
+
+- **Use unique project names** during setup to avoid confusion:
+  ```bash
+  make setup-quick
+  # Enter unique name: MiProyectoTaller
+  ```
+
+### Issue: MongoDB Authentication Failed
+
+**Symptom:** API container shows `unhealthy`, logs show:
+```
+pymongo.errors.OperationFailure: Authentication failed.
+```
+
+**Cause:** Stale database volumes with old credentials from a previous setup.
+
+**Solution:**
+```bash
+# Stop and remove volumes (DESTRUCTIVE - loses data)
+docker compose -f infra/docker-compose.yml down -v
+
+# Or use Make command
+make clean-all
+
+# Run setup again with new credentials
+make setup-quick  # or: make setup
+
+# Start services
+make dev
+```
+
+**Note:** This issue is prevented by default in workshop scenarios because the project now uses local volumes that are automatically recreated on each setup.
 
 Then visit: http://localhost:3000
 
