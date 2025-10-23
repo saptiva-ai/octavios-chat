@@ -1,0 +1,34 @@
+# ========================================
+# EXTERNAL VOLUMES OVERRIDE
+# ========================================
+# This file overrides volume definitions to use external volumes for production
+#
+# Usage:
+#   Development (local volumes):
+#     docker compose -f infra/docker-compose.yml up -d
+#     make dev
+#
+#   Production (external volumes):
+#     docker compose -f infra/docker-compose.yml -f infra/docker-compose.volumes-external.yml up -d
+#
+# Benefits:
+#   - Development: Clean slate on each setup, no credential conflicts
+#   - Production: Data persists across container/stack recreations
+#
+# Note: External volumes must be created before deployment:
+#   docker volume create copilotos-prod_mongodb_data
+#   docker volume create copilotos-prod_mongodb_config
+#   docker volume create copilotos-prod_redis_data
+
+volumes:
+  mongodb_data:
+    external: true
+    name: ${COMPOSE_PROJECT_NAME:-copilotos-prod}_mongodb_data
+
+  mongodb_config:
+    external: true
+    name: ${COMPOSE_PROJECT_NAME:-copilotos-prod}_mongodb_config
+
+  redis_data:
+    external: true
+    name: ${COMPOSE_PROJECT_NAME:-copilotos-prod}_redis_data

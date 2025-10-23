@@ -75,7 +75,7 @@ slugify_project_name() {
     # Replace non-alphanumeric characters with hyphen and normalize the result
     slug="$(echo "$slug" | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$$//; s/-{2,}/-/g')"
     if [ -z "$slug" ]; then
-        slug="octavios"
+        slug="mychat"
     fi
     echo "$slug"
 }
@@ -203,19 +203,44 @@ print_header "◆ Configuration"
 echo -e "${BOLD}1. Basic Configuration${NC}"
 echo ""
 
-DEFAULT_PROJECT_DISPLAY_NAME="CopilotOS"
-PROJECT_DISPLAY_NAME=$(whiptail_input \
-    "Project display name" \
-    "${PROJECT_DISPLAY_NAME:-$DEFAULT_PROJECT_DISPLAY_NAME}")
+# No default - force user to provide a project name
+while true; do
+    PROJECT_DISPLAY_NAME=$(whiptail_input \
+        "Project display name (REQUIRED - e.g., 'MyChat', 'Copilot OS')" \
+        "${PROJECT_DISPLAY_NAME:-}")
 
+    if [ -z "$PROJECT_DISPLAY_NAME" ]; then
+        if ! prompt_yes_no "Project name is required. Do you want to enter it now?"; then
+            print_error "Setup cannot continue without a project name."
+            exit 1
+        fi
+    else
+        break
+    fi
+done
+
+print_success "Project name set to: $PROJECT_DISPLAY_NAME"
+
+# Generate slug from project name
 DEFAULT_COMPOSE_SLUG="$COMPOSE_PROJECT_NAME"
 if [ -z "$DEFAULT_COMPOSE_SLUG" ]; then
     DEFAULT_COMPOSE_SLUG="$(slugify_project_name "$PROJECT_DISPLAY_NAME")"
 fi
 
-COMPOSE_PROJECT_NAME_INPUT=$(whiptail_input \
-    "Docker Compose project slug" \
-    "$DEFAULT_COMPOSE_SLUG")
+while true; do
+    COMPOSE_PROJECT_NAME_INPUT=$(whiptail_input \
+        "Docker Compose project slug (REQUIRED - lowercase, no spaces)" \
+        "$DEFAULT_COMPOSE_SLUG")
+
+    if [ -z "$COMPOSE_PROJECT_NAME_INPUT" ]; then
+        if ! prompt_yes_no "Project slug is required. Do you want to enter it now?"; then
+            print_error "Setup cannot continue without a project slug."
+            exit 1
+        fi
+    else
+        break
+    fi
+done
 
 COMPOSE_PROJECT_NAME=$(slugify_project_name "$COMPOSE_PROJECT_NAME_INPUT")
 if [ "$COMPOSE_PROJECT_NAME" != "$COMPOSE_PROJECT_NAME_INPUT" ]; then
@@ -223,12 +248,6 @@ if [ "$COMPOSE_PROJECT_NAME" != "$COMPOSE_PROJECT_NAME_INPUT" ]; then
 else
     print_success "Compose project slug set to: $COMPOSE_PROJECT_NAME"
 fi
-
-if [ -z "$PROJECT_DISPLAY_NAME" ]; then
-    PROJECT_DISPLAY_NAME="$DEFAULT_PROJECT_DISPLAY_NAME"
-fi
-
-print_success "Project name set to: $PROJECT_DISPLAY_NAME"
 
 echo ""
 
@@ -301,9 +320,11 @@ else
     fi
 fi
 
+# Default MongoDB username based on project slug
+DEFAULT_MONGODB_USER="${COMPOSE_PROJECT_NAME}_user"
 MONGODB_USER=$(whiptail_input \
     "MongoDB username" \
-    "${MONGODB_USER:-octavios_user}" \
+    "${MONGODB_USER:-$DEFAULT_MONGODB_USER}" \
     "MONGODB_USER")
 
 if [ -z "$REDIS_PASSWORD" ] || [ "$REDIS_PASSWORD" = "redis_password_change_me" ]; then
@@ -483,7 +504,7 @@ NEXT_PUBLIC_FEATURE_MIC=false
 # ============================================================================
 MONGODB_USER=$MONGODB_USER
 MONGODB_PASSWORD=$MONGODB_PASSWORD
-MONGODB_DATABASE=octavios
+MONGODB_DATABASE=$COMPOSE_PROJECT_NAME
 MONGODB_PORT=27017
 
 REDIS_PASSWORD=$REDIS_PASSWORD
@@ -539,7 +560,7 @@ ALLOWED_HOSTS=["localhost","127.0.0.1","$DOMAIN","web","api"]
 # ============================================================================
 # OBSERVABILITY
 # ============================================================================
-OTEL_SERVICE_NAME=octavios-bridge-$ENVIRONMENT
+OTEL_SERVICE_NAME=$COMPOSE_PROJECT_NAME-bridge-$ENVIRONMENT
 OTEL_ENABLED=false
 JAEGER_ENDPOINT=http://localhost:14268/api/traces
 
