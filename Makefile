@@ -19,9 +19,10 @@ obs-up obs-down obs-logs obs-restart obs-status obs-clean venv-install
 # CONFIGURATION
 # ============================================================================
 
-# Project defaults
-DEFAULT_PROJECT_DISPLAY_NAME := OctavioOS
-DEFAULT_COMPOSE_PROJECT_NAME := octavios
+# Project defaults - NONE: Force user to configure
+# Users must run 'make setup' or 'make setup-interactive' first
+DEFAULT_PROJECT_DISPLAY_NAME :=
+DEFAULT_COMPOSE_PROJECT_NAME :=
 
 # Environment
 DEV_ENV_FILE := envs/.env
@@ -316,20 +317,33 @@ setup-interactive-prod:
 	@./scripts/interactive-env-setup.sh production
 	@$(MAKE) --no-print-directory venv-install
 
-## Ensure environment file exists (non-interactive fallback)
+## Ensure environment file exists and is properly configured
 ensure-env:
 	@if [ ! -f $(DEV_ENV_FILE) ]; then \
-		if [ -f $(DEV_ENV_FALLBACK) ]; then \
-			echo "$(YELLOW)Creating $(DEV_ENV_FILE) from $(DEV_ENV_FALLBACK)...$(NC)"; \
-			cp $(DEV_ENV_FALLBACK) $(DEV_ENV_FILE); \
-		elif [ -f $(DEV_ENV_EXAMPLE) ]; then \
-			echo "$(YELLOW)Creating $(DEV_ENV_FILE) from $(DEV_ENV_EXAMPLE)...$(NC)"; \
-			cp $(DEV_ENV_EXAMPLE) $(DEV_ENV_FILE); \
-		else \
-			echo "$(RED)Error: No environment file found!$(NC)"; \
-			echo "Please create $(DEV_ENV_FILE) or $(DEV_ENV_FALLBACK)"; \
-			exit 1; \
-		fi; \
+		echo "$(RED)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"; \
+		echo "$(RED)✖ ERROR: Environment not configured$(NC)"; \
+		echo "$(RED)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"; \
+		echo ""; \
+		echo "$(YELLOW)You must configure your project first.$(NC)"; \
+		echo ""; \
+		echo "$(BOLD)Run one of these commands:$(NC)"; \
+		echo "  $(GREEN)make setup$(NC)        $(CYAN)# Interactive setup (recommended)$(NC)"; \
+		echo "  $(GREEN)make setup-quick$(NC)  $(CYAN)# Quick setup with example config$(NC)"; \
+		echo ""; \
+		exit 1; \
+	fi; \
+	PROJECT_NAME=$$(grep "^COMPOSE_PROJECT_NAME=" $(DEV_ENV_FILE) 2>/dev/null | cut -d'=' -f2 | tr -d '"' | tr -d "'" | xargs); \
+	if [ -z "$$PROJECT_NAME" ]; then \
+		echo "$(RED)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"; \
+		echo "$(RED)✖ ERROR: Project name not configured$(NC)"; \
+		echo "$(RED)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"; \
+		echo ""; \
+		echo "$(YELLOW)Your .env file exists but COMPOSE_PROJECT_NAME is not set.$(NC)"; \
+		echo ""; \
+		echo "$(BOLD)Fix this by running:$(NC)"; \
+		echo "  $(GREEN)make configure$(NC)  $(CYAN)# Update your configuration$(NC)"; \
+		echo ""; \
+		exit 1; \
 	fi
 
 ## Sync development environment file with interactive configuration
@@ -377,8 +391,36 @@ configure:
 	@echo "$(YELLOW)Tip: Restart running services to apply changes.$(NC)"
 	@echo ""
 
-## Quick setup (non-interactive, uses example files)
-setup-quick: ensure-env venv-install
+## Quick setup (minimal prompts, uses example files)
+setup-quick: venv-install
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BLUE)▸ Quick Setup$(NC)"
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@if [ ! -f $(DEV_ENV_EXAMPLE) ]; then \
+		echo "$(RED)Error: $(DEV_ENV_EXAMPLE) not found!$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)This will create a basic configuration from the example file.$(NC)"
+	@echo "$(YELLOW)You'll only need to provide a project name.$(NC)"
+	@echo ""
+	@read -p "$(CYAN)Enter your project name (e.g., MyChat): $(NC)" PROJECT_NAME; \
+	if [ -z "$$PROJECT_NAME" ]; then \
+		echo "$(RED)✖ Project name is required!$(NC)"; \
+		exit 1; \
+	fi; \
+	PROJECT_SLUG=$$(echo "$$PROJECT_NAME" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$$//'); \
+	echo ""; \
+	echo "$(CYAN)  Project name: $$PROJECT_NAME$(NC)"; \
+	echo "$(CYAN)  Project slug: $$PROJECT_SLUG$(NC)"; \
+	echo ""; \
+	cp $(DEV_ENV_EXAMPLE) $(DEV_ENV_FILE); \
+	sed -i.bak "s/^COMPOSE_PROJECT_NAME=.*/COMPOSE_PROJECT_NAME=$$PROJECT_SLUG/" $(DEV_ENV_FILE); \
+	sed -i.bak "s/^MONGODB_USER=.*/MONGODB_USER=$${PROJECT_SLUG}_user/" $(DEV_ENV_FILE); \
+	sed -i.bak "s/^MONGODB_DATABASE=.*/MONGODB_DATABASE=$$PROJECT_SLUG/" $(DEV_ENV_FILE); \
+	sed -i.bak "s/your-project-bridge/$$PROJECT_SLUG-bridge/g" $(DEV_ENV_FILE); \
+	rm -f $(DEV_ENV_FILE).bak; \
+	chmod 600 $(DEV_ENV_FILE)
 	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo "$(GREEN)◆ Quick setup completed!$(NC)"
 	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
@@ -389,6 +431,35 @@ setup-quick: ensure-env venv-install
 	@echo "  2. Run: $(GREEN)make dev$(NC)"
 	@echo "  3. Run: $(GREEN)make create-demo-user$(NC)"
 	@echo "  4. Visit: $(BLUE)http://localhost:3000$(NC)"
+	@echo ""
+
+## Create external volumes for production (run BEFORE deploying with external volumes)
+create-external-volumes:
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BLUE)▸ Creating External Volumes for Production$(NC)"
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@if [ -f "$(DEV_ENV_FILE)" ]; then \
+		PROJECT_NAME=$$(grep "^COMPOSE_PROJECT_NAME=" $(DEV_ENV_FILE) | cut -d'=' -f2 | tr -d '"' | tr -d "'"); \
+		PROJECT_NAME=$${PROJECT_NAME:-$(PROJECT_NAME)}; \
+	else \
+		PROJECT_NAME=$(PROJECT_NAME); \
+	fi; \
+	echo "$(CYAN)  ℹ Using project name: $$PROJECT_NAME$(NC)"; \
+	echo ""; \
+	for volume in mongodb_data mongodb_config redis_data; do \
+		VOLUME_NAME="$${PROJECT_NAME}_$${volume}"; \
+		if docker volume inspect $$VOLUME_NAME >/dev/null 2>&1; then \
+			echo "$(YELLOW)  ▲ Volume $$VOLUME_NAME already exists$(NC)"; \
+		else \
+			docker volume create $$VOLUME_NAME; \
+			echo "$(GREEN)  ✓ Created volume: $$VOLUME_NAME$(NC)"; \
+		fi; \
+	done
+	@echo ""
+	@echo "$(GREEN)◆ External volumes ready!$(NC)"
+	@echo "$(YELLOW)Next: Deploy with external volumes:$(NC)"
+	@echo "  $(GREEN)docker compose -f infra/docker-compose.yml -f infra/docker-compose.volumes-external.yml up -d$(NC)"
 	@echo ""
 
 # ============================================================================
