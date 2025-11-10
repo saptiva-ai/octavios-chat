@@ -71,5 +71,5 @@ disallow_untyped_defs = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q -ra"
-pythonpath = ["src"]  # Enable imports from src/ in local/CI
+pythonpath = ["src", "../.."]  # Enable imports from src/ in local/CI and shared backend package
 asyncio_mode = "auto"
