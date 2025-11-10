@@ -272,7 +272,7 @@ class Settings(BaseSettings):
     )
     cors_allow_credentials: bool = Field(default=True, description="Allow CORS credentials")
     allowed_hosts: List[str] = Field(
-        default=["localhost", "127.0.0.1"],
+        default=["localhost", "127.0.0.1", "testserver"],
         description="Allowed hosts (comma-separated or JSON array)"
     )
 

@@ -7,10 +7,8 @@ Tests coverage for:
 """
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch
 
 from src.main import app
-from src.core.config import Settings
 
 
 client = TestClient(app)
@@ -38,51 +36,63 @@ class TestModelsEndpoint:
         if data["allowed_models"]:
             assert len(data["allowed_models"]) > 0
 
-    def test_get_models_custom_config(self):
+    def test_get_models_custom_config(self, monkeypatch):
         """Test getting models with custom configuration"""
-        # Mock settings with specific models
-        mock_settings = Settings()
-        mock_settings.chat_default_model = "Saptiva Turbo"
-        mock_settings.chat_allowed_models = "Saptiva Turbo,Saptiva Cortex,Saptiva Ops"
+        # Clear the lru_cache to allow new settings to be loaded
+        from src.core.config import get_settings
+        get_settings.cache_clear()
 
-        with patch('src.routers.models.get_settings', return_value=mock_settings):
-            response = client.get("/api/models")
-            assert response.status_code == 200
-            data = response.json()
+        # Set environment variables for custom configuration
+        monkeypatch.setenv("CHAT_DEFAULT_MODEL", "Saptiva Turbo")
+        monkeypatch.setenv("CHAT_ALLOWED_MODELS", "Saptiva Turbo,Saptiva Cortex,Saptiva Ops")
 
-            # Check configured values
-            assert data["default_model"] == "Saptiva Turbo"
-            assert len(data["allowed_models"]) == 3
-            assert "Saptiva Turbo" in data["allowed_models"]
-            assert "Saptiva Cortex" in data["allowed_models"]
-            assert "Saptiva Ops" in data["allowed_models"]
+        # Create new settings instance with updated env vars
+        response = client.get("/api/models")
+        assert response.status_code == 200
+        data = response.json()
 
-    def test_get_models_with_whitespace(self):
+        # Check configured values
+        assert data["default_model"] == "Saptiva Turbo"
+        assert len(data["allowed_models"]) == 3
+        assert "Saptiva Turbo" in data["allowed_models"]
+        assert "Saptiva Cortex" in data["allowed_models"]
+        assert "Saptiva Ops" in data["allowed_models"]
+
+        # Clear cache again for next test
+        get_settings.cache_clear()
+
+    def test_get_models_with_whitespace(self, monkeypatch):
         """Test getting models with whitespace in configuration"""
-        mock_settings = Settings()
-        mock_settings.chat_default_model = "Saptiva Turbo"
-        mock_settings.chat_allowed_models = " Saptiva Turbo , Saptiva Cortex , Saptiva Ops "
+        from src.core.config import get_settings
+        get_settings.cache_clear()
 
-        with patch('src.routers.models.get_settings', return_value=mock_settings):
-            response = client.get("/api/models")
-            assert response.status_code == 200
-            data = response.json()
+        monkeypatch.setenv("CHAT_DEFAULT_MODEL", "Saptiva Turbo")
+        monkeypatch.setenv("CHAT_ALLOWED_MODELS", " Saptiva Turbo , Saptiva Cortex , Saptiva Ops ")
 
-            # Check that whitespace is stripped
-            for model in data["allowed_models"]:
-                assert model == model.strip()
-                assert len(model) > 0
+        response = client.get("/api/models")
+        assert response.status_code == 200
+        data = response.json()
 
-    def test_get_models_empty_config(self):
+        # Check that whitespace is stripped
+        for model in data["allowed_models"]:
+            assert model == model.strip()
+            assert len(model) > 0
+
+        get_settings.cache_clear()
+
+    def test_get_models_empty_config(self, monkeypatch):
         """Test getting models with empty configuration"""
-        mock_settings = Settings()
-        mock_settings.chat_default_model = "Saptiva Turbo"
-        mock_settings.chat_allowed_models = ""
+        from src.core.config import get_settings
+        get_settings.cache_clear()
 
-        with patch('src.routers.models.get_settings', return_value=mock_settings):
-            response = client.get("/api/models")
-            assert response.status_code == 200
-            data = response.json()
+        monkeypatch.setenv("CHAT_DEFAULT_MODEL", "Saptiva Turbo")
+        monkeypatch.setenv("CHAT_ALLOWED_MODELS", "")
 
-            # Check that empty config results in empty list
-            assert data["allowed_models"] == []
+        response = client.get("/api/models")
+        assert response.status_code == 200
+        data = response.json()
+
+        # Check that empty config results in empty list
+        assert data["allowed_models"] == []
+
+        get_settings.cache_clear()
