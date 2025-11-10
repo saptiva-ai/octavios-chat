@@ -63,11 +63,11 @@ class TestAuthSchemas:
     def test_auth_response_creation(self):
         """Test AuthResponse model"""
         user = User(
-            id=uuid4(),
+            id=str(uuid4()),  # User schema expects string id
             username="testuser",
             email="test@example.com",
-            full_name="Test User",
             created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),  # Required field
             is_active=True
         )
 
@@ -132,10 +132,11 @@ class TestAuthSchemas:
     def test_auth_response_json_serialization(self):
         """Test AuthResponse can be serialized"""
         user = User(
-            id=uuid4(),
+            id=str(uuid4()),  # User schema expects string id
             username="user",
             email="user@example.com",
             created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),  # Required field
             is_active=True
         )
 
