@@ -72,14 +72,14 @@ def _validate_password_strength(password: str) -> Optional[str]:
 
 
 async def _get_user_by_username(username: str) -> Optional[User]:
-    return await User.find_one(User.username == username)
+    return await User.find_one({"username": username})
 
 
 async def _get_user_by_email(email: str) -> Optional[User]:
     """Get user by email with normalization."""
     try:
         normalized_email = normalize_email(email)
-        return await User.find_one(User.email == normalized_email)
+        return await User.find_one({"email": normalized_email})
     except ValueError:
         # If normalization fails, return None (invalid email format)
         return None
