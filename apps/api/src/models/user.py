@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import uuid4
 
-from beanie import Document, Indexed
+from beanie import Document
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -21,8 +21,8 @@ class UserPreferences(BaseModel):
 class User(Document):
     """User document model"""
     id: str = Field(default_factory=lambda: str(uuid4()), alias="_id")
-    username: Indexed(str, unique=True) = Field(..., description="Username")
-    email: Indexed(EmailStr, unique=True) = Field(..., description="Email address")
+    username: str = Field(..., description="Username")
+    email: EmailStr = Field(..., description="Email address")
     password_hash: str = Field(..., description="Hashed password")
     is_active: bool = Field(default=True, description="Whether user is active")
     created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
@@ -33,6 +33,8 @@ class User(Document):
     class Settings:
         name = "users"
         indexes = [
+            [("username", 1)],  # Unique index on username
+            [("email", 1)],     # Unique index on email
             "created_at",
             "is_active",
         ]
