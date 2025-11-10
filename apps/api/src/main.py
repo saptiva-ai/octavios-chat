@@ -24,13 +24,24 @@ from .core.exceptions import (
     validation_exception_handler,
 )
 from .core.logging import setup_logging
-from .core.telemetry import setup_telemetry, instrument_fastapi, shutdown_telemetry
+from .core.telemetry import (
+    setup_telemetry,
+    instrument_fastapi,
+    shutdown_telemetry,
+    increment_tool_invocation,
+)
 from .middleware.auth import AuthMiddleware
 from .middleware.rate_limit import RateLimitMiddleware
 from .middleware.telemetry import TelemetryMiddleware
 from .routers import auth, chat, deep_research, health, history, reports, stream, metrics, conversations, intent, models, documents, review, features, files
 from .routers import settings as settings_router
 from .services.storage import storage
+from .core.auth import get_current_user
+
+# TODO: Fix MCP integration - backend.mcp doesn't exist
+# from backend.mcp.registry import ToolRegistry
+# from backend.mcp.routes import create_mcp_router
+# from backend.mcp.tools import AuditFileTool, ExcelAnalyzerTool, VizTool
 
 
 @asynccontextmanager
@@ -118,6 +129,29 @@ def create_app() -> FastAPI:
     app.include_router(documents.router, prefix="/api", tags=["documents"])
     app.include_router(review.router, prefix="/api", tags=["review"])
     # app.include_router(files.router, prefix="/api", tags=["files"])  # Temporarily disabled - Phase 3
+
+    # TODO: Fix MCP integration - temporarily disabled due to broken imports
+    # MCP registry & routes
+    # mcp_registry = ToolRegistry()
+    # mcp_registry.register(AuditFileTool())
+    # mcp_registry.register(ExcelAnalyzerTool())
+    # mcp_registry.register(VizTool())
+    # app.state.mcp_registry = mcp_registry
+
+    # def _on_mcp_invoke(response):
+    #     try:
+    #         increment_tool_invocation(response.tool)
+    #     except Exception:  # pragma: no cover - telemetry best-effort
+    #         pass
+
+    # app.include_router(
+    #     create_mcp_router(
+    #         registry=mcp_registry,
+    #         auth_dependency=get_current_user,
+    #         on_invoke=_on_mcp_invoke,
+    #     ),
+    #     prefix="/api",
+    # )
 
     # Instrument FastAPI for telemetry
     instrument_fastapi(app)
