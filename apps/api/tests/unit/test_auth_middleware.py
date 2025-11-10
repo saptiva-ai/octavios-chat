@@ -80,7 +80,10 @@ class TestAuthMiddleware:
 
         assert response.status_code == 401
         data = response.json()
-        assert "error" in data or "detail" in data
+        # Middleware returns {"code": "...", "message": "..."}
+        assert "code" in data
+        assert "message" in data
+        assert data["code"] == "token_missing"
 
     def test_protected_endpoint_rejects_malformed_token(self, client):
         """Test that malformed tokens are rejected."""
@@ -129,10 +132,13 @@ class TestAuthMiddleware:
 
     def test_middleware_extracts_token_case_insensitive(self):
         """Test that Authorization header is case-insensitive."""
+        from starlette.datastructures import Headers
+
         middleware = AuthMiddleware(app=Mock())
 
         mock_request = Mock(spec=Request)
-        mock_request.headers = {"authorization": "bearer token-xyz"}
+        # Use Starlette Headers which is case-insensitive
+        mock_request.headers = Headers({"authorization": "bearer token-xyz"})
 
         token = middleware._extract_token(mock_request)
 
@@ -215,7 +221,7 @@ class TestAuthMiddlewareIntegration:
 class TestTokenValidation:
     """Test token validation logic."""
 
-    @patch('src.middleware.auth.jwt.decode')
+    @patch('jose.jwt.decode')
     def test_validate_token_with_valid_jwt(self, mock_decode):
         """Test that valid JWT token is accepted."""
         mock_decode.return_value = {"sub": "user-123", "exp": 9999999999}
@@ -227,7 +233,7 @@ class TestTokenValidation:
         assert payload is not None
         assert "sub" in payload
 
-    @patch('src.middleware.auth.jwt.decode')
+    @patch('jose.jwt.decode')
     def test_validate_token_with_expired_jwt(self, mock_decode):
         """Test that expired JWT token is rejected."""
         from jose.exceptions import ExpiredSignatureError
@@ -239,7 +245,7 @@ class TestTokenValidation:
         # Should return None for expired token
         assert payload is None
 
-    @patch('src.middleware.auth.jwt.decode')
+    @patch('jose.jwt.decode')
     def test_validate_token_with_invalid_jwt(self, mock_decode):
         """Test that invalid JWT token is rejected."""
         from jose.exceptions import JWTError
