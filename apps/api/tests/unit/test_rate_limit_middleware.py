@@ -14,8 +14,17 @@ from src.middleware.rate_limit import RateLimitMiddleware
 
 
 @pytest.fixture
-def app_with_rate_limit():
+def app_with_rate_limit(monkeypatch):
     """Create a test FastAPI app with rate limiting enabled."""
+    # Enable rate limiting for tests (may be disabled in .env)
+    monkeypatch.setenv("RATE_LIMIT_ENABLED", "true")
+    monkeypatch.setenv("RATE_LIMIT_CALLS", "100")
+    monkeypatch.setenv("RATE_LIMIT_PERIOD", "60")
+
+    # Clear get_settings cache to pick up new env vars
+    from src.core.config import get_settings
+    get_settings.cache_clear()
+
     app = FastAPI()
 
     @app.get("/api/test")
@@ -25,7 +34,10 @@ def app_with_rate_limit():
     # Add rate limit middleware
     app.add_middleware(RateLimitMiddleware)
 
-    return app
+    yield app
+
+    # Clear cache after test
+    get_settings.cache_clear()
 
 
 @pytest.fixture
@@ -53,15 +65,16 @@ class TestRateLimitMiddleware:
         assert "X-RateLimit-Limit" in response.headers or "x-ratelimit-limit" in response.headers
         # Note: header names might be case-insensitive
 
-    @patch('src.core.config.get_settings')
-    def test_middleware_blocks_requests_exceeding_limit(self, mock_settings):
+    def test_middleware_blocks_requests_exceeding_limit(self, monkeypatch):
         """Test that requests exceeding rate limit are blocked with 429."""
-        # Configure very low rate limit for testing
-        settings = Mock()
-        settings.rate_limit_enabled = True
-        settings.rate_limit_calls = 2  # Only allow 2 requests
-        settings.rate_limit_period = 60  # per 60 seconds
-        mock_settings.return_value = settings
+        # Clear cache first
+        from src.core.config import get_settings
+        get_settings.cache_clear()
+
+        # Configure very low rate limit for testing via env vars
+        monkeypatch.setenv("RATE_LIMIT_ENABLED", "true")
+        monkeypatch.setenv("RATE_LIMIT_CALLS", "2")  # Only allow 2 requests
+        monkeypatch.setenv("RATE_LIMIT_PERIOD", "60")
 
         app = FastAPI()
 
@@ -83,14 +96,17 @@ class TestRateLimitMiddleware:
         response3 = client.get("/api/test")
         assert response3.status_code == 429
 
-    @patch('src.core.config.get_settings')
-    def test_rate_limit_response_format(self, mock_settings):
+        # Clear cache after test
+        get_settings.cache_clear()
+
+    def test_rate_limit_response_format(self, monkeypatch):
         """Test that rate limit error response has correct format."""
-        settings = Mock()
-        settings.rate_limit_enabled = True
-        settings.rate_limit_calls = 1
-        settings.rate_limit_period = 60
-        mock_settings.return_value = settings
+        from src.core.config import get_settings
+        get_settings.cache_clear()
+
+        monkeypatch.setenv("RATE_LIMIT_ENABLED", "true")
+        monkeypatch.setenv("RATE_LIMIT_CALLS", "1")
+        monkeypatch.setenv("RATE_LIMIT_PERIOD", "60")
 
         app = FastAPI()
 
@@ -113,6 +129,8 @@ class TestRateLimitMiddleware:
         # Check response structure
         assert "error" in data or "detail" in data
         assert "retry_after" in data or "Retry-After" in response.headers
+
+        get_settings.cache_clear()
 
     def test_middleware_tracks_requests_per_ip(self):
         """Test that middleware tracks requests per client IP."""
@@ -222,14 +240,14 @@ class TestRateLimitHeaders:
         if remaining1 >= 0 and remaining2 >= 0:
             assert remaining2 < remaining1
 
-    @patch('src.core.config.get_settings')
-    def test_retry_after_header_on_rate_limit(self, mock_settings):
+    def test_retry_after_header_on_rate_limit(self, monkeypatch):
         """Test that Retry-After header is set when rate limited."""
-        settings = Mock()
-        settings.rate_limit_enabled = True
-        settings.rate_limit_calls = 1
-        settings.rate_limit_period = 60
-        mock_settings.return_value = settings
+        from src.core.config import get_settings
+        get_settings.cache_clear()
+
+        monkeypatch.setenv("RATE_LIMIT_ENABLED", "true")
+        monkeypatch.setenv("RATE_LIMIT_CALLS", "1")
+        monkeypatch.setenv("RATE_LIMIT_PERIOD", "60")
 
         app = FastAPI()
 
@@ -250,6 +268,8 @@ class TestRateLimitHeaders:
         assert "Retry-After" in response.headers
         assert int(response.headers["Retry-After"]) == 60
 
+        get_settings.cache_clear()
+
 
 class TestRateLimitConfiguration:
     """Test rate limit configuration."""
@@ -268,19 +288,21 @@ class TestRateLimitConfiguration:
         assert hasattr(middleware, '_requests')
         assert isinstance(middleware._requests, dict)
 
-    @patch('src.core.config.get_settings')
-    def test_custom_rate_limit_values(self, mock_settings):
+    def test_custom_rate_limit_values(self, monkeypatch):
         """Test that custom rate limit values are respected."""
-        settings = Mock()
-        settings.rate_limit_enabled = True
-        settings.rate_limit_calls = 100  # Custom value
-        settings.rate_limit_period = 3600  # 1 hour
-        mock_settings.return_value = settings
+        from src.core.config import get_settings
+        get_settings.cache_clear()
+
+        monkeypatch.setenv("RATE_LIMIT_ENABLED", "true")
+        monkeypatch.setenv("RATE_LIMIT_CALLS", "100")
+        monkeypatch.setenv("RATE_LIMIT_PERIOD", "3600")
 
         middleware = RateLimitMiddleware(app=Mock())
 
         assert middleware.settings.rate_limit_calls == 100
         assert middleware.settings.rate_limit_period == 3600
+
+        get_settings.cache_clear()
 
 
 class TestRateLimitCleanup:
