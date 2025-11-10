@@ -72,8 +72,14 @@ def saptiva_client(mock_settings):
         mock_client.aclose = AsyncMock()
         MockAsyncClient.return_value = mock_client
 
-        client = SaptivaClient()
-        yield client
+        # Disable mock mode for tests - we want to test HTTP behavior
+        with patch.dict('os.environ', {'SAPTIVA_FORCE_MOCK': '0', 'SAPTIVA_ALLOW_MOCK_FALLBACK': '0'}):
+            client = SaptivaClient()
+            # Explicitly disable mock mode
+            client.force_mock = False
+            client.mock_mode = False
+            client.allow_mock_fallback = False
+            yield client
 
 
 # ============================================================================
@@ -277,15 +283,21 @@ class TestChatCompletion:
             settings.saptiva_max_retries = 3
             mock_get_settings.return_value = settings
 
-            with patch('src.services.saptiva_client.httpx.AsyncClient'):
-                client = SaptivaClient()
+            # Disable mock mode so it raises ValueError instead of falling back
+            with patch.dict('os.environ', {'SAPTIVA_FORCE_MOCK': '0', 'SAPTIVA_ALLOW_MOCK_FALLBACK': '0'}):
+                with patch('src.services.saptiva_client.httpx.AsyncClient'):
+                    client = SaptivaClient()
+                    # Explicitly disable mock fallback
+                    client.allow_mock_fallback = False
+                    client.force_mock = False
+                    client.mock_mode = False
 
-                messages = [{"role": "user", "content": "Hi"}]
+                    messages = [{"role": "user", "content": "Hi"}]
 
-                with pytest.raises(ValueError) as exc_info:
-                    await client.chat_completion(messages)
+                    with pytest.raises(ValueError) as exc_info:
+                        await client.chat_completion(messages)
 
-                assert "API key is required" in str(exc_info.value)
+                    assert "API key is required" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_chat_completion_with_custom_params(self, saptiva_client):
@@ -396,16 +408,22 @@ class TestChatStreaming:
             settings.saptiva_max_retries = 3
             mock_get_settings.return_value = settings
 
-            with patch('src.services.saptiva_client.httpx.AsyncClient'):
-                client = SaptivaClient()
+            # Disable mock mode so it raises ValueError instead of falling back
+            with patch.dict('os.environ', {'SAPTIVA_FORCE_MOCK': '0', 'SAPTIVA_ALLOW_MOCK_FALLBACK': '0'}):
+                with patch('src.services.saptiva_client.httpx.AsyncClient'):
+                    client = SaptivaClient()
+                    # Explicitly disable mock fallback
+                    client.allow_mock_fallback = False
+                    client.force_mock = False
+                    client.mock_mode = False
 
-                messages = [{"role": "user", "content": "Hi"}]
+                    messages = [{"role": "user", "content": "Hi"}]
 
-                with pytest.raises(ValueError) as exc_info:
-                    async for _ in client.chat_completion_stream(messages):
-                        pass
+                    with pytest.raises(ValueError) as exc_info:
+                        async for _ in client.chat_completion_stream(messages):
+                            pass
 
-                assert "API key is required" in str(exc_info.value)
+                    assert "API key is required" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_chat_completion_stream_handles_invalid_json(self, saptiva_client):
