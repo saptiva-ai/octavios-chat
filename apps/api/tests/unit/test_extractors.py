@@ -261,7 +261,8 @@ class TestThirdPartyExtractor:
         """Should return False when dependencies are missing."""
         extractor = ThirdPartyExtractor()
 
-        with patch("src.services.extractors.third_party.PdfReader", side_effect=ImportError):
+        # Patch to None to simulate missing dependency (health_check checks if PdfReader is None)
+        with patch("src.services.extractors.third_party.PdfReader", None):
             result = await extractor.health_check()
 
             assert result is False
