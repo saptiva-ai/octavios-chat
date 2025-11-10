@@ -62,11 +62,13 @@ class TestRedisCache:
     async def test_close_connection(self):
         """Test closing Redis connection."""
         cache = RedisCache()
-        cache.client = AsyncMock()
+        mock_client = AsyncMock()
+        cache.client = mock_client
 
         await cache.close()
 
-        cache.client.close.assert_awaited_once()
+        # Verify close was called before client was set to None
+        mock_client.close.assert_awaited_once()
         assert cache.client is None
 
     @pytest.mark.asyncio
@@ -232,7 +234,10 @@ class TestRedisCacheOperations:
         # Should be a JSON string
         assert isinstance(stored_value, str)
         parsed = json.loads(stored_value)
-        assert parsed == data
+        # Cache now adds metadata (_cached_at, _cache_params), verify original data is present
+        assert parsed["key"] == data["key"]
+        assert parsed["number"] == data["number"]
+        assert "_cached_at" in parsed  # Metadata should be added
 
     @pytest.mark.asyncio
     async def test_cache_retrieves_parsed_json(self):
