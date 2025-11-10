@@ -8,7 +8,7 @@ from typing import List, Optional, Dict, Any, ClassVar
 from uuid import uuid4
 
 from beanie import Document, Indexed, Link
-from pydantic import Field, BaseModel
+from pydantic import Field, BaseModel, ConfigDict
 
 from .user import User
 
@@ -40,11 +40,11 @@ class FileMetadata(BaseModel):
     pages: Optional[int] = Field(None, description="Number of pages (for PDFs)")
     mimetype: Optional[str] = Field(None, description="MIME type")
 
-    class Config:
+    # Pydantic V2: Replace class Config with model_config
+    model_config = ConfigDict(
         # Ensure compatibility with MongoDB ObjectId serialization
-        json_encoders = {
-            str: str  # Keep file_id as string for flexibility
-        }
+        json_encoders={str: str}  # Keep file_id as string for flexibility
+    )
 
 
 class ConversationState(str, Enum):

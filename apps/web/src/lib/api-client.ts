@@ -83,6 +83,25 @@ export interface ChatResponse {
     docs_used?: number;
     docs_expired?: string[];
   };
+  metadata?: Record<string, any>; // Include audit metadata (report_pdf_url, etc.)
+}
+
+export interface ChatMessageRecord {
+  id: string;
+  chat_id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  status?: string;
+  created_at: string;
+  updated_at?: string;
+  model?: string;
+  tokens?: number;
+  latency_ms?: number;
+  task_id?: string;
+  file_ids?: string[];
+  files?: Array<Record<string, any>>;
+  metadata?: Record<string, any> | null;
+  validation_report_id?: string | null;
 }
 
 export interface DeepResearchRequest {
@@ -228,27 +247,27 @@ class ApiClient {
   }
 
   private getApiBaseUrl(): string {
+    // CRITICAL: Direct inline check - Next.js replaces process.env.NEXT_PUBLIC_* at build time
+    // We MUST use direct access without intermediate variables for replacement to work
+
     // Check if we're in browser environment
     if (typeof window === "undefined") {
-      // Server-side: use environment variable
-      return process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+      // Server-side: use environment variable with fallback chain
+      return (
+        process.env.NEXT_PUBLIC_API_URL ||
+        process.env.API_BASE_URL ||
+        "http://localhost:8001"
+      );
     }
 
-    // Client-side: determine based on environment
-    const isLocal =
-      window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1" ||
-      window.location.hostname.startsWith("192.168.") ||
-      window.location.hostname.endsWith(".local");
-
-    if (isLocal) {
-      // Development: use Next.js proxy (rewrites in next.config.js)
-      // This avoids CORS issues by making requests to same origin
-      return window.location.origin;
-    } else {
-      // Production: use current origin (nginx proxy handles /api routes)
-      return window.location.origin;
+    // Client-side: Direct inline check ensures Next.js static replacement works
+    // This pattern MUST NOT use intermediate constants or the bundler will collapse it
+    if (process.env.NEXT_PUBLIC_API_URL) {
+      return process.env.NEXT_PUBLIC_API_URL;
     }
+
+    // Development fallback only - should never reach here in production builds
+    return window.location.origin;
   }
 
   private initializeClient() {
@@ -470,6 +489,115 @@ class ApiClient {
     }
   }
 
+  /**
+   * Send chat message with streaming support via SSE.
+   * Returns an async generator that yields content chunks.
+   */
+  async *sendChatMessageStream(
+    request: ChatRequest,
+    abortSignal?: AbortSignal,
+  ): AsyncGenerator<
+    | {
+        type: "meta";
+        data: { chat_id: string; user_message_id: string; model: string };
+      }
+    | { type: "chunk"; data: { content: string } }
+    | { type: "done"; data: ChatResponse }
+    | { type: "error"; data: { error: string } },
+    void,
+    unknown
+  > {
+    const payload = { model: "Saptiva Turbo", ...request, stream: true };
+    const token = authTokenGetter?.();
+
+    // Build query params
+    const params = new URLSearchParams();
+
+    // Build URL
+    const baseURL = this.client.defaults.baseURL || "";
+    const url = `${baseURL}/api/chat`;
+
+    // Use fetch with SSE
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+      signal: abortSignal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    if (!response.body) {
+      throw new Error("Response body is null");
+    }
+
+    // Parse SSE stream
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let currentEvent = "";
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (!line.trim() || line.startsWith(":")) continue;
+
+          // Parse SSE format: "event: chunk\ndata: {...}"
+          if (line.startsWith("event:")) {
+            currentEvent = line.slice(6).trim();
+            continue;
+          }
+
+          if (line.startsWith("data:")) {
+            const dataStr = line.slice(5).trim();
+
+            if (dataStr === "[DONE]") {
+              return;
+            }
+
+            try {
+              const parsed = JSON.parse(dataStr);
+
+              // Use the event type from the "event:" line
+              if (currentEvent === "meta") {
+                yield { type: "meta", data: parsed };
+              } else if (currentEvent === "chunk") {
+                yield { type: "chunk", data: parsed };
+              } else if (currentEvent === "done") {
+                yield { type: "done", data: parsed as ChatResponse };
+              } else if (currentEvent === "error") {
+                yield { type: "error", data: parsed };
+              }
+
+              // Reset current event after processing
+              currentEvent = "";
+            } catch (parseError) {
+              console.error("Failed to parse SSE data:", parseError);
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
   // Document endpoints
   async uploadDocument(
     file: File,
@@ -494,6 +622,7 @@ class ApiClient {
         "Idempotency-Key": idempotencyKey,
       },
       withCredentials: true,
+      timeout: 180000, // 3 minutes for file upload with OCR processing
       onUploadProgress: (progressEvent) => {
         if (onProgress && progressEvent.total) {
           const percentCompleted = Math.round(
@@ -540,6 +669,170 @@ class ApiClient {
         axiosConfig,
       );
       return response.data;
+    }
+  }
+
+  // Copiloto 414 - Document Audit endpoints
+  async auditDocument(
+    documentId: string,
+    options: {
+      clientName?: string;
+      policyId?: string;
+      enableDisclaimer?: boolean;
+      enableFormat?: boolean;
+      enableGrammar?: boolean;
+      enableLogo?: boolean;
+    } = {},
+  ): Promise<import("@/types/validation").ValidationReportResponse> {
+    const {
+      clientName,
+      policyId = "auto",
+      enableDisclaimer = true,
+      enableFormat = true,
+      enableGrammar = true,
+      enableLogo = true,
+    } = options;
+
+    const params = new URLSearchParams({
+      doc_id: documentId,
+      policy_id: policyId, // NEW: Use policy_id instead of client_name
+      ...(clientName && { client_name: clientName }), // DEPRECATED: backward compat
+      enable_disclaimer: String(enableDisclaimer),
+      enable_format: String(enableFormat),
+      enable_grammar: String(enableGrammar),
+      enable_logo: String(enableLogo),
+    });
+
+    try {
+      const response = await this.client.post(
+        `/api/review/validate?${params.toString()}`,
+        {},
+        {
+          withCredentials: true,
+        },
+      );
+
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const errorMessage = error.response?.data?.detail || error.message;
+        throw new Error(`Audit failed: ${errorMessage}`);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Invoke audit_file tool in chat (P2.BE.3)
+   *
+   * Audits a document and posts the result as an assistant message in the chat.
+   *
+   * @param documentId - Document ID to audit
+   * @param chatId - Chat session ID where result will be posted
+   * @param policyId - Policy to apply (default: "auto")
+   * @returns ChatMessageRecord with the created audit message
+   */
+  async auditFileInChat(
+    documentId: string,
+    chatId: string,
+    policyId: string = "auto",
+  ): Promise<ChatMessageRecord> {
+    try {
+      const params = new URLSearchParams({
+        doc_id: documentId,
+        chat_id: chatId,
+        policy_id: policyId,
+      });
+
+      const response = await this.client.post(
+        `/api/chat/tools/audit-file?${params.toString()}`,
+        {},
+        {
+          withCredentials: true,
+          timeout: 180000,
+        },
+      );
+
+      return response.data as ChatMessageRecord;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const errorMessage = error.response?.data?.detail || error.message;
+        throw new Error(`Audit tool failed: ${errorMessage}`);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * List documents for the current user
+   *
+   * Optionally filter by conversation ID to get documents for a specific chat.
+   *
+   * @param conversationId - Optional chat/conversation ID to filter by
+   * @returns Array of document metadata
+   */
+  async listDocuments(
+    conversationId?: string,
+  ): Promise<Array<import("@/types/files").FileAttachment>> {
+    try {
+      const params = conversationId
+        ? new URLSearchParams({ conversation_id: conversationId })
+        : undefined;
+
+      const url = params
+        ? `/api/documents?${params.toString()}`
+        : "/api/documents";
+
+      const response = await this.client.get(url, {
+        withCredentials: true,
+      });
+
+      // Convert backend DocumentMetadata to frontend FileAttachment format
+      const documents = response.data.map((doc: any) => ({
+        file_id: doc.doc_id,
+        filename: doc.filename,
+        status: doc.status === "ready" ? "READY" : doc.status.toUpperCase(),
+        bytes: doc.size_bytes,
+        pages: doc.total_pages,
+        mimetype: doc.content_type,
+      }));
+
+      return documents;
+    } catch (error: any) {
+      console.error("API Error Details:", error);
+      throw new Error(
+        `Failed to list documents: ${error.response?.data?.detail || error.message}`,
+      );
+    }
+  }
+
+  /**
+   * Get validation report for a document (Copiloto 414)
+   *
+   * Fetches the most recent validation report if the document has been audited.
+   *
+   * @param documentId - Document ID
+   * @returns ValidationReportResponse with findings and summary
+   * @throws Error if document not found or no validation report exists (404)
+   */
+  async getDocumentValidation(
+    documentId: string,
+  ): Promise<import("@/types/validation").ValidationReportResponse> {
+    try {
+      const response = await this.client.get(
+        `/api/documents/${documentId}/validation`,
+        {
+          withCredentials: true,
+        },
+      );
+
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const errorMessage = error.response?.data?.detail || error.message;
+        throw new Error(`Failed to fetch validation report: ${errorMessage}`);
+      }
+      throw error;
     }
   }
 

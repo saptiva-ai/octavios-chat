@@ -7,7 +7,7 @@ import { ChatComposer, ChatComposerAttachment } from "./ChatComposer";
 import { CompactChatComposer } from "./ChatComposer/CompactChatComposer";
 import { ChatHero } from "./ChatHero";
 import { ChatSkeleton } from "./ChatSkeleton";
-import { LoadingSpinner } from "../ui";
+import { LoadingSpinner, Modal } from "../ui";
 import { ReportPreviewModal } from "../research/ReportPreviewModal";
 import { cn } from "../../lib/utils";
 import type { ToolId } from "@/types/tools";
@@ -15,15 +15,23 @@ import { useAuthStore } from "@/lib/auth-store";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useDocumentReview } from "@/hooks/useDocumentReview";
 import { detectReviewCommand } from "@/lib/review-command-detector";
-import { logDebug } from "@/lib/logger";
+import { logDebug, logError } from "@/lib/logger";
 import toast from "react-hot-toast";
 import { useSettingsStore } from "@/lib/stores/settings-store";
+import { ValidationFindings } from "@/components/validation";
+import { apiClient } from "@/lib/api-client";
+import type { ValidationReportResponse } from "@/types/validation";
+import type {
+  ChatMessage as StoreChatMessage,
+  ChatMessageStatus,
+} from "@/lib/types";
 
 import { FeatureFlagsResponse } from "@/lib/types";
 import { logRender, logState, logAction } from "@/lib/ux-logger";
 import { legacyKeyToToolId, toolIdToLegacyKey } from "@/lib/tool-mapping";
 // Files V1 imports
 import type { FileAttachment } from "@/types/files";
+import type { LastReadyFile } from "@/hooks/useFiles";
 
 interface ChatInterfaceProps {
   messages: ChatMessageProps[];
@@ -53,6 +61,10 @@ interface ChatInterfaceProps {
   filesV1Attachments?: FileAttachment[];
   onAddFilesV1Attachment?: (attachment: FileAttachment) => void;
   onRemoveFilesV1Attachment?: (fileId: string) => void;
+  lastReadyFile?: LastReadyFile | null;
+  // Copiloto 414: Audit progress callback
+  onStartAudit?: (fileId: string, filename: string) => void;
+  onAuditError?: (fileId: string, reason?: string) => void;
 }
 
 export function ChatInterface({
@@ -80,6 +92,10 @@ export function ChatInterface({
   filesV1Attachments = [],
   onAddFilesV1Attachment,
   onRemoveFilesV1Attachment,
+  lastReadyFile,
+  // Copiloto 414: Audit progress callback
+  onStartAudit,
+  onAuditError,
 }: ChatInterfaceProps) {
   const [inputValue, setInputValue] = React.useState("");
   const [attachments, setAttachments] = React.useState<
@@ -89,6 +105,14 @@ export function ChatInterface({
     isOpen: false,
     taskId: "",
     taskTitle: "",
+  });
+  const [auditModal, setAuditModal] = React.useState({
+    isOpen: false,
+    loading: false,
+    documentId: "",
+    filename: "",
+    report: null as ValidationReportResponse | null,
+    error: null as string | null,
   });
   const [submitIntent, setSubmitIntent] = React.useState(false); // Only true after first submit
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
@@ -143,7 +167,7 @@ export function ChatInterface({
   }, [loading, scrollToBottom, messages.length]);
 
   // Review hooks
-  const { messages: chatMessages } = useChatStore();
+  const addMessage = useChatStore((state) => state.addMessage);
   const { startReview } = useDocumentReview();
   const toolVisibility = useSettingsStore((state) => state.toolVisibility);
   const loadToolVisibility = useSettingsStore(
@@ -158,6 +182,123 @@ export function ChatInterface({
       loadToolVisibility();
     }
   }, [loadToolVisibility, toolVisibilityLoaded]);
+
+  const handleCloseAuditModal = React.useCallback(() => {
+    setAuditModal({
+      isOpen: false,
+      loading: false,
+      documentId: "",
+      filename: "",
+      report: null,
+      error: null,
+    });
+  }, []);
+
+  const handleViewAuditReport = React.useCallback(
+    async (
+      _validationReportId: string,
+      documentId: string,
+      filename?: string,
+    ) => {
+      if (!documentId) {
+        return;
+      }
+
+      setAuditModal({
+        isOpen: true,
+        loading: true,
+        documentId,
+        filename: filename ?? "Reporte de auditoría",
+        report: null,
+        error: null,
+      });
+
+      try {
+        const report = await apiClient.getDocumentValidation(documentId);
+        setAuditModal((prev) => ({
+          ...prev,
+          loading: false,
+          report,
+        }));
+      } catch (error) {
+        logError("[ChatInterface] Failed to load audit report", error);
+        const message =
+          error instanceof Error
+            ? error.message
+            : "No se pudo cargar el reporte de auditoría.";
+        toast.error("No se pudo cargar el reporte de auditoría.");
+        setAuditModal((prev) => ({
+          ...prev,
+          loading: false,
+          error: message,
+        }));
+      }
+    },
+    [],
+  );
+
+  const handleReAuditDocument = React.useCallback(
+    async (documentId: string, _jobId?: string, filename?: string) => {
+      if (!documentId) {
+        return;
+      }
+
+      if (!currentChatId) {
+        toast.error("Necesitas una conversación activa para re-auditar.");
+        return;
+      }
+
+      const displayName = filename ?? "Documento auditado";
+      onStartAudit?.(documentId, displayName);
+
+      try {
+        const response = await apiClient.auditFileInChat(
+          documentId,
+          currentChatId,
+          "auto",
+        );
+
+        if (response) {
+          const newMessage: StoreChatMessage = {
+            id: response.id,
+            content: response.content,
+            role: response.role,
+            timestamp: response.created_at,
+            status:
+              (response.status as ChatMessageStatus | undefined) || "delivered",
+            model: response.model,
+            tokens: response.tokens,
+            latency: response.latency_ms,
+            task_id: response.task_id,
+            metadata: {
+              ...(response.metadata ?? {}),
+              validation_report_id: response.validation_report_id,
+              document_id: documentId,
+              filename: displayName,
+            },
+          };
+
+          addMessage(newMessage);
+        }
+
+        toast.success(
+          "Re-auditoría solicitada. Recibirás un nuevo reporte en unos momentos.",
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Error desconocido al re-auditar.";
+        logError("[ChatInterface] Failed to re-audit document", {
+          documentId,
+          error,
+        });
+        onAuditError?.(documentId, message);
+        toast.error("No se pudo re-auditar el documento. Inténtalo de nuevo.");
+      }
+    },
+    [addMessage, currentChatId, onAuditError, onStartAudit],
+  );
 
   const handleSend = React.useCallback(async () => {
     const trimmed = inputValue.trim();
@@ -342,8 +483,12 @@ export function ChatInterface({
                 filesV1Attachments={filesV1Attachments}
                 onAddFilesV1Attachment={onAddFilesV1Attachment}
                 onRemoveFilesV1Attachment={onRemoveFilesV1Attachment}
+                lastReadyFile={lastReadyFile}
                 conversationId={currentChatId || undefined}
                 featureFlags={featureFlags}
+                // Copiloto 414: Audit progress callback
+                onStartAudit={onStartAudit}
+                onAuditError={onAuditError}
               />
             </div>
           </motion.section>
@@ -380,6 +525,8 @@ export function ChatInterface({
                           taskTitle: taskTitle ?? "",
                         })
                       }
+                      onViewAuditReport={handleViewAuditReport}
+                      onReAuditDocument={handleReAuditDocument}
                     />
                   ))}
                 </div>
@@ -406,8 +553,12 @@ export function ChatInterface({
               filesV1Attachments={filesV1Attachments}
               onAddFilesV1Attachment={onAddFilesV1Attachment}
               onRemoveFilesV1Attachment={onRemoveFilesV1Attachment}
+              lastReadyFile={lastReadyFile}
               conversationId={currentChatId || undefined}
               featureFlags={featureFlags}
+              // Copiloto 414: Audit progress callback
+              onStartAudit={onStartAudit}
+              onAuditError={onAuditError}
             />
           </motion.div>
         )}
@@ -421,6 +572,30 @@ export function ChatInterface({
           setReportModal({ isOpen: false, taskId: "", taskTitle: "" })
         }
       />
+
+      <Modal
+        isOpen={auditModal.isOpen}
+        onClose={handleCloseAuditModal}
+        title={auditModal.filename || "Reporte de auditoría"}
+        size="xl"
+        className="bg-zinc-900 text-zinc-100 border border-zinc-800"
+      >
+        {auditModal.loading ? (
+          <div className="flex items-center justify-center py-12">
+            <LoadingSpinner />
+          </div>
+        ) : auditModal.error ? (
+          <p className="text-sm text-red-400">{auditModal.error}</p>
+        ) : auditModal.report ? (
+          <div className="max-h-[70vh] overflow-y-auto pr-2">
+            <ValidationFindings report={auditModal.report} />
+          </div>
+        ) : (
+          <p className="text-sm text-zinc-400">
+            Selecciona un reporte de auditoría para ver los detalles.
+          </p>
+        )}
+      </Modal>
     </div>
   );
 }

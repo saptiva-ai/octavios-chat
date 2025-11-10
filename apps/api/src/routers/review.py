@@ -5,7 +5,8 @@ Document review router - handles review workflow and SSE events.
 import asyncio
 import json
 from datetime import datetime
-from typing import AsyncGenerator
+from pathlib import Path
+from typing import AsyncGenerator, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -18,6 +19,7 @@ from ..core.config import get_settings
 from ..models.user import User
 from ..models.document import Document, DocumentStatus
 from ..models.review_job import ReviewJob, ReviewStatus
+from ..models.validation_report import ValidationReport
 from ..schemas.review import (
     ReviewStartRequest,
     ReviewStartResponse,
@@ -33,7 +35,11 @@ from ..schemas.review import (
     ColorAuditResponse,
     ColorPairResponse,
 )
+from ..schemas.audit_message import ValidationReportResponse
+from ..services.minio_storage import get_minio_storage
 from ..services.review_service import review_service
+from ..services.validation_coordinator import validate_document
+from ..services.policy_manager import resolve_policy
 
 logger = structlog.get_logger(__name__)
 
@@ -411,6 +417,309 @@ async def get_review_report(
     )
 
     return response
+
+
+@router.post("/validate", response_model=ValidationReportResponse, status_code=status.HTTP_200_OK)
+async def validate_document_414(
+    doc_id: str,
+    policy_id: str = "auto",
+    client_name: str = None,  # DEPRECATED: Use policy_id instead
+    enable_disclaimer: bool = True,
+    enable_format: bool = True,
+    enable_logo: bool = True,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Validate document against Copiloto 414 compliance rules.
+
+    **V2 UPDATE**: Now supports policy-based validation with auto-detection
+
+    Validates:
+    - **Disclaimers**: Presence and coverage on all pages (footer detection)
+    - **Format**: Number formatting, fonts, colors (brand compliance)
+    - **Logo**: Presence, size, position on required pages
+
+    Args:
+        doc_id: Document ID to validate
+        policy_id: Policy to apply (default: "auto")
+            - "auto": Auto-detect policy based on document content
+            - "414-std": Standard 414 Capital validation
+            - "414-strict": Strict validation for premium clients
+            - "banamex": Banamex-specific validation
+            - "afore-xxi": Afore XXI-specific validation
+        client_name: DEPRECATED - Use policy_id instead. Only used if policy doesn't specify client_name
+        enable_disclaimer: Run disclaimer auditor (default: True)
+        enable_format: Run format auditor (default: True)
+        enable_logo: Run logo auditor (default: True)
+        current_user: Authenticated user
+
+    Returns:
+        ValidationReportResponse with findings and summary
+
+    Example (with auto-detection):
+        POST /api/review/validate?doc_id=abc123&policy_id=auto
+
+    Example (with explicit policy):
+        POST /api/review/validate?doc_id=abc123&policy_id=banamex
+
+    Example (legacy - backward compatible):
+        POST /api/review/validate?doc_id=abc123&client_name=Banamex
+
+        Response:
+        {
+          "job_id": "val-xyz789",
+          "status": "done",
+          "findings": [
+            {
+              "id": "disclaimer-missing-5-abc",
+              "category": "compliance",
+              "rule": "disclaimer_coverage",
+              "issue": "Disclaimer ausente o inválido en página 5",
+              "severity": "high",
+              "location": {"page": 5, "bbox": null},
+              "suggestion": "Agregar disclaimer válido en el footer de la página 5"
+            }
+          ],
+          "summary": {
+            "total_findings": 1,
+            "policy_id": "banamex",
+            "policy_name": "Banamex Custom",
+            "disclaimer_coverage": 0.95,
+            "findings_by_severity": {"high": 1}
+          }
+        }
+    """
+    logger.info(
+        "Validation 414 requested",
+        doc_id=doc_id,
+        policy_id=policy_id,
+        client_name=client_name,
+        user_id=str(current_user.id),
+        enable_disclaimer=enable_disclaimer,
+        enable_format=enable_format,
+        enable_logo=enable_logo,
+    )
+
+    # ========================================================================
+    # 1. Get and validate document
+    # ========================================================================
+
+    doc = await Document.get(doc_id)
+
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        )
+
+    # Check ownership
+    if doc.user_id != str(current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to validate this document",
+        )
+
+    # Check document status
+    if doc.status != DocumentStatus.READY:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Document not ready for validation. Status: {doc.status}",
+        )
+
+    # ========================================================================
+    # 2. Get PDF path from local filesystem (V1)
+    # ========================================================================
+
+    temp_pdf_path: Optional[Path] = None
+    try:
+        pdf_path = Path(doc.minio_key)
+
+        if not pdf_path.exists():
+            minio_storage = get_minio_storage()
+            pdf_path, is_temp = minio_storage.materialize_document(
+                doc.minio_key,
+                filename=doc.filename,
+            )
+            if is_temp:
+                temp_pdf_path = pdf_path
+
+        logger.info(
+            "PDF path resolved for validation",
+            doc_id=doc_id,
+            pdf_path=str(pdf_path),
+            source="temp" if temp_pdf_path else "local",
+            size_bytes=pdf_path.stat().st_size,
+        )
+
+    except Exception as exc:
+        logger.error(
+            "Failed to access PDF file",
+            doc_id=doc_id,
+            error=str(exc),
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve document: {exc}",
+        )
+
+    # ========================================================================
+    # 2.5. Resolve Policy (NEW: P2.BE.1)
+    # ========================================================================
+
+    try:
+        # Resolve policy configuration
+        policy = await resolve_policy(policy_id, document=doc)
+
+        logger.info(
+            "Policy resolved for validation",
+            doc_id=doc_id,
+            policy_id=policy.id,
+            policy_name=policy.name,
+            requested_policy=policy_id,
+        )
+
+        # Use policy client_name if available, otherwise fall back to parameter
+        effective_client_name = policy.client_name or client_name
+
+        # Override enable flags based on policy configuration
+        policy_disclaimers = policy.disclaimers or {}
+        policy_logo = policy.logo or {}
+        policy_format = policy.format or {}
+
+        effective_enable_disclaimer = enable_disclaimer and policy_disclaimers.get("enabled", True)
+        effective_enable_format = enable_format and policy_format.get("enabled", True)
+        effective_enable_logo = enable_logo and policy_logo.get("enabled", True)
+
+        logger.info(
+            "Validation config from policy",
+            policy_id=policy.id,
+            client_name=effective_client_name,
+            enable_disclaimer=effective_enable_disclaimer,
+            enable_format=effective_enable_format,
+            enable_logo=effective_enable_logo,
+        )
+
+    except ValueError as policy_exc:
+        logger.error(
+            "Policy resolution failed",
+            policy_id=policy_id,
+            error=str(policy_exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid policy: {policy_exc}",
+        )
+
+    # ========================================================================
+    # 3. Run validation with resolved policy
+    # ========================================================================
+
+    try:
+        report = await validate_document(
+            document=doc,
+            pdf_path=pdf_path,
+            client_name=effective_client_name,
+            enable_disclaimer=effective_enable_disclaimer,
+            enable_format=effective_enable_format,
+            enable_logo=effective_enable_logo,
+            policy_config=policy.to_compliance_config(),  # NEW: Pass policy config
+            policy_id=policy.id,  # NEW: Track which policy was used
+            policy_name=policy.name,
+        )
+
+        # Add policy info to report summary
+        if hasattr(report, 'summary') and isinstance(report.summary, dict):
+            report.summary["policy_id"] = policy.id
+            report.summary["policy_name"] = policy.name
+
+        logger.info(
+            "Validation 414 completed",
+            doc_id=doc_id,
+            job_id=report.job_id,
+            total_findings=len(report.findings),
+        )
+
+        # ====================================================================
+        # INT1: Save validation report to MongoDB
+        # ====================================================================
+
+        try:
+            # Create ValidationReport document
+            validation_report = ValidationReport(
+                document_id=doc_id,
+                user_id=str(current_user.id),
+                job_id=report.job_id,
+                status="done" if report.status == "done" else "error",
+                client_name=client_name,
+                auditors_enabled={
+                    "disclaimer": enable_disclaimer,
+                    "format": enable_format,
+                    "logo": enable_logo,
+                },
+                findings=[f.model_dump() for f in report.findings],
+                summary=report.summary,
+                attachments=report.attachments,
+            )
+
+            # Insert into MongoDB
+            await validation_report.insert()
+
+            logger.info(
+                "Validation report saved to MongoDB",
+                report_id=str(validation_report.id),
+                doc_id=doc_id,
+                findings_count=len(report.findings),
+            )
+
+            # Update document with link to validation report
+            doc.validation_report_id = str(validation_report.id)
+            await doc.save()
+
+            logger.info(
+                "Document linked to validation report",
+                doc_id=doc_id,
+                validation_report_id=str(validation_report.id),
+            )
+
+        except Exception as save_exc:
+            # Log error but don't fail the request (report was generated successfully)
+            logger.error(
+                "Failed to save validation report to MongoDB",
+                doc_id=doc_id,
+                error=str(save_exc),
+                exc_info=True,
+            )
+
+        return report
+
+    except Exception as exc:
+        logger.error(
+            "Validation 414 failed",
+            doc_id=doc_id,
+            error=str(exc),
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Validation failed: {exc}",
+        )
+    finally:
+        if temp_pdf_path and temp_pdf_path.exists():
+            try:
+                temp_pdf_path.unlink()
+                logger.debug(
+                    "Temporary PDF cleaned up after validation",
+                    doc_id=doc_id,
+                    pdf_path=str(temp_pdf_path),
+                )
+            except Exception as cleanup_exc:
+                logger.warning(
+                    "Failed to cleanup temporary PDF",
+                    doc_id=doc_id,
+                    pdf_path=str(temp_pdf_path),
+                    error=str(cleanup_exc),
+                )
 
 
 async def _process_review_job(job_id: str, doc_id: str):

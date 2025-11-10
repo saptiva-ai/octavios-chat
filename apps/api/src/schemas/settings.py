@@ -21,7 +21,7 @@ class SaptivaKeyStatus(BaseModel):
 
 class SaptivaKeyUpdateRequest(BaseModel):
     api_key: str = Field(..., min_length=12, max_length=256, repr=False)
-    validate: bool = Field(default=True, description="Validate the key against SAPTIVA before saving")
+    validate_key: bool = Field(default=True, description="Validate the key against SAPTIVA before saving")
 
 
 class SaptivaKeyUpdateResponse(SaptivaKeyStatus):

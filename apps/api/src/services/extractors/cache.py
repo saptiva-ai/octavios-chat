@@ -256,7 +256,7 @@ class ExtractionCache:
             logger.warning("Compression failed, storing uncompressed", error=str(exc))
             return text_bytes
 
-    def _decompress_text(self, compressed_bytes: bytes) -> str:
+    def _decompress_text(self, compressed_bytes: bytes) -> Optional[str]:
         """
         Decompress text using zstd.
 
@@ -264,7 +264,7 @@ class ExtractionCache:
             compressed_bytes: Compressed or raw bytes
 
         Returns:
-            Decompressed text string
+            Decompressed text string, or None if decompression fails
         """
         # Try decompression first
         if self._decompressor is not None:
@@ -276,7 +276,16 @@ class ExtractionCache:
                 pass
 
         # Fallback to direct decode
-        return compressed_bytes.decode("utf-8")
+        try:
+            return compressed_bytes.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            # Data is corrupted or not text (e.g., binary image data)
+            logger.warning(
+                "Failed to decode cached data, may be corrupted",
+                error=str(exc)[:100],
+                bytes_preview=compressed_bytes[:20].hex(),
+            )
+            return None
 
     async def get(
         self, provider: str, media_type: MediaType, data: bytes
@@ -311,6 +320,12 @@ class ExtractionCache:
 
             # Decompress and return
             text = self._decompress_text(cached_bytes)
+
+            # If decompression failed, treat as cache miss
+            if text is None:
+                self._cache_misses += 1
+                logger.debug("Cache data corrupted, treating as miss", cache_key=cache_key)
+                return None
 
             self._cache_hits += 1
             self._bytes_saved += len(data)

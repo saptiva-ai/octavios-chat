@@ -205,9 +205,48 @@ class Settings(BaseSettings):
     # Controls which backend is used for PDF/image text extraction
     extractor_provider: str = Field(
         default="third_party",
-        description="Text extraction provider: 'third_party' (pypdf+pytesseract) or 'saptiva' (Saptiva Native Tools)",
+        description="Text extraction provider: 'third_party' (pypdf+pytesseract), 'saptiva' (Saptiva Native Tools) or 'huggingface' (DeepSeek OCR)",
         alias="EXTRACTOR_PROVIDER"
     )
+    huggingface_ocr_endpoint: str = Field(
+        default="https://saptivaDev1-DeepSeek-OCR-Space.hf.space/ocr",
+        description="Hugging Face OCR endpoint (DeepSeek or compatible)",
+        alias="HF_OCR_ENDPOINT"
+    )
+    huggingface_ocr_prompt_mode: str = Field(
+        default="auto",
+        description="Prompt mode for Hugging Face OCR: 'auto', 'plain', or 'markdown'",
+        alias="HF_OCR_PROMPT_MODE"
+    )
+    huggingface_ocr_prompt_plain: str = Field(
+        default="<image>\\nFree OCR.",
+        description="Prompt used when requesting plain text output from Hugging Face OCR",
+        alias="HF_OCR_PROMPT_PLAIN"
+    )
+    huggingface_ocr_prompt_markdown: str = Field(
+        default="<image>\\nConvert to markdown.",
+        description="Prompt used when requesting markdown output from Hugging Face OCR",
+        alias="HF_OCR_PROMPT_MARKDOWN"
+    )
+    huggingface_ocr_timeout: float = Field(
+        default=45.0,
+        description="Timeout (seconds) for Hugging Face OCR requests",
+        alias="HF_OCR_TIMEOUT"
+    )
+    huggingface_ocr_max_retries: int = Field(
+        default=3,
+        description="Maximum retries for Hugging Face OCR calls",
+        alias="HF_OCR_MAX_RETRIES"
+    )
+
+    @computed_field
+    @property
+    def huggingface_ocr_token(self) -> str:
+        """Hugging Face token for DeepSeek OCR integration."""
+        try:
+            return get_secret("HF_TOKEN", required=False) or os.getenv("HF_TOKEN", "")
+        except Exception:
+            return os.getenv("HF_TOKEN", "")
 
     # PDF OCR Fallback Configuration (for image-only/scanned PDFs)
     max_ocr_pages: int = Field(

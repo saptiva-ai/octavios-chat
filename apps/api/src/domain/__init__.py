@@ -20,8 +20,7 @@ from .chat_response_builder import (
 )
 from .chat_strategy import (
     ChatStrategy,
-    SimpleChatStrategy,
-    ChatStrategyFactory
+    SimpleChatStrategy
 )
 
 __all__ = [
@@ -38,5 +37,4 @@ __all__ = [
     # Strategies
     'ChatStrategy',
     'SimpleChatStrategy',
-    'ChatStrategyFactory',
 ]

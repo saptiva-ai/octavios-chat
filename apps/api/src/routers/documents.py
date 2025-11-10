@@ -140,6 +140,61 @@ async def upload_document_legacy(
         ) from exc
 
 
+@router.get("", response_model=list[DocumentMetadata])
+async def list_documents(
+    conversation_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    List documents for the current user.
+
+    Args:
+        conversation_id: Optional filter by conversation/chat session
+    """
+    from ..models.chat import ChatSession
+
+    # If conversation_id provided, get documents attached to that session
+    if conversation_id:
+        session = await ChatSession.get(conversation_id)
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found",
+            )
+
+        # Check ownership
+        if session.user_id != str(current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to access this conversation",
+            )
+
+        # Get documents by IDs from session
+        documents = []
+        for doc_id in session.attached_file_ids:
+            doc = await Document.get(doc_id)
+            if doc and doc.user_id == str(current_user.id):
+                documents.append(doc)
+    else:
+        # List all user's documents
+        documents = await Document.find(Document.user_id == str(current_user.id)).to_list()
+
+    # Convert to response format
+    return [
+        DocumentMetadata(
+            doc_id=str(doc.id),
+            filename=doc.filename,
+            content_type=doc.content_type,
+            size_bytes=doc.size_bytes,
+            total_pages=doc.total_pages,
+            status=doc.status.value,
+            created_at=doc.created_at.isoformat(),
+            minio_url=None,  # V1: Always None for temp storage
+        )
+        for doc in documents
+    ]
+
+
 @router.get("/{doc_id}", response_model=DocumentMetadata)
 async def get_document(
     doc_id: str,

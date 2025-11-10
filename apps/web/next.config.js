@@ -4,6 +4,10 @@ const nextConfig = {
   output: 'standalone',
   trailingSlash: false,
   // Use default .next directory - volume is mounted there in Docker
+  generateBuildId: async () => {
+    // Force new build ID to bust browser cache after proxy fix
+    return `build-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+  },
   env: {
     CUSTOM_KEY: process.env.CUSTOM_KEY,
   },

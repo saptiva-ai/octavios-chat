@@ -474,7 +474,8 @@ function LegacyChatShell({
                 alt="Saptiva AI"
                 width={120}
                 height={32}
-                className="h-8 w-auto"
+                className="h-8"
+                style={{ width: "auto" }}
                 priority
               />
             </div>

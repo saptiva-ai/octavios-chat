@@ -5,13 +5,14 @@
 reload-env reload-env-service rebuild-api rebuild-web rebuild-all \
 push-registry push-registry-fast deploy-registry deploy-prod deploy deploy-clean deploy-quick deploy-tar \
 deploy-fast deploy-tar-fast logs-prod logs-api-prod logs-web-prod logs-mongo-prod logs-redis-prod ssh-prod status-prod \
+deploy-demo deploy-demo-fast deploy-demo-safe status-demo logs-demo logs-demo-api logs-demo-web logs-demo-mongo logs-demo-redis ssh-demo setup-demo-server \
 db-migrate db-backup db-restore db-stats db-collections db-fix-drafts \
 backup-mongodb-prod restore-mongodb-prod backup-volumes monitor-backups \
 redis-stats redis-monitor generate-credentials rotate-mongo-password rotate-redis-password reset \
 debug-containers debug-api debug-models \
 debug-file-sync debug-endpoints debug-logs-errors debug-network debug-full \
 troubleshoot resources resources-monitor docker-cleanup docker-cleanup-aggressive \
-test-sh lint-sh fix-sh audit-tests test-integration test-unit-host \
+test-sh lint-sh fix-sh audit-tests test-integration test-unit-host test-benchmark convert-markdown \
 ci-status ci-logs ci-logs-failed ci-watch ci-list ci-rerun ci-jobs \
 obs-up obs-down obs-logs obs-restart obs-status obs-clean venv-install
 
@@ -19,10 +20,9 @@ obs-up obs-down obs-logs obs-restart obs-status obs-clean venv-install
 # CONFIGURATION
 # ============================================================================
 
-# Project defaults - NONE: Force user to configure
-# Users must run 'make setup' or 'make setup-interactive' first
-DEFAULT_PROJECT_DISPLAY_NAME :=
-DEFAULT_COMPOSE_PROJECT_NAME :=
+# Project defaults
+DEFAULT_PROJECT_DISPLAY_NAME := CopilotOS
+DEFAULT_COMPOSE_PROJECT_NAME := octavios
 
 # Environment
 DEV_ENV_FILE := envs/.env
@@ -248,6 +248,15 @@ help:
 	@echo "  $(GREEN)make deploy-safe$(NC)          🔒 Deployment con backups automáticos (RECOMENDADO)"
 	@echo "  $(YELLOW)make deploy-status$(NC)        Revisar estado del servidor"
 	@echo ""
+	@echo "$(GREEN) ▸ Demo Server (Capital 414 - 34.172.67.93):$(NC)"
+	@echo "  $(GREEN)make setup-demo-server$(NC)    🚀 Setup demo server (first time only)"
+	@echo "  $(GREEN)make deploy-demo$(NC)          Deploy to demo server (full build)"
+	@echo "  $(YELLOW)make deploy-demo-fast$(NC)     Deploy to demo server (skip build)"
+	@echo "  $(GREEN)make deploy-demo-safe$(NC)     🔒 Safe deploy with backups (RECOMMENDED)"
+	@echo "  $(YELLOW)make status-demo$(NC)          Check demo server status"
+	@echo "  $(YELLOW)make logs-demo$(NC)            View demo server logs"
+	@echo "  $(YELLOW)make ssh-demo$(NC)             SSH into demo server"
+	@echo ""
 	@echo "$(GREEN) ▸ Rollback & Recovery:$(NC)"
 	@echo "  $(YELLOW)make rollback$(NC)             ▸ Rollback to previous version (automatic)"
 	@echo "  $(YELLOW)make deploy-history$(NC)       Show deployment history and versions"
@@ -317,33 +326,20 @@ setup-interactive-prod:
 	@./scripts/interactive-env-setup.sh production
 	@$(MAKE) --no-print-directory venv-install
 
-## Ensure environment file exists and is properly configured
+## Ensure environment file exists (non-interactive fallback)
 ensure-env:
 	@if [ ! -f $(DEV_ENV_FILE) ]; then \
-		echo "$(RED)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"; \
-		echo "$(RED)✖ ERROR: Environment not configured$(NC)"; \
-		echo "$(RED)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"; \
-		echo ""; \
-		echo "$(YELLOW)You must configure your project first.$(NC)"; \
-		echo ""; \
-		echo "$(BOLD)Run one of these commands:$(NC)"; \
-		echo "  $(GREEN)make setup$(NC)        $(CYAN)# Interactive setup (recommended)$(NC)"; \
-		echo "  $(GREEN)make setup-quick$(NC)  $(CYAN)# Quick setup with example config$(NC)"; \
-		echo ""; \
-		exit 1; \
-	fi; \
-	PROJECT_NAME=$$(grep "^COMPOSE_PROJECT_NAME=" $(DEV_ENV_FILE) 2>/dev/null | cut -d'=' -f2 | tr -d '"' | tr -d "'" | xargs); \
-	if [ -z "$$PROJECT_NAME" ]; then \
-		echo "$(RED)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"; \
-		echo "$(RED)✖ ERROR: Project name not configured$(NC)"; \
-		echo "$(RED)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"; \
-		echo ""; \
-		echo "$(YELLOW)Your .env file exists but COMPOSE_PROJECT_NAME is not set.$(NC)"; \
-		echo ""; \
-		echo "$(BOLD)Fix this by running:$(NC)"; \
-		echo "  $(GREEN)make configure$(NC)  $(CYAN)# Update your configuration$(NC)"; \
-		echo ""; \
-		exit 1; \
+		if [ -f $(DEV_ENV_FALLBACK) ]; then \
+			echo "$(YELLOW)Creating $(DEV_ENV_FILE) from $(DEV_ENV_FALLBACK)...$(NC)"; \
+			cp $(DEV_ENV_FALLBACK) $(DEV_ENV_FILE); \
+		elif [ -f $(DEV_ENV_EXAMPLE) ]; then \
+			echo "$(YELLOW)Creating $(DEV_ENV_FILE) from $(DEV_ENV_EXAMPLE)...$(NC)"; \
+			cp $(DEV_ENV_EXAMPLE) $(DEV_ENV_FILE); \
+		else \
+			echo "$(RED)Error: No environment file found!$(NC)"; \
+			echo "Please create $(DEV_ENV_FILE) or $(DEV_ENV_FALLBACK)"; \
+			exit 1; \
+		fi; \
 	fi
 
 ## Sync development environment file with interactive configuration
@@ -391,36 +387,8 @@ configure:
 	@echo "$(YELLOW)Tip: Restart running services to apply changes.$(NC)"
 	@echo ""
 
-## Quick setup (minimal prompts, uses example files)
-setup-quick: venv-install
-	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo "$(BLUE)▸ Quick Setup$(NC)"
-	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo ""
-	@if [ ! -f $(DEV_ENV_EXAMPLE) ]; then \
-		echo "$(RED)Error: $(DEV_ENV_EXAMPLE) not found!$(NC)"; \
-		exit 1; \
-	fi
-	@echo "$(YELLOW)This will create a basic configuration from the example file.$(NC)"
-	@echo "$(YELLOW)You'll only need to provide a project name.$(NC)"
-	@echo ""
-	@read -p "$(CYAN)Enter your project name (e.g., MyChat): $(NC)" PROJECT_NAME; \
-	if [ -z "$$PROJECT_NAME" ]; then \
-		echo "$(RED)✖ Project name is required!$(NC)"; \
-		exit 1; \
-	fi; \
-	PROJECT_SLUG=$$(echo "$$PROJECT_NAME" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$$//'); \
-	echo ""; \
-	echo "$(CYAN)  Project name: $$PROJECT_NAME$(NC)"; \
-	echo "$(CYAN)  Project slug: $$PROJECT_SLUG$(NC)"; \
-	echo ""; \
-	cp $(DEV_ENV_EXAMPLE) $(DEV_ENV_FILE); \
-	sed -i.bak "s/^COMPOSE_PROJECT_NAME=.*/COMPOSE_PROJECT_NAME=$$PROJECT_SLUG/" $(DEV_ENV_FILE); \
-	sed -i.bak "s/^MONGODB_USER=.*/MONGODB_USER=$${PROJECT_SLUG}_user/" $(DEV_ENV_FILE); \
-	sed -i.bak "s/^MONGODB_DATABASE=.*/MONGODB_DATABASE=$$PROJECT_SLUG/" $(DEV_ENV_FILE); \
-	sed -i.bak "s/your-project-bridge/$$PROJECT_SLUG-bridge/g" $(DEV_ENV_FILE); \
-	rm -f $(DEV_ENV_FILE).bak; \
-	chmod 600 $(DEV_ENV_FILE)
+## Quick setup (non-interactive, uses example files)
+setup-quick: ensure-env venv-install
 	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo "$(GREEN)◆ Quick setup completed!$(NC)"
 	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
@@ -431,35 +399,6 @@ setup-quick: venv-install
 	@echo "  2. Run: $(GREEN)make dev$(NC)"
 	@echo "  3. Run: $(GREEN)make create-demo-user$(NC)"
 	@echo "  4. Visit: $(BLUE)http://localhost:3000$(NC)"
-	@echo ""
-
-## Create external volumes for production (run BEFORE deploying with external volumes)
-create-external-volumes:
-	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo "$(BLUE)▸ Creating External Volumes for Production$(NC)"
-	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo ""
-	@if [ -f "$(DEV_ENV_FILE)" ]; then \
-		PROJECT_NAME=$$(grep "^COMPOSE_PROJECT_NAME=" $(DEV_ENV_FILE) | cut -d'=' -f2 | tr -d '"' | tr -d "'"); \
-		PROJECT_NAME=$${PROJECT_NAME:-$(PROJECT_NAME)}; \
-	else \
-		PROJECT_NAME=$(PROJECT_NAME); \
-	fi; \
-	echo "$(CYAN)  ℹ Using project name: $$PROJECT_NAME$(NC)"; \
-	echo ""; \
-	for volume in mongodb_data mongodb_config redis_data; do \
-		VOLUME_NAME="$${PROJECT_NAME}_$${volume}"; \
-		if docker volume inspect $$VOLUME_NAME >/dev/null 2>&1; then \
-			echo "$(YELLOW)  ▲ Volume $$VOLUME_NAME already exists$(NC)"; \
-		else \
-			docker volume create $$VOLUME_NAME; \
-			echo "$(GREEN)  ✓ Created volume: $$VOLUME_NAME$(NC)"; \
-		fi; \
-	done
-	@echo ""
-	@echo "$(GREEN)◆ External volumes ready!$(NC)"
-	@echo "$(YELLOW)Next: Deploy with external volumes:$(NC)"
-	@echo "  $(GREEN)docker compose -f infra/docker-compose.yml -f infra/docker-compose.volumes-external.yml up -d$(NC)"
 	@echo ""
 
 # ============================================================================
@@ -1279,6 +1218,55 @@ shell-db:
 shell-redis:
 	@docker exec -it $(PROJECT_NAME)-redis redis-cli
 
+## MinIO shell
+shell-minio:
+	@echo "$(YELLOW)Opening MinIO shell...$(NC)"
+	@echo "$(BLUE)MinIO Console UI: http://localhost:9001$(NC)"
+	@echo "$(BLUE)MinIO API: http://localhost:9000$(NC)"
+	@docker exec -it $(PROJECT_NAME)-minio sh
+
+## Open MinIO Web Console
+minio-console:
+	@echo "$(GREEN)Opening MinIO Console...$(NC)"
+	@echo "$(BLUE)URL: http://localhost:9001$(NC)"
+	@echo "$(BLUE)Username: $(MINIO_ROOT_USER)$(NC)"
+	@echo "$(BLUE)Password: $(MINIO_ROOT_PASSWORD)$(NC)"
+	@echo ""
+	@if command -v xdg-open > /dev/null; then \
+		xdg-open http://localhost:9001; \
+	elif command -v open > /dev/null; then \
+		open http://localhost:9001; \
+	else \
+		echo "$(YELLOW)Please open http://localhost:9001 manually$(NC)"; \
+	fi
+
+## MinIO statistics
+minio-stats:
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BLUE)▸ MinIO Storage Statistics$(NC)"
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Service Status:$(NC)"
+	@docker ps --filter "name=minio" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" || true
+	@echo ""
+	@echo "$(YELLOW)Storage Size:$(NC)"
+	@docker exec $(PROJECT_NAME)-minio du -sh /data 2>/dev/null || echo "Cannot check storage"
+	@echo ""
+	@echo "$(GREEN)Access MinIO Console: http://localhost:9001$(NC)"
+	@echo "$(GREEN)Access MinIO API: http://localhost:9000$(NC)"
+
+## Clean MinIO data
+minio-clean:
+	@echo "$(RED)▲  WARNING: This will delete ALL MinIO data!$(NC)"
+	@read -p "Type 'yes' to confirm: " CONFIRM; \
+	if [ "$$CONFIRM" = "yes" ]; then \
+		echo "$(YELLOW)Cleaning MinIO data...$(NC)"; \
+		$(DOCKER_COMPOSE_DEV) exec minio rm -rf /data/* && \
+		echo "$(GREEN)✓ MinIO data cleaned$(NC)"; \
+	else \
+		echo "$(BLUE)Cancelled$(NC)"; \
+	fi
+
 # ============================================================================
 # DEBUGGING & DIAGNOSTICS
 # ============================================================================
@@ -1538,6 +1526,50 @@ test-api-file:
 test-api-parallel:
 	@echo "$(YELLOW)Running API tests in parallel...$(NC)"
 	@$(DOCKER_COMPOSE_DEV) exec api pytest tests/ -v -n auto
+
+## Run OCR benchmark (compare Tesseract, Saptiva, DeepSeek)
+test-benchmark:
+	@echo "$(YELLOW)Running OCR benchmark...$(NC)"
+	@$(DOCKER_COMPOSE_DEV) exec api python -m tests.test_ocr_benchmark \
+		--pdf /app/../../tests/data/capital414/Capital414_presentacion.pdf \
+		--pages 3 \
+		--output /app/../../tests/reports \
+		--deepseek-endpoint "$(HF_OCR_ENDPOINT)" \
+		--deepseek-token "$(HF_TOKEN)"
+	@echo "$(GREEN)✅ OCR Benchmark Completed$(NC)"
+	@echo "$(BLUE)Reports saved to: tests/reports/$(NC)"
+	@echo "  - ocr_benchmark.json"
+	@echo "  - ocr_benchmark.md"
+
+## Convert PDFs to Markdown using local OCR extraction (for comparison with external pipelines)
+convert-markdown: venv-install
+	@echo "$(YELLOW)Converting PDFs to Markdown using production OCR pipeline...$(NC)"
+	@if [ ! -d "$(VENV_DIR)" ]; then \
+		echo "$(RED)Error: Virtual environment not found$(NC)"; \
+		echo "$(YELLOW)Run 'make venv-install' first$(NC)"; \
+		exit 1; \
+	fi
+	@if [ ! -d "tests/inputs_pdfs" ]; then \
+		mkdir -p tests/inputs_pdfs tests/outputs_markdown; \
+		echo "$(YELLOW)⚠️  Created test directories$(NC)"; \
+		echo "$(YELLOW)   Place PDFs in: tests/inputs_pdfs/$(NC)"; \
+	fi
+	@if [ -z "$$(ls -A tests/inputs_pdfs/*.pdf 2>/dev/null)" ]; then \
+		echo "$(RED)❌ No PDF files found in tests/inputs_pdfs/$(NC)"; \
+		echo "$(YELLOW)   Place PDFs to convert in: tests/inputs_pdfs/$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(BLUE)📄 Found PDFs:$(NC)"
+	@ls -1 tests/inputs_pdfs/*.pdf | sed 's|.*/||' | sed 's/^/   - /'
+	@echo ""
+	@cd apps/api && $(PYTHON) tools/pdf_to_markdown.py
+	@echo ""
+	@echo "$(GREEN)✅ Conversion completed!$(NC)"
+	@echo "$(BLUE)📁 Output files:$(NC)"
+	@echo "   - Markdown files: tests/outputs_markdown/"
+	@echo "   - Comparison report: tests/outputs_markdown/CONVERSION_REPORT.md"
+	@echo ""
+	@echo "$(YELLOW)💡 Tip: Check CONVERSION_REPORT.md for detailed statistics$(NC)"
 
 ## List all available API tests
 list-api-tests:
@@ -1966,6 +1998,148 @@ ssh-prod:
 	@ssh $(PROD_SERVER_HOST)
 
 status-prod: deploy-status
+
+# ============================================================================
+# DEMO SERVER DEPLOYMENT (Capital 414 - 34.172.67.93)
+# ============================================================================
+#
+# Quick reference commands for deploying to the Capital 414 demo server.
+# These commands use the same configuration from envs/.env.prod but with
+# clearer naming for team communication.
+#
+# Server: 34.172.67.93 (cuatro-catorce)
+# User: jf
+# Path: /home/jf/capital414-chat
+#
+# WHEN TO USE THESE COMMANDS:
+#
+# Regular deployments:
+#   make deploy-demo       - Full deployment with build (~8-12 min)
+#   make deploy-demo-fast  - Fast deployment, reuse images (~2-3 min)
+#   make deploy-demo-safe  - Safe deployment with automatic backups (RECOMMENDED)
+#
+# Monitoring:
+#   make status-demo       - Check server status and health
+#   make logs-demo         - View all service logs
+#   make logs-demo-api     - View API logs only
+#   make logs-demo-web     - View web logs only
+#
+# Access:
+#   make ssh-demo          - SSH into demo server
+# ============================================================================
+
+## Deploy to Capital 414 demo server (full build + deploy)
+deploy-demo:
+	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(GREEN)▸ Deploying to Capital 414 Demo Server$(NC)"
+	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@echo "$(BLUE)Target:$(NC)  $(PROD_SERVER_HOST)"
+	@echo "$(BLUE)Server:$(NC) 34.172.67.93 (cuatro-catorce)"
+	@echo "$(BLUE)Path:$(NC)   $(PROD_DEPLOY_PATH)"
+	@echo ""
+	@./scripts/deploy.sh tar
+
+## Deploy to demo server (fast mode - reuse existing images)
+deploy-demo-fast:
+	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(GREEN)▸ Fast Deploy to Capital 414 Demo Server$(NC)"
+	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@echo "$(BLUE)Target:$(NC)  $(PROD_SERVER_HOST)"
+	@echo "$(BLUE)Mode:$(NC)    Skip build (using existing images)"
+	@echo ""
+	@./scripts/deploy.sh tar --skip-build
+
+## Safe deployment to demo server with comprehensive backups
+deploy-demo-safe:
+	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(GREEN)🔒 Safe Deployment to Capital 414 Demo Server$(NC)"
+	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@echo "$(BLUE)This deployment includes:$(NC)"
+	@echo "  ✓ Docker image backups (code rollback)"
+	@echo "  ✓ MongoDB backup (mongodump)"
+	@echo "  ✓ Redis volume backup (tar)"
+	@echo "  ✓ Backup integrity verification"
+	@echo "  ✓ Automatic rollback on failure"
+	@echo ""
+	@echo "$(BLUE)Target:$(NC)  $(PROD_SERVER_HOST)"
+	@echo ""
+	@ssh $(PROD_SERVER_HOST) 'cd $(PROD_DEPLOY_PATH) && ./scripts/deploy-on-server.sh'
+	@echo ""
+	@echo "$(GREEN)✅ Safe deployment complete!$(NC)"
+
+## Check Capital 414 demo server status
+status-demo:
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BLUE)▸ Capital 414 Demo Server Status$(NC)"
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@echo "$(BLUE)Server:$(NC) 34.172.67.93 (cuatro-catorce)"
+	@echo "$(BLUE)User:$(NC)   jf"
+	@echo ""
+	@echo "$(BLUE)Git Status:$(NC)"
+	@ssh $(PROD_SERVER_HOST) "cd $(PROD_DEPLOY_PATH) && git log -1 --format='  %h - %s (%ar)'" 2>/dev/null || echo "  Error fetching git status"
+	@echo ""
+	@echo "$(BLUE)Current Version:$(NC)"
+	@ssh $(PROD_SERVER_HOST) "cat $(PROD_DEPLOY_PATH)/.deploy/current_version 2>/dev/null || echo '  Unknown'" | sed 's/^/  /'
+	@echo ""
+	@echo "$(BLUE)Running Containers:$(NC)"
+	@ssh $(PROD_SERVER_HOST) "docker ps --format '  {{.Names}}\t{{.Status}}' --filter 'name=capital414'" 2>/dev/null || echo "  No containers running"
+	@echo ""
+	@echo "$(BLUE)Health Check:$(NC)"
+	@ssh $(PROD_SERVER_HOST) "curl -sf http://localhost:8001/api/health | jq -r '\"  API: \" + .status' 2>/dev/null" || echo "  API: Error"
+	@ssh $(PROD_SERVER_HOST) "curl -sf -o /dev/null -w '  Web: HTTP %{http_code}\n' http://localhost:3000 2>/dev/null" || echo "  Web: Error"
+	@echo ""
+	@echo "$(BLUE)Access:$(NC)"
+	@echo "  Frontend: http://34.172.67.93:3000"
+	@echo "  API:      http://34.172.67.93:8001"
+	@echo "  MinIO:    http://34.172.67.93:9001"
+	@echo ""
+
+## View all logs from demo server
+logs-demo:
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BLUE)▸ Capital 414 Demo Server Logs$(NC)"
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@ssh $(PROD_SERVER_HOST) "cd $(PROD_DEPLOY_PATH) && docker compose -f infra/docker-compose.yml logs -f"
+
+## View API logs from demo server
+logs-demo-api:
+	@ssh $(PROD_SERVER_HOST) "cd $(PROD_DEPLOY_PATH) && docker compose -f infra/docker-compose.yml logs -f api"
+
+## View web logs from demo server
+logs-demo-web:
+	@ssh $(PROD_SERVER_HOST) "cd $(PROD_DEPLOY_PATH) && docker compose -f infra/docker-compose.yml logs -f web"
+
+## View MongoDB logs from demo server
+logs-demo-mongo:
+	@ssh $(PROD_SERVER_HOST) "cd $(PROD_DEPLOY_PATH) && docker compose -f infra/docker-compose.yml logs -f mongodb"
+
+## View Redis logs from demo server
+logs-demo-redis:
+	@ssh $(PROD_SERVER_HOST) "cd $(PROD_DEPLOY_PATH) && docker compose -f infra/docker-compose.yml logs -f redis"
+
+## SSH into Capital 414 demo server
+ssh-demo:
+	@echo "$(BLUE)Connecting to Capital 414 demo server (34.172.67.93)...$(NC)"
+	@ssh $(PROD_SERVER_HOST)
+
+## Setup demo server (install Docker, clone repo, configure environment)
+setup-demo-server:
+	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(GREEN)▸ Setting up Capital 414 Demo Server$(NC)"
+	@echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@echo "$(BLUE)This will:$(NC)"
+	@echo "  ✓ Install Docker and Docker Compose"
+	@echo "  ✓ Install system dependencies (git, jq, curl)"
+	@echo "  ✓ Transfer project code to server"
+	@echo "  ✓ Configure environment variables"
+	@echo ""
+	@./scripts/setup-demo-server.sh
 
 # ============================================================================
 # RESOURCE OPTIMIZATION

@@ -9,7 +9,7 @@
  * See: VALIDATION_REPORT_V1.md for complete specification
  */
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import toast from "react-hot-toast";
 import { useApiClient } from "../lib/api-client";
 import { sha256Hex } from "../lib/hash";
@@ -28,6 +28,8 @@ import {
   RATE_LIMIT_UPLOADS_PER_MINUTE,
 } from "../types/files";
 import { useFilesStore } from "../lib/stores/files-store";
+
+export type LastReadyFile = FileAttachment | null;
 
 export interface UseFilesReturn {
   // Upload functions
@@ -51,6 +53,7 @@ export interface UseFilesReturn {
   addAttachment: (attachment: FileAttachment) => void;
   removeAttachment: (fileId: string) => void;
   clearAttachments: () => void;
+  lastReadyFile: LastReadyFile;
 }
 
 /**
@@ -74,6 +77,12 @@ export function useFiles(chatId?: string): UseFilesReturn {
   const [attachments, setAttachments] = useState<FileAttachment[]>(() => {
     return filesStore.getForChat(effectiveChatId);
   });
+  const lastReadyFile = useMemo(() => {
+    const ready = attachments.filter(
+      (attachment) => attachment.status === "READY",
+    );
+    return ready.length > 0 ? ready[ready.length - 1] : null;
+  }, [attachments]);
 
   // MVP-LOCK: Sync with persistent store when chatId changes
   useEffect(() => {
@@ -414,5 +423,6 @@ export function useFiles(chatId?: string): UseFilesReturn {
     addAttachment,
     removeAttachment,
     clearAttachments,
+    lastReadyFile,
   };
 }

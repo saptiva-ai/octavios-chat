@@ -26,6 +26,22 @@ from .base import (
 
 logger = structlog.get_logger(__name__)
 
+# Optional third-party dependencies (mock-friendly for unit tests)
+try:
+    from pypdf import PdfReader  # type: ignore
+except ImportError:  # pragma: no cover - handled in runtime checks
+    PdfReader = None  # type: ignore[assignment]
+
+try:
+    from PIL import Image  # type: ignore
+except ImportError:  # pragma: no cover - handled in runtime checks
+    Image = None  # type: ignore[assignment]
+
+try:
+    import pytesseract  # type: ignore
+except ImportError:  # pragma: no cover - handled in runtime checks
+    pytesseract = None  # type: ignore[assignment]
+
 
 class ThirdPartyExtractor(TextExtractor):
     """
@@ -143,13 +159,10 @@ class ThirdPartyExtractor(TextExtractor):
             ImportError: If pypdf is not installed
             ExtractionError: If PDF reading fails
         """
-        try:
-            from pypdf import PdfReader
-        except ImportError as exc:
+        if PdfReader is None:
             raise ExtractionError(
                 "pypdf not installed. Install with: pip install pypdf>=3.17.0",
                 media_type="pdf",
-                original_error=exc,
             )
 
         try:
@@ -202,14 +215,10 @@ class ThirdPartyExtractor(TextExtractor):
             ImportError: If pytesseract or PIL is not installed
             ExtractionError: If OCR processing fails
         """
-        try:
-            from PIL import Image
-            import pytesseract
-        except ImportError as exc:
+        if Image is None or pytesseract is None:
             raise ExtractionError(
                 "OCR dependencies not installed. Install with: pip install pytesseract Pillow",
                 media_type="image",
-                original_error=exc,
             )
 
         try:
@@ -317,24 +326,25 @@ class ThirdPartyExtractor(TextExtractor):
         Returns:
             True if all dependencies are available, False otherwise
         """
-        try:
-            # Check pypdf
-            from pypdf import PdfReader  # noqa: F401
-
-            # Check pytesseract + Tesseract binary
-            import pytesseract
-
-            pytesseract.get_tesseract_version()
-
-            logger.debug("Third-party extractor health check passed")
-            return True
-
-        except (ImportError, Exception) as exc:
+        if PdfReader is None or pytesseract is None:
             logger.warning(
-                "Third-party extractor health check failed",
+                "Third-party extractor health check failed: dependencies missing",
+                has_pdf_reader=PdfReader is not None,
+                has_pytesseract=pytesseract is not None,
+            )
+            return False
+
+        try:
+            pytesseract.get_tesseract_version()
+        except Exception as exc:
+            logger.warning(
+                "Third-party extractor health check failed: tesseract unavailable",
                 error=str(exc),
             )
             return False
+
+        logger.debug("Third-party extractor health check passed")
+        return True
 
     def _validate_mime_type(self, media_type: MediaType, mime: str) -> None:
         """
