@@ -11,6 +11,8 @@ Tests cover:
 
 import pytest
 from typing import List, Dict, Any
+from uuid import uuid4
+from types import SimpleNamespace
 
 from src.services.compliance_auditor import (
     match_disclaimer,
@@ -21,6 +23,105 @@ from src.services.compliance_auditor import (
     audit_disclaimers,
 )
 from src.models.document import PageFragment
+
+
+# ============================================================================
+# Fixtures
+# ============================================================================
+
+
+@pytest.fixture
+def compliance_config():
+    """Sample compliance configuration for testing"""
+    return {
+        "disclaimers": {
+            "templates": [
+                {
+                    "id": "template-414-capital",
+                    "text": "Este documento es confidencial para {CLIENTE} por 414 Capital.",
+                    "active": True,
+                }
+            ],
+            "default_tolerance": 0.80,
+            "severity": "high",
+            "min_coverage": 1.0,
+        },
+        "format": {
+            "numeric_format": {},
+            "fonts": {},
+        },
+        "logo": {},
+    }
+
+
+@pytest.fixture
+def sample_fragments_with_disclaimer():
+    """Create sample fragments with disclaimers on all pages (full coverage)"""
+    fragments = []
+
+    # Page 1 - with disclaimer in footer
+    fragments.append(SimpleNamespace(
+        fragment_id=f"1-{uuid4().hex[:8]}",
+        page=1,
+        kind="footer",
+        bbox=[50.0, 700.0, 500.0, 750.0],
+        text="Este documento es confidencial para Banamex por 414 Capital.",
+    ))
+
+    # Page 2 - with disclaimer in footer
+    fragments.append(SimpleNamespace(
+        fragment_id=f"2-{uuid4().hex[:8]}",
+        page=2,
+        kind="footer",
+        bbox=[50.0, 700.0, 500.0, 750.0],
+        text="Este documento es confidencial para Banamex por 414 Capital.",
+    ))
+
+    # Page 3 - with disclaimer in footer
+    fragments.append(SimpleNamespace(
+        fragment_id=f"3-{uuid4().hex[:8]}",
+        page=3,
+        kind="footer",
+        bbox=[50.0, 700.0, 500.0, 750.0],
+        text="Este documento es confidencial para Banamex por 414 Capital.",
+    ))
+
+    return fragments
+
+
+@pytest.fixture
+def sample_fragments_missing_disclaimer():
+    """Create sample fragments with disclaimer only on page 1 (partial coverage)"""
+    fragments = []
+
+    # Page 1 - with disclaimer in footer
+    fragments.append(SimpleNamespace(
+        fragment_id=f"1-{uuid4().hex[:8]}",
+        page=1,
+        kind="footer",
+        bbox=[50.0, 700.0, 500.0, 750.0],
+        text="Este documento es confidencial para Banamex por 414 Capital.",
+    ))
+
+    # Page 2 - NO disclaimer (missing)
+    fragments.append(SimpleNamespace(
+        fragment_id=f"2-{uuid4().hex[:8]}",
+        page=2,
+        kind="footer",
+        bbox=[50.0, 700.0, 500.0, 750.0],
+        text="Página 2",
+    ))
+
+    # Page 3 - NO disclaimer (missing)
+    fragments.append(SimpleNamespace(
+        fragment_id=f"3-{uuid4().hex[:8]}",
+        page=3,
+        kind="footer",
+        bbox=[50.0, 700.0, 500.0, 750.0],
+        text="Página 3",
+    ))
+
+    return fragments
 
 
 # ============================================================================
