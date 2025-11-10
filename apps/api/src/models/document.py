@@ -28,6 +28,31 @@ class PageContent(BaseModel):
     image_keys: List[str] = Field(default_factory=list, description="S3 keys for images")
 
 
+class PageFragment(BaseModel):
+    """
+    Page fragment for validation/auditing (simplified from PageContent).
+    Used by compliance auditors to analyze document fragments.
+    """
+    fragment_id: str = Field(..., description="Unique fragment identifier")
+    page: int = Field(..., description="Page number (1-indexed)")
+    kind: Optional[str] = Field(None, description="Fragment type: footer, paragraph, header, etc.")
+    text: str = Field(..., description="Plain text content")
+    bbox: Optional[List[float]] = Field(None, description="Bounding box [x0, y0, x1, y1]")
+    font_name: Optional[str] = Field(None, description="Font family name if available")
+    font_size: Optional[float] = Field(None, description="Font size in points")
+    line_height: Optional[float] = Field(None, description="Line height or spacing metric")
+
+    @classmethod
+    def from_page_content(cls, page_content: "PageContent") -> "PageFragment":
+        """Create PageFragment from PageContent."""
+        from uuid import uuid4
+        return cls(
+            fragment_id=f"page-{page_content.page}-{uuid4().hex[:8]}",
+            page=page_content.page,
+            text=page_content.text_md
+        )
+
+
 class Document(BeanieDocument):
     """Document model for PDF/IMG files"""
 

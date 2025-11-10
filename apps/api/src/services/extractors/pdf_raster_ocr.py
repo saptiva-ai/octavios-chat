@@ -7,7 +7,7 @@ be processed with pypdf's text extraction.
 Strategy:
     1. Rasterize each page with PyMuPDF (fitz) at configurable DPI
     2. Convert raster images to PNG format
-    3. Send each PNG to Saptiva Chat Completions OCR
+    3. Send each PNG to configured OCR extractor (default: Saptiva)
     4. Return List[PageContent] maintaining existing format
 
 Configuration (via Settings):
@@ -42,12 +42,16 @@ from PIL import Image
 
 from ...models.document import PageContent
 from ...core.config import get_settings
+from .base import TextExtractor
 from .saptiva import SaptivaExtractor
 
 logger = structlog.get_logger(__name__)
 
 
-async def raster_pdf_then_ocr_pages(pdf_bytes: bytes) -> List[PageContent]:
+async def raster_pdf_then_ocr_pages(
+    pdf_bytes: bytes,
+    image_extractor: TextExtractor | None = None
+) -> List[PageContent]:
     """
     Rasterize PDF pages and extract text via OCR.
 
@@ -60,13 +64,15 @@ async def raster_pdf_then_ocr_pages(pdf_bytes: bytes) -> List[PageContent]:
         3. For each page within limit:
            a. Rasterize at OCR_RASTER_DPI
            b. Convert to PNG bytes
-           c. Send to Saptiva OCR (Chat Completions)
+           c. Send to configured OCR extractor (default: Saptiva)
            d. Retry up to 3 times with exponential backoff
            e. Create PageContent with extracted text
         4. If PDF has more pages than limit, append truncation marker
 
     Args:
         pdf_bytes: Raw PDF file bytes
+        image_extractor: Optional TextExtractor to OCR rasterized pages.
+            Defaults to SaptivaExtractor for backwards compatibility.
 
     Returns:
         List of PageContent objects, one per processed page
@@ -108,8 +114,8 @@ async def raster_pdf_then_ocr_pages(pdf_bytes: bytes) -> List[PageContent]:
         truncated=total_pages > max_pages,
     )
 
-    # Initialize Saptiva OCR extractor (reuses existing Chat Completions logic)
-    ocr_extractor = SaptivaExtractor()
+    # Initialize OCR extractor
+    ocr_extractor = image_extractor or SaptivaExtractor()
     pages: List[PageContent] = []
 
     # Process each page
@@ -247,7 +253,8 @@ async def raster_pdf_then_ocr_pages(pdf_bytes: bytes) -> List[PageContent]:
 async def raster_single_page_and_ocr(
     doc: fitz.Document,
     page_idx: int,
-    dpi: int = 180
+    dpi: int = 180,
+    image_extractor: TextExtractor | None = None,
 ) -> str:
     """
     Rasterize a single PDF page and extract text via OCR.
@@ -259,6 +266,8 @@ async def raster_single_page_and_ocr(
         doc: Opened PyMuPDF document (fitz.Document)
         page_idx: Zero-based page index to process
         dpi: Rasterization DPI (default: 180)
+        image_extractor: Optional TextExtractor used for OCR. Defaults to
+            SaptivaExtractor if not provided.
 
     Returns:
         Extracted text from OCR, or error message if all retries fail
@@ -269,7 +278,7 @@ async def raster_single_page_and_ocr(
         >>> print(f"OCR text: {text[:100]}...")
     """
     page_start_time = time.time()
-    ocr_extractor = SaptivaExtractor()
+    ocr_extractor = image_extractor or SaptivaExtractor()
 
     try:
         # Load and rasterize page

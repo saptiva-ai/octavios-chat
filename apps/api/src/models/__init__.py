@@ -14,6 +14,7 @@ from .system_settings import SystemSettings
 from .history import HistoryEvent, HistoryEventFactory, HistoryQuery
 from .document import Document as DocumentModel
 from .review_job import ReviewJob
+from .validation_report import ValidationReport
 
 # List of all document models for Beanie initialization
 def get_document_models() -> List[Type[BeanieDocument]]:
@@ -30,6 +31,7 @@ def get_document_models() -> List[Type[BeanieDocument]]:
         HistoryEvent,
         DocumentModel,
         ReviewJob,
+        ValidationReport,
     ]
 
 __all__ = [
@@ -46,5 +48,6 @@ __all__ = [
     "HistoryQuery",
     "DocumentModel",
     "ReviewJob",
+    "ValidationReport",
     "get_document_models",
 ]

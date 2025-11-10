@@ -41,6 +41,7 @@ from .factory import (
 )
 from .third_party import ThirdPartyExtractor
 from .saptiva import SaptivaExtractor
+from .huggingface import HuggingFaceExtractor
 
 # Cache and A/B testing modules are available but not imported by default
 # to avoid circular dependencies. Import explicitly if needed:
@@ -62,6 +63,7 @@ __all__ = [
     # Concrete implementations (for testing/explicit use)
     "ThirdPartyExtractor",
     "SaptivaExtractor",
+    "HuggingFaceExtractor",
 ]
 
 __version__ = "2.0.0"

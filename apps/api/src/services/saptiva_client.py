@@ -17,6 +17,17 @@ from .settings_service import load_saptiva_api_key
 import structlog
 logger = structlog.get_logger(__name__)
 
+_global_mock_mode: bool = False
+_global_mock_reason: Optional[str] = None
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    """Parse truthy environment flags (1/true/yes/on)."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
 
 class SaptivaMessage(BaseModel):
     """Mensaje para SAPTIVA API"""
@@ -62,6 +73,21 @@ class SaptivaClient:
         self.api_key = getattr(self.settings, 'saptiva_api_key', '')
         self.timeout = getattr(self.settings, 'saptiva_timeout', 30)
         self.max_retries = getattr(self.settings, 'saptiva_max_retries', 3)
+        global _global_mock_mode, _global_mock_reason
+        self.force_mock_reason: Optional[str] = None
+        env_force_mock = _env_flag("SAPTIVA_FORCE_MOCK", False)
+        if env_force_mock:
+            self.force_mock = True
+            self.force_mock_reason = "forced_via_env"
+        elif _global_mock_mode:
+            self.force_mock = True
+            self.force_mock_reason = _global_mock_reason or "fallback_on_error"
+        else:
+            self.force_mock = False
+        self.allow_mock_fallback = _env_flag("SAPTIVA_ALLOW_MOCK_FALLBACK", True)
+        self.mock_mode = False
+        self.mock_reason: Optional[str] = None
+        self._last_mock_reason: Optional[str] = None
 
         # Configurar cliente HTTP optimizado para velocidad y estabilidad
         # Timeouts más generosos para LLM generativo que puede tomar tiempo
@@ -108,6 +134,13 @@ class SaptivaClient:
             "saptiva-guard": "Saptiva Guard",
             "saptiva-ocr": "Saptiva OCR"
         }
+        if self.force_mock:
+            self._enable_mock_mode(self.force_mock_reason or "forced_via_env")
+        elif not self.api_key:
+            self._enable_mock_mode("missing_api_key")
+        else:
+            self.mock_mode = False
+            self.mock_reason = None
 
     async def __aenter__(self):
         return self
@@ -131,7 +164,11 @@ class SaptivaClient:
         # Construct URL manually to avoid urljoin issues with redirects
         url = f"{self.base_url.rstrip('/')}{endpoint}"
 
-        for attempt in range(self.max_retries + 1):
+        retries = self.max_retries
+        if self.allow_mock_fallback and not self.force_mock:
+            retries = 0
+
+        for attempt in range(retries + 1):
             try:
                 if stream:
                     # Para streaming, no usar context manager
@@ -161,7 +198,7 @@ class SaptivaClient:
                 return response
 
             except httpx.HTTPError as e:
-                if attempt < self.max_retries:
+                if attempt < retries:
                     wait_time = min(2 ** attempt, 10)
                     logger.warning(
                         "SAPTIVA request failed, retrying",
@@ -203,7 +240,13 @@ class SaptivaClient:
         """
 
         # Validar API key
+        if self.mock_mode:
+            return self._generate_mock_response(messages, model)
+
         if not self.api_key:
+            if self.allow_mock_fallback:
+                self._enable_mock_mode("missing_api_key")
+                return self._generate_mock_response(messages, model)
             raise ValueError("SAPTIVA API key is required but not configured")
 
         try:
@@ -258,6 +301,9 @@ class SaptivaClient:
                 model=model
             )
             # Re-raise the exception without fallback
+            if self.allow_mock_fallback:
+                self._enable_mock_mode("fallback_on_error")
+                return self._generate_mock_response(messages, model)
             raise
 
     async def chat_completion_stream(
@@ -273,7 +319,17 @@ class SaptivaClient:
         """
 
         # Validar API key
+        if self.mock_mode:
+            async for chunk in self._mock_stream_response(messages, model, temperature, max_tokens, tools):
+                yield chunk
+            return
+
         if not self.api_key:
+            if self.allow_mock_fallback:
+                self._enable_mock_mode("missing_api_key")
+                async for chunk in self._mock_stream_response(messages, model, temperature, max_tokens, tools):
+                    yield chunk
+                return
             raise ValueError("SAPTIVA API key is required but not configured")
 
         try:
@@ -329,6 +385,11 @@ class SaptivaClient:
                 model=model
             )
             # Re-raise the exception without fallback
+            if self.allow_mock_fallback:
+                self._enable_mock_mode("fallback_on_error")
+                async for chunk in self._mock_stream_response(messages, model, temperature, max_tokens, tools):
+                    yield chunk
+                return
             raise
 
     async def chat_completion_or_stream(
@@ -400,7 +461,125 @@ class SaptivaClient:
                 "response": response  # Include full response for metadata
             }
 
+    def _enable_mock_mode(self, reason: str) -> None:
+        """Enable mock mode and log once per reason."""
+        self.mock_mode = True
+        self.mock_reason = reason
+        global _global_mock_mode, _global_mock_reason
+        _global_mock_mode = True
+        _global_mock_reason = reason
+        if self._last_mock_reason != reason:
+            logger.warning(
+                "SAPTIVA client running in mock mode",
+                reason=reason
+            )
+            self._last_mock_reason = reason
 
+    def _generate_mock_response(
+        self,
+        messages: List[Dict[str, str]],
+        model: str
+    ) -> SaptivaResponse:
+        """Generate deterministic mock responses for local development."""
+        last_message = messages[-1]["content"] if messages else ""
+        message_lower = last_message.lower()
+
+        if "hola" in message_lower or "hello" in message_lower:
+            content = "¡Hola! Soy SAPTIVA en modo demo para capital414-chat. ¿En qué puedo ayudarte hoy?"
+        elif "?" in last_message:
+            content = (
+                f"Entiendo tu pregunta sobre \"{last_message}\". "
+                "En este entorno de desarrollo respondo con ejemplos mientras la API real no está disponible."
+            )
+        else:
+            content = (
+                f"He recibido tu mensaje: \"{last_message}\". "
+                "Esta es una respuesta simulada porque la integración con SAPTIVA no está activa."
+            )
+
+        prompt_tokens = sum(len(msg.get("content", "").split()) for msg in messages)
+        completion_tokens = len(content.split())
+
+        response = SaptivaResponse(
+            id=f"mock-{uuid.uuid4()}",
+            model=self._get_model_name(model),
+            choices=[{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": content
+                },
+                "finish_reason": "stop"
+            }],
+            usage={
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": prompt_tokens + completion_tokens
+            },
+            created=int(time.time())
+        )
+
+        logger.info(
+            "Generated mock SAPTIVA response",
+            model=model,
+            reason=self.mock_reason or "mock_mode"
+        )
+
+        return response
+
+    async def _mock_stream_response(
+        self,
+        messages: List[Dict[str, str]],
+        model: str,
+        temperature: float,
+        max_tokens: int,
+        tools: Optional[List[str]]
+    ) -> AsyncGenerator[SaptivaStreamChunk, None]:
+        """Yield mock streaming chunks to emulate SAPTIVA API behaviour."""
+        response = self._generate_mock_response(messages, model)
+        content = response.choices[0]["message"]["content"]
+        chunk_id = response.id
+        created_ts = response.created or int(time.time())
+
+        # First chunk includes the assistant role declaration
+        yield SaptivaStreamChunk(
+            id=chunk_id,
+            model=response.model,
+            choices=[{
+                "index": 0,
+                "delta": {
+                    "role": "assistant"
+                },
+                "finish_reason": None
+            }],
+            created=created_ts
+        )
+
+        # Second chunk streams the full content
+        yield SaptivaStreamChunk(
+            id=chunk_id,
+            model=response.model,
+            choices=[{
+                "index": 0,
+                "delta": {
+                    "content": content
+                },
+                "finish_reason": None
+            }],
+            created=created_ts
+        )
+
+        # Final chunk marks completion
+        yield SaptivaStreamChunk(
+            id=chunk_id,
+            model=response.model,
+            choices=[{
+                "index": 0,
+                "delta": {},
+                "finish_reason": "stop"
+            }],
+            created=created_ts
+        )
 
     async def get_available_models(self) -> List[str]:
         """Obtener lista de modelos disponibles"""

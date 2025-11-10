@@ -315,6 +315,28 @@ docker-compose.override.yml
 copilotos-bridge-*.tar.gz
 
 # Playwright
+playwright/
 playwright-report/
 test-results/
 test-data/
+
+# Temporary and build artifacts
+apps/web/tmp/
+apps/api/diagnostico/
+apps/api/venv_test/
+apps/api/logs/
+
+# Claude Code documentation (auto-generated)
+CLAUDE.md
+AGENTS.md
+
+# PDF to Markdown conversion tool outputs
+tests/inputs_pdfs/
+tests/outputs_markdown/
+tests/codigo_fuente_extraccion/
+tests/*.zip
+tests/MENSAJE_*.txt
+tests/MENSAJE_*.md
+tests/CODIGO_FUENTE_README.md
+tests/codigo_fuente_pdf_to_markdown.py
+tests/INSTRUCCIONES_ENVIO_FRANCISCO.txt

@@ -7,8 +7,8 @@ FROM node:20-alpine AS base
 ARG UID=1000
 ARG GID=1000
 
-# Install pnpm
-RUN corepack enable pnpm
+# Install pnpm with specific version
+RUN corepack enable pnpm && corepack prepare pnpm@10.15.1 --activate
 
 # Create app user and group with configurable IDs
 RUN set -eux; \
@@ -32,7 +32,7 @@ WORKDIR /app
 RUN chown app:appgroup /app
 
 # Copy package files with proper ownership
-COPY --chown=app:appgroup package.json pnpm-lock.yaml* pnpm-workspace.yaml* ./
+COPY --chown=app:appgroup pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY --chown=app:appgroup packages/ ./packages/
 COPY --chown=app:appgroup apps/web/package.json ./apps/web/
 
@@ -40,6 +40,9 @@ COPY --chown=app:appgroup apps/web/package.json ./apps/web/
 # DEPENDENCIES STAGE
 # =========================================
 FROM base AS deps
+
+# Prepare pnpm with the exact version specified in package.json
+RUN corepack prepare pnpm@10.15.1 --activate
 
 # Switch to app user for dependency installation
 USER app
@@ -86,14 +89,31 @@ CMD ["pnpm", "dev", "--hostname", "0.0.0.0", "--port", "3000"]
 # =========================================
 FROM base AS builder
 
-# Build-time environment variables
-ARG NEXT_PUBLIC_API_URL=http://localhost:8001
+# Build-time environment variables (with production defaults)
+# IMPORTANT: Do NOT include /api suffix - routes already include it
+ARG NEXT_PUBLIC_API_URL=https://414.saptiva.com
+ARG NEXT_PUBLIC_APP_NAME="Saptiva Copilot OS - Capital 414"
 ARG NEXT_PUBLIC_MAX_FILE_SIZE_MB=50
+ARG NEXT_PUBLIC_FEATURE_WEB_SEARCH=false
+ARG NEXT_PUBLIC_FEATURE_DEEP_RESEARCH=false
+ARG NEXT_PUBLIC_FEATURE_ADD_FILES=true
+ARG NEXT_PUBLIC_FEATURE_GOOGLE_DRIVE=false
+ARG NEXT_PUBLIC_FEATURE_CANVAS=false
+ARG NEXT_PUBLIC_FEATURE_AGENT_MODE=false
+ARG NEXT_PUBLIC_FEATURE_MIC=false
 ARG NODE_ENV=production
 
 # Set environment variables for build
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
 ENV NEXT_PUBLIC_MAX_FILE_SIZE_MB=$NEXT_PUBLIC_MAX_FILE_SIZE_MB
+ENV NEXT_PUBLIC_FEATURE_WEB_SEARCH=$NEXT_PUBLIC_FEATURE_WEB_SEARCH
+ENV NEXT_PUBLIC_FEATURE_DEEP_RESEARCH=$NEXT_PUBLIC_FEATURE_DEEP_RESEARCH
+ENV NEXT_PUBLIC_FEATURE_ADD_FILES=$NEXT_PUBLIC_FEATURE_ADD_FILES
+ENV NEXT_PUBLIC_FEATURE_GOOGLE_DRIVE=$NEXT_PUBLIC_FEATURE_GOOGLE_DRIVE
+ENV NEXT_PUBLIC_FEATURE_CANVAS=$NEXT_PUBLIC_FEATURE_CANVAS
+ENV NEXT_PUBLIC_FEATURE_AGENT_MODE=$NEXT_PUBLIC_FEATURE_AGENT_MODE
+ENV NEXT_PUBLIC_FEATURE_MIC=$NEXT_PUBLIC_FEATURE_MIC
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV IN_DOCKER=1
@@ -114,6 +134,21 @@ RUN mkdir -p /app/apps/web/.next && chown app:appgroup /app/apps/web/.next
 # Switch to app user for build
 USER app
 
+# Create .env.production file to ensure Next.js picks up build-time variables
+# This is more reliable than ENV alone for Next.js static optimization
+RUN echo "# IMPORTANT: API URL should NOT include /api suffix - routes already include it" > /app/apps/web/.env.production && \
+    echo "NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL" >> /app/apps/web/.env.production && \
+    echo "NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME" >> /app/apps/web/.env.production && \
+    echo "NEXT_PUBLIC_MAX_FILE_SIZE_MB=$NEXT_PUBLIC_MAX_FILE_SIZE_MB" >> /app/apps/web/.env.production && \
+    echo "NEXT_PUBLIC_FEATURE_WEB_SEARCH=$NEXT_PUBLIC_FEATURE_WEB_SEARCH" >> /app/apps/web/.env.production && \
+    echo "NEXT_PUBLIC_FEATURE_DEEP_RESEARCH=$NEXT_PUBLIC_FEATURE_DEEP_RESEARCH" >> /app/apps/web/.env.production && \
+    echo "NEXT_PUBLIC_FEATURE_ADD_FILES=$NEXT_PUBLIC_FEATURE_ADD_FILES" >> /app/apps/web/.env.production && \
+    echo "NEXT_PUBLIC_FEATURE_GOOGLE_DRIVE=$NEXT_PUBLIC_FEATURE_GOOGLE_DRIVE" >> /app/apps/web/.env.production && \
+    echo "NEXT_PUBLIC_FEATURE_CANVAS=$NEXT_PUBLIC_FEATURE_CANVAS" >> /app/apps/web/.env.production && \
+    echo "NEXT_PUBLIC_FEATURE_AGENT_MODE=$NEXT_PUBLIC_FEATURE_AGENT_MODE" >> /app/apps/web/.env.production && \
+    echo "NEXT_PUBLIC_FEATURE_MIC=$NEXT_PUBLIC_FEATURE_MIC" >> /app/apps/web/.env.production && \
+    cat /app/apps/web/.env.production
+
 # Build application as non-root user
 RUN pnpm --filter web build
 
@@ -130,8 +165,8 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Install pnpm
-RUN corepack enable pnpm
+# Install pnpm with specific version
+RUN corepack enable pnpm && corepack prepare pnpm@10.15.1 --activate
 
 # Create non-root user with same IDs as build stage
 RUN set -eux; \

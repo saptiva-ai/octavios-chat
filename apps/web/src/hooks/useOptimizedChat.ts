@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { flushSync } from "react-dom";
 import { useAppStore } from "../lib/store";
 import type { ChatMessage } from "../lib/types";
 import { logDebug } from "../lib/logger";
@@ -22,6 +23,13 @@ export function useOptimizedChat(options: UseOptimizedChatOptions = {}) {
   );
   const responseCache = useRef(new Map<string, string>());
   const currentRequestController = useRef<AbortController | null>(null);
+
+  // Throttling refs para evitar bloquear el navegador con demasiados flushSync
+  const lastUpdateTime = useRef<number>(0);
+  const pendingUpdate = useRef<{ messageId: string; content: string } | null>(
+    null,
+  );
+  const throttleTimer = useRef<NodeJS.Timeout | null>(null);
 
   const { addMessage, updateMessage } = useAppStore();
 
@@ -65,11 +73,36 @@ export function useOptimizedChat(options: UseOptimizedChatOptions = {}) {
   // Función para finalizar streaming (DEFINIDA ANTES para evitar ReferenceError)
   const completeStreaming = useCallback(
     (messageId: string, finalData: Partial<ChatMessage>) => {
+      // Limpiar cualquier throttle timer pendiente
+      if (throttleTimer.current !== null) {
+        clearTimeout(throttleTimer.current);
+        throttleTimer.current = null;
+      }
+
+      // Si hay contenido pendiente, aplicarlo antes de completar
+      if (
+        pendingUpdate.current &&
+        pendingUpdate.current.messageId === messageId
+      ) {
+        flushSync(() => {
+          updateMessage(pendingUpdate.current!.messageId, {
+            content: pendingUpdate.current!.content,
+            status: "streaming",
+            isStreaming: true,
+          });
+        });
+        pendingUpdate.current = null;
+      }
+
+      // Completar el streaming
       updateMessage(messageId, {
         ...finalData,
         status: finalData.status ?? "delivered",
         isStreaming: false,
       });
+
+      // Reset throttle state
+      lastUpdateTime.current = 0;
     },
     [updateMessage],
   );
@@ -77,12 +110,60 @@ export function useOptimizedChat(options: UseOptimizedChatOptions = {}) {
   // Función para actualizar contenido de streaming de forma optimizada
   const updateStreamingContent = useCallback(
     (messageId: string, newContent: string) => {
-      updateMessage(messageId, {
-        content: newContent,
-        // Mantener streaming status hasta que se complete
-        status: "streaming",
-        isStreaming: true,
-      });
+      const now = Date.now();
+      const timeSinceLastUpdate = now - lastUpdateTime.current;
+      const THROTTLE_MS = 50;
+
+      // console.log("[DEBUG] updateStreamingContent - length:", newContent.length, "timeSince:", timeSinceLastUpdate, "hasTimer:", throttleTimer.current !== null);
+
+      // Siempre guardar el último contenido
+      pendingUpdate.current = { messageId, content: newContent };
+
+      // Actualizar inmediatamente si:
+      // 1. Es el primer chunk (lastUpdateTime === 0)
+      // 2. Han pasado >= THROTTLE_MS desde la última actualización
+      if (lastUpdateTime.current === 0 || timeSinceLastUpdate >= THROTTLE_MS) {
+        // console.log("[DEBUG] IMMEDIATE UPDATE - length:", newContent.length);
+        // Actualizar inmediatamente
+        flushSync(() => {
+          updateMessage(messageId, {
+            content: newContent,
+            status: "streaming",
+            isStreaming: true,
+          });
+        });
+        lastUpdateTime.current = now;
+        pendingUpdate.current = null;
+
+        // Limpiar timer si existe
+        if (throttleTimer.current !== null) {
+          clearTimeout(throttleTimer.current);
+          throttleTimer.current = null;
+        }
+      } else {
+        // Programar actualización para el próximo intervalo si no hay timer activo
+        if (throttleTimer.current === null) {
+          const delay = THROTTLE_MS - timeSinceLastUpdate;
+          // console.log("[DEBUG] SCHEDULING TIMER - delay:", delay, "ms");
+          throttleTimer.current = setTimeout(() => {
+            // console.log("[DEBUG] TIMER FIRED - pendingLength:", pendingUpdate.current?.content.length);
+            if (pendingUpdate.current) {
+              flushSync(() => {
+                updateMessage(pendingUpdate.current!.messageId, {
+                  content: pendingUpdate.current!.content,
+                  status: "streaming",
+                  isStreaming: true,
+                });
+              });
+              lastUpdateTime.current = Date.now();
+              pendingUpdate.current = null;
+            }
+            throttleTimer.current = null;
+          }, delay);
+        } else {
+          // console.log("[DEBUG] TIMER ALREADY EXISTS - just updating pending");
+        }
+      }
     },
     [updateMessage],
   );
@@ -235,11 +316,14 @@ export function useOptimizedChat(options: UseOptimizedChatOptions = {}) {
     }
   }, []);
 
-  // Limpiar el controlador cuando se desmonte
+  // Limpiar el controlador y timers cuando se desmonte
   useEffect(() => {
     return () => {
       if (currentRequestController.current) {
         currentRequestController.current.abort();
+      }
+      if (throttleTimer.current !== null) {
+        clearTimeout(throttleTimer.current);
       }
     };
   }, []);

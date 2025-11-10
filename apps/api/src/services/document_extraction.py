@@ -5,7 +5,7 @@ This module provides a high-level interface for document text extraction.
 Uses pluggable extractors (pypdf+pytesseract or Saptiva) via factory pattern.
 
 Configuration:
-    EXTRACTOR_PROVIDER: "third_party" (default) | "saptiva"
+    EXTRACTOR_PROVIDER: "third_party" (default) | "saptiva" | "huggingface"
     MAX_OCR_PAGES: Maximum pages to OCR for image-only PDFs (default: 30)
     OCR_RASTER_DPI: Rasterization DPI for OCR fallback (default: 180)
 """
@@ -33,7 +33,8 @@ async def extract_text_from_file(file_path: Path, content_type: str) -> List[Pag
     This function routes to the appropriate extraction backend based on
     EXTRACTOR_PROVIDER environment variable:
         - third_party: pypdf + pytesseract (current default)
-        - saptiva: Saptiva Native Tools API (future)
+        - saptiva: Saptiva Native Tools API
+        - huggingface: DeepSeek OCR via Hugging Face Space
 
     Args:
         file_path: Path to document file on disk
@@ -126,6 +127,20 @@ async def extract_text_from_file(file_path: Path, content_type: str) -> List[Pag
                         file_path=str(file_path),
                     )
 
+                # Determine OCR extractor for fallback pages
+                extractor_provider = (settings.extractor_provider or "third_party").lower().strip()
+                hybrid_ocr_extractor = None
+                if extractor_provider == "huggingface":
+                    try:
+                        from .extractors.huggingface import HuggingFaceExtractor
+
+                        hybrid_ocr_extractor = HuggingFaceExtractor()
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to initialize HuggingFaceExtractor for hybrid OCR, defaulting to Saptiva",
+                            error=str(exc),
+                        )
+
                 # Process each page with hybrid approach
                 for page_idx, page in enumerate(reader.pages):
                     page_num = page_idx + 1
@@ -154,6 +169,7 @@ async def extract_text_from_file(file_path: Path, content_type: str) -> List[Pag
                                 doc=fitz_doc,
                                 page_idx=page_idx,
                                 dpi=settings.ocr_raster_dpi,
+                                image_extractor=hybrid_ocr_extractor,
                             )
 
                             # Use OCR text if it's better than pypdf

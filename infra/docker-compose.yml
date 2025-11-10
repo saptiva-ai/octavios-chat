@@ -3,16 +3,9 @@
 # ========================================
 # Archivo canónico para levantar la plataforma completa (dev, testing, prod).
 # Usa perfiles de Docker Compose para habilitar servicios adicionales cuando se necesitan.
-#
 #   Desarrollo: make dev / docker compose -f infra/docker-compose.yml up -d
 #   Testing:    docker compose -f infra/docker-compose.yml --profile testing up --build
-#   Producción: docker compose -f infra/docker-compose.yml -f infra/docker-compose.volumes-external.yml --profile production up -d
-#
-# VOLUMES STRATEGY:
-#   - Development/Workshop: Uses LOCAL volumes (auto-created, fresh on each setup)
-#     Benefits: No credential conflicts, clean slate for workshops/demos
-#   - Production: Use docker-compose.volumes-external.yml override for EXTERNAL volumes
-#     Benefits: Data persists across deployments, safe for production use
+#   Producción: docker compose -f infra/docker-compose.yml --profile production up -d
 
 services:
   # ========================================
@@ -32,7 +25,7 @@ services:
       - mongodb_data:/data/db
       - mongodb_config:/data/configdb
     ports:
-      - "${MONGODB_PORT:-27017}:27017"
+      - "${MONGODB_PORT:-27018}:27017"
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.runCommand('ping')"]
       interval: 30s
@@ -67,6 +60,64 @@ services:
       start_period: 20s
     ports:
       - "${REDIS_PORT:-6380}:6379"
+    networks:
+      - octavios-network
+
+  # ========================================
+  # LANGUAGETOOL - Grammar Checking Service
+  # ========================================
+  languagetool:
+    image: erikvl87/languagetool:latest
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-languagetool
+    restart: unless-stopped
+    environment:
+      - Java_Xms=512m
+      - Java_Xmx=1g
+    ports:
+      - "8010:8010"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8010/v2/languages"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - octavios-network
+
+  # ========================================
+  # MINIO - S3-Compatible Object Storage
+  # ========================================
+  minio:
+    image: minio/minio:latest
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    env_file:
+      - ../envs/.env
+    environment:
+      # Credentials (from .env)
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin123}
+
+      # Browser configuration
+      - MINIO_BROWSER=on
+      - MINIO_BROWSER_REDIRECT_URL=http://localhost:9001
+
+      # Storage configuration
+      - MINIO_STORAGE_CLASS_STANDARD=EC:0
+      - MINIO_API_REQUESTS_MAX=10000
+      - MINIO_API_REQUESTS_DEADLINE=10s
+    volumes:
+      - minio_data:/data
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     networks:
       - octavios-network
 
@@ -107,6 +158,7 @@ services:
       - ALETHEIA_API_KEY=${ALETHEIA_API_KEY:-}
       - ALETHEIA_TIMEOUT=${ALETHEIA_TIMEOUT:-120}
       - ALETHEIA_MAX_RETRIES=${ALETHEIA_MAX_RETRIES:-3}
+      - LANGUAGETOOL_URL=http://languagetool:8010
 
       # Deep Research Feature Flags (P0-DR-KILL-001)
       # GLOBAL KILL SWITCH - dominates all other flags
@@ -138,6 +190,10 @@ services:
       mongodb:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      languagetool:
+        condition: service_healthy
+      minio:
         condition: service_healthy
 
     ports:
@@ -271,18 +327,14 @@ services:
 # ========================================
 # VOLUMES
 # ========================================
-# Default: LOCAL volumes for development/workshops
-# For production with persistent data, use:
-#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.volumes-external.yml up
-#
-# This creates fresh volumes on each setup, avoiding credential/data conflicts
-# in workshop scenarios or when cloning the repo.
 volumes:
   mongodb_data:
     driver: local
   mongodb_config:
     driver: local
   redis_data:
+    driver: local
+  minio_data:
     driver: local
   nginx_cache:
     driver: local

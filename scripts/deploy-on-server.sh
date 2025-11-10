@@ -35,14 +35,11 @@ NC=""
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Load environment and save path for passing to subprocesses
-ENV_FILE_PATH=""
+# Load environment
 if [ -f "$PROJECT_ROOT/envs/.env.prod" ]; then
     source "$PROJECT_ROOT/envs/.env.prod"
-    ENV_FILE_PATH="$PROJECT_ROOT/envs/.env.prod"
 elif [ -f "$PROJECT_ROOT/envs/.env" ]; then
     source "$PROJECT_ROOT/envs/.env"
-    ENV_FILE_PATH="$PROJECT_ROOT/envs/.env"
 fi
 
 # ========================================
@@ -224,8 +221,7 @@ backup_data_volumes() {
     if [ -f "$PROJECT_ROOT/scripts/backup-mongodb.sh" ]; then
         if ! "$PROJECT_ROOT/scripts/backup-mongodb.sh" \
             --backup-dir "$backup_dir" \
-            --retention-days 7 \
-            --env-file "$ENV_FILE_PATH"; then
+            --retention-days 7; then
             log_error "MongoDB backup FAILED"
             log_error "Aborting deployment for data safety"
             exit 1
@@ -237,13 +233,9 @@ backup_data_volumes() {
     # Backup Docker volumes (MongoDB + Redis data)
     log_info "Backing up Docker volumes..."
     if [ -f "$PROJECT_ROOT/scripts/backup-docker-volumes.sh" ]; then
-        # Note: backup-docker-volumes.sh doesn't support --env-file, but inherits
-        # environment variables from parent shell (COMPOSE_PROJECT_NAME, etc.)
-        # Pass explicit volume names to handle external volumes with different naming
         if ! "$PROJECT_ROOT/scripts/backup-docker-volumes.sh" \
             --backup-dir "$backup_dir" \
-            --retention-days 7 \
-            --volumes "copilotos-prod_mongodb_data,copilotos-prod_redis_data"; then
+            --retention-days 7; then
             log_error "Volume backup FAILED"
             log_error "Aborting deployment for data safety"
             exit 1
@@ -327,7 +319,7 @@ build_images() {
 
     log_info "Building API and Web images..."
 
-    docker compose --env-file ../envs/.env build $build_flags || {
+    docker compose build $build_flags || {
         log_error "Build failed"
         return 1
     }
@@ -344,12 +336,12 @@ deploy_containers() {
     cd "$PROJECT_ROOT/infra"
 
     log_info "Stopping current containers..."
-    docker compose --env-file ../envs/.env down || {
+    docker compose down || {
         log_warning "Stop had warnings (may be first deployment)"
     }
 
     log_info "Starting updated containers..."
-    docker compose --env-file ../envs/.env up -d || {
+    docker compose up -d || {
         log_error "Container start failed"
         return 1
     }
@@ -437,14 +429,14 @@ rollback_to_backup() {
     cd "$PROJECT_ROOT/infra"
 
     log_info "Stopping failed deployment..."
-    docker compose --env-file ../envs/.env down
+    docker compose down
 
     log_info "Restoring backup images..."
     docker tag "octavios-api:$backup_tag" octavios-api:latest
     docker tag "octavios-web:$backup_tag" octavios-web:latest
 
     log_info "Starting previous version..."
-    docker compose --env-file ../envs/.env up -d
+    docker compose up -d
 
     sleep 20
 

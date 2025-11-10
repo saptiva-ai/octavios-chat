@@ -8,6 +8,7 @@ import { cn } from "../../lib/utils";
 export interface FileAttachmentListProps {
   attachments: FileAttachment[];
   onRemove?: (fileId: string) => void;
+  onAudit?: (file: FileAttachment) => void;
   className?: string;
 }
 
@@ -30,11 +31,41 @@ export interface FileAttachmentListProps {
 export function FileAttachmentList({
   attachments,
   onRemove,
+  onAudit,
   className,
 }: FileAttachmentListProps) {
   if (attachments.length === 0) {
     return null;
   }
+
+  return (
+    <div className={cn("space-y-3", className)}>
+      {attachments.map((attachment) => (
+        <FileAttachmentCard
+          key={attachment.file_id}
+          attachment={attachment}
+          onRemove={onRemove}
+          onAudit={onAudit}
+        />
+      ))}
+    </div>
+  );
+}
+
+// Separate component for individual file cards with audit toggle
+interface FileAttachmentCardProps {
+  attachment: FileAttachment;
+  onRemove?: (fileId: string) => void;
+  onAudit?: (file: FileAttachment) => void;
+}
+
+function FileAttachmentCard({
+  attachment,
+  onRemove,
+  onAudit,
+}: FileAttachmentCardProps) {
+  const [auditToggled, setAuditToggled] = React.useState(false);
+  const [isAuditing, setIsAuditing] = React.useState(false);
 
   const formatBytes = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
@@ -73,73 +104,132 @@ export function FileAttachmentList({
     }
   };
 
+  const handleAuditToggle = async () => {
+    if (!onAudit || isAuditing || attachment.status !== "READY") return;
+
+    // Toggle ON
+    setAuditToggled(true);
+    setIsAuditing(true);
+
+    try {
+      // Call audit callback
+      await onAudit(attachment);
+    } finally {
+      // Reset toggle after audit is sent
+      setIsAuditing(false);
+      setTimeout(() => setAuditToggled(false), 300);
+    }
+  };
+
+  const canAudit = attachment.status === "READY" && onAudit && !isAuditing;
+
   return (
-    <div className={cn("space-y-3", className)}>
-      {attachments.map((attachment) => (
-        <div
-          key={attachment.file_id}
-          className={cn(
-            "group flex items-center gap-4 rounded-2xl border p-4 transition-all duration-200 hover:shadow-lg",
-            attachment.status === "READY"
-              ? "border-emerald-200 bg-gradient-to-br from-emerald-50/80 to-green-50/50 hover:border-emerald-300 shadow-emerald-100/50"
-              : attachment.status === "FAILED"
-                ? "border-red-200 bg-gradient-to-br from-red-50/80 to-pink-50/50 hover:border-red-300 shadow-red-100/50"
-                : attachment.status === "PROCESSING"
-                  ? "border-blue-200 bg-gradient-to-br from-blue-50/80 to-indigo-50/50 hover:border-blue-300 shadow-blue-100/50"
-                  : "border-gray-200 bg-gradient-to-br from-gray-50/80 to-slate-50/50 hover:border-gray-300 shadow-gray-100/50",
-            "shadow-sm hover:scale-[1.01]",
-          )}
-        >
-          {/* File Icon with Background */}
-          <div className="flex-shrink-0">
-            <FileIconEnhanced
-              mimetype={attachment.mimetype}
-              status={attachment.status}
-            />
-          </div>
-
-          {/* File Info */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1.5">
-              <p className="text-sm font-semibold text-gray-900 truncate">
-                {attachment.filename}
-              </p>
-              {getStatusBadge(attachment.status)}
-            </div>
-
-            <div className="flex items-center gap-2 text-xs text-gray-600 font-medium">
-              <span>{formatBytes(attachment.bytes)}</span>
-              {attachment.pages && (
-                <>
-                  <span className="text-gray-400">•</span>
-                  <span>
-                    {attachment.pages} página{attachment.pages !== 1 ? "s" : ""}
-                  </span>
-                </>
-              )}
-              {attachment.mimetype && (
-                <>
-                  <span className="text-gray-400">•</span>
-                  <span className="uppercase font-semibold">
-                    {getMimeLabel(attachment.mimetype)}
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Remove Button */}
-          {onRemove && (
-            <button
-              onClick={() => onRemove(attachment.file_id)}
-              className="flex-shrink-0 p-2 rounded-xl hover:bg-white/80 text-gray-400 hover:text-red-600 transition-all duration-200 hover:scale-110 opacity-0 group-hover:opacity-100"
-              aria-label={`Eliminar ${attachment.filename}`}
-            >
-              <XIcon />
-            </button>
-          )}
+    <div
+      className={cn(
+        "group flex flex-col rounded-2xl border transition-all duration-200 hover:shadow-lg",
+        attachment.status === "READY"
+          ? "border-emerald-200 bg-gradient-to-br from-emerald-50/80 to-green-50/50 hover:border-emerald-300 shadow-emerald-100/50"
+          : attachment.status === "FAILED"
+            ? "border-red-200 bg-gradient-to-br from-red-50/80 to-pink-50/50 hover:border-red-300 shadow-red-100/50"
+            : attachment.status === "PROCESSING"
+              ? "border-blue-200 bg-gradient-to-br from-blue-50/80 to-indigo-50/50 hover:border-blue-300 shadow-blue-100/50"
+              : "border-gray-200 bg-gradient-to-br from-gray-50/80 to-slate-50/50 hover:border-gray-300 shadow-gray-100/50",
+        "shadow-sm hover:scale-[1.01]",
+      )}
+    >
+      {/* Main card content */}
+      <div className="flex items-center gap-4 p-4">
+        {/* File Icon with Background */}
+        <div className="flex-shrink-0">
+          <FileIconEnhanced
+            mimetype={attachment.mimetype}
+            status={attachment.status}
+          />
         </div>
-      ))}
+
+        {/* File Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1.5">
+            <p className="text-sm font-semibold text-gray-900 truncate">
+              {attachment.filename}
+            </p>
+            {getStatusBadge(attachment.status)}
+          </div>
+
+          <div className="flex items-center gap-2 text-xs text-gray-600 font-medium">
+            <span>{formatBytes(attachment.bytes)}</span>
+            {attachment.pages && (
+              <>
+                <span className="text-gray-400">•</span>
+                <span>
+                  {attachment.pages} página{attachment.pages !== 1 ? "s" : ""}
+                </span>
+              </>
+            )}
+            {attachment.mimetype && (
+              <>
+                <span className="text-gray-400">•</span>
+                <span className="uppercase font-semibold">
+                  {getMimeLabel(attachment.mimetype)}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Remove Button */}
+        {onRemove && (
+          <button
+            onClick={() => onRemove(attachment.file_id)}
+            className="flex-shrink-0 p-2 rounded-xl hover:bg-white/80 text-gray-400 hover:text-red-600 transition-all duration-200 hover:scale-110 opacity-0 group-hover:opacity-100"
+            aria-label={`Eliminar ${attachment.filename}`}
+          >
+            <XIcon />
+          </button>
+        )}
+      </div>
+
+      {/* Audit Toggle Section - Only shown for READY files */}
+      {onAudit && attachment.status === "READY" && (
+        <div className="border-t border-emerald-200/50 px-4 py-2 bg-emerald-50/30">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-gray-700">
+              Auditoría automática (Capital 414)
+            </span>
+            <button
+              role="switch"
+              aria-checked={auditToggled}
+              aria-label={`Activar auditoría para ${attachment.filename}`}
+              aria-busy={isAuditing}
+              aria-disabled={!canAudit}
+              onClick={handleAuditToggle}
+              disabled={!canAudit}
+              className={cn(
+                "relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2",
+                auditToggled || isAuditing ? "bg-emerald-500" : "bg-gray-300",
+                !canAudit && "opacity-40 cursor-not-allowed",
+                canAudit && "cursor-pointer hover:bg-emerald-600",
+              )}
+            >
+              {/* Switch Knob */}
+              <span
+                className={cn(
+                  "inline-block h-3 w-3 transform rounded-full bg-white shadow-sm transition-transform",
+                  auditToggled || isAuditing
+                    ? "translate-x-5"
+                    : "translate-x-1",
+                )}
+              />
+              {/* Loading spinner inside switch when auditing */}
+              {isAuditing && (
+                <span className="absolute inset-0 flex items-center justify-center">
+                  <SpinnerIcon />
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

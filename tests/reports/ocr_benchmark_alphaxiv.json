@@ -1,0 +1,72 @@
+{
+  "metadata": {
+    "timestamp": "2025-11-03 18:18:42",
+    "pdf_path": "/tmp/test_data/Capital414_presentacion.pdf",
+    "pages_tested": [
+      1,
+      2
+    ],
+    "api_provider": "AlphaXiv"
+  },
+  "results": {
+    "Saptiva OCR": {
+      "success": true,
+      "pages": [
+        {
+          "page": 1,
+          "text": "C4P1T4L\n\nIntroducción a CKDs y CERPIs\n\nDiciembre de 2022\n\nInformación privada y confidencial\n414 Capital • www.414c.com\n\nhttps://vdr.414capital.com/index.php/apps/files/files/568310?dir=/Saptiva AI/Metodologia&editing=false&openfile=true",
+          "duration_ms": 194.39411163330078,
+          "chars": 237,
+          "words": 19
+        },
+        {
+          "page": 2,
+          "text": "Aviso y Limitación de Responsabilidad\n\nLa información contenida en este documento es proporcionada por Consultora 414, S.A. de C.V., (\"Consultora 414\" o \"414 Capital\") de buena fe. Se considera que la información es precisa y actualizada, cuando aplica.\n\n414 Capital no es responsable por errores u omisiones, o por los resultados obtenidos al utilizar esta información. Toda la información de este documento es ofrecida sin garantía de ningún tipo, expresiva o tácita, de precisión, oportunidad, o de los resultados obtenidos por el uso de esta información, incluyendo casos de negligencia. En ningún evento serán 414 Capital, sus partes relacionadas, directores o empleados responsables hacia el lector o cualquier tercero por cualquier decisión o acción tomada basada en la información contenida en este documento, o por cualquier daño consecuente.\n\nLas valoraciones proporcionadas pueden basarse en una serie de factores incluyendo, pero no limitadas a, precios actuales, valuaciones estimadas de activos subyacentes, liquidez de mercado, modelos propios y supuestos (susjetos a cambio sin aviso previo), e información públicamente disponible. Todos los supuestos, opiniones y estimados constituyen el juicio de 414 Capital a la fecha y también son sujetos a cambio sin aviso previo.\n\nNo se realizan representaciones con respecto a la razónabilidad de los supuestos o la precisión o completitud de los modelos o la información utilizada. No se realizan representaciones sobre los valores presentados o que dichos valores sean en ninguna forma indicativos de desempeño futuro. Las valuaciones son indicativas y no son una oferta de compra o venta de cualquier instrumento, o de cualquier otra transacción. Estas valuaciones pueden variar significativamente de un valor realizable, particularmente en condiciones de mercado volátiles.\n\nEl hecho de que 414 Capital le presente este documento no constituye una recomendación de participar en una transacción o mantener una posición, ni una representación en que una transacción pueda ser adecuada al lector. Las transacciones pueden implicar riesgo considerable y el lector no debe participar en ninguna transacción a menos que entienda completamente dicho riesgo y haya determinado de manera independiente que la transacción es apropiada en su caso particular. 414 Capital no provee asesoría contable, legal o fiscal; estos temas deben ser discutidos con asesores independientes.\n\nEsta presentación no representa un compromiso de adquirir, colocar o suscribir ningún instrumento, o una oferta de cualquier otro servicio.\n\nEstos materiales no pueden ser reproducidos o distrib",
+          "duration_ms": 7309.475898742676,
+          "chars": 2626,
+          "words": 388
+        }
+      ],
+      "total_duration_ms": 7504.965305328369,
+      "total_chars": 2863,
+      "total_words": 407,
+      "error": null
+    },
+    "DeepSeek OCR (AlphaXiv)": {
+      "success": true,
+      "pages": [
+        {
+          "page": 1,
+          "text": "PDF-Is viewer \n\n\n10/27/25, 11:12 PM \n\n\nIntroduction a CKDS y CERPiS \n\n\nC4PT14\n414 Capitol",
+          "duration_ms": 2121.492385864258,
+          "chars": 89,
+          "words": 13
+        },
+        {
+          "page": 2,
+          "text": "",
+          "duration_ms": 32827.58378982544,
+          "chars": 0,
+          "words": 0
+        }
+      ],
+      "total_duration_ms": 34950.228452682495,
+      "total_chars": 89,
+      "total_words": 13,
+      "error": null
+    }
+  },
+  "comparison": {
+    "text_similarities": {
+      "Saptiva OCR_vs_DeepSeek OCR (AlphaXiv)": 2.84
+    },
+    "best_speed": {
+      "strategy": "Saptiva OCR",
+      "duration_ms": 7504.97
+    },
+    "best_extraction": {
+      "strategy": "Saptiva OCR",
+      "total_chars": 2863
+    }
+  }
+}

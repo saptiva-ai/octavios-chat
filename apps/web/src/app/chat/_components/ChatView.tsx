@@ -17,9 +17,10 @@ import {
 } from "../../../components/chat/DeepResearchWizard";
 import { DeepResearchProgress } from "../../../components/chat/DeepResearchProgress";
 import { IntentNudge } from "../../../components/chat/IntentNudge";
+import { AuditProgress } from "../../../components/chat/AuditProgress";
 import type { ChatComposerAttachment } from "../../../components/chat/ChatComposer";
-import { useChat, useUI } from "../../../lib/store";
-import { apiClient } from "../../../lib/api-client";
+import { useChat, useUI, useChatStore } from "../../../lib/store";
+import { apiClient, type ChatResponse } from "../../../lib/api-client";
 import { getAllModels } from "../../../config/modelCatalog";
 import { useRequireAuth } from "../../../hooks/useRequireAuth";
 import { useOptimizedChat } from "../../../hooks/useOptimizedChat";
@@ -56,10 +57,13 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
     return null;
   }, [initialChatId, queryChatId]);
 
+  // CRITICAL: Use direct selector for messages to ensure re-renders on content changes
+  // This fixes streaming text not appearing word-by-word
+  const messages = useChatStore((state) => state.messages);
+
   const {
     currentChatId,
     selectionEpoch,
-    messages,
     isLoading,
     models,
     modelsLoading,
@@ -105,19 +109,27 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
   } = useChat();
 
   const { checkConnection } = useUI();
-  const { sendOptimizedMessage, cancelCurrentRequest } = useOptimizedChat({
+  const {
+    sendOptimizedMessage,
+    cancelCurrentRequest,
+    updateStreamingContent,
+    completeStreaming,
+  } = useOptimizedChat({
     enablePredictiveLoading: true,
     enableResponseCache: true,
     streamingChunkSize: 3,
   });
 
   // Files V1 state - MVP-LOCK: Pass chatId to persist attachments
+  // FIX: Use resolvedChatId (from URL) instead of currentChatId (from async store)
+  // to prevent race condition where files are stored under chatId but loaded from "draft"
   const {
     attachments: filesV1Attachments,
     addAttachment: addFilesV1Attachment,
     removeAttachment: removeFilesV1Attachment,
     clearAttachments: clearFilesV1Attachments,
-  } = useFiles(currentChatId || undefined);
+    lastReadyFile: lastReadyAuditFile,
+  } = useFiles(resolvedChatId || currentChatId || undefined);
 
   const [nudgeMessage, setNudgeMessage] = React.useState<string | null>(null);
   const [pendingWizard, setPendingWizard] = React.useState<{
@@ -131,6 +143,12 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
   } | null>(null);
   const [isStartingResearch, setIsStartingResearch] = React.useState(false);
   const [researchError, setResearchError] = React.useState<string | null>(null);
+
+  // Audit progress state (Copiloto 414)
+  const [activeAudit, setActiveAudit] = React.useState<{
+    fileId: string;
+    filename: string;
+  } | null>(null);
 
   const selectedTools = React.useMemo<ToolId[]>(() => {
     return Object.entries(toolsEnabled)
@@ -384,6 +402,62 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
   }, [resolvedChatId, isHydrated]); // MINIMAL DEPS: Only route param and app hydration
   /* eslint-enable react-hooks/exhaustive-deps */
 
+  // Track which chats have already loaded documents (prevent duplicate loads)
+  const loadedChatsRef = React.useRef<Set<string>>(new Set());
+
+  // Load documents from backend when chat changes (fixes file persistence after refresh)
+  React.useEffect(() => {
+    const loadChatDocuments = async () => {
+      if (!resolvedChatId || resolvedChatId.startsWith("temp-")) return;
+
+      // Skip if already loaded for this chat
+      if (loadedChatsRef.current.has(resolvedChatId)) {
+        logDebug(
+          "[ChatView] Documents already loaded for this chat, skipping",
+          {
+            chatId: resolvedChatId,
+          },
+        );
+        return;
+      }
+
+      try {
+        logDebug("[ChatView] Loading documents from backend", {
+          chatId: resolvedChatId,
+        });
+
+        const documents = await apiClient.listDocuments(resolvedChatId);
+
+        // Re-populate filesStore with documents from backend
+        // This ensures files persist after page refresh, even if localStorage was cleared
+        documents.forEach((doc) => {
+          // Only add if not already in store (avoid duplicates)
+          const existing = filesV1Attachments.find(
+            (f) => f.file_id === doc.file_id,
+          );
+          if (!existing) {
+            addFilesV1Attachment(doc);
+          }
+        });
+
+        // Mark this chat as loaded
+        loadedChatsRef.current.add(resolvedChatId);
+
+        logDebug("[ChatView] Documents loaded from backend", {
+          chatId: resolvedChatId,
+          count: documents.length,
+        });
+      } catch (error) {
+        // Non-blocking error - chat can still function without file list
+        logError("[ChatView] Failed to load documents from backend", error);
+      }
+    };
+
+    loadChatDocuments();
+    // CRITICAL: Don't include filesV1Attachments in deps - causes infinite loop!
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedChatId]);
+
   const sendStandardMessage = React.useCallback(
     async (message: string, attachments?: ChatComposerAttachment[]) => {
       // MVP-LOCK: Prepare metadata with file_ids for user message bubble
@@ -494,23 +568,126 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
               metadata_present: !!userMessageMetadata,
             });
 
-            const response = await apiClient.sendChatMessage({
-              message: msg,
-              chat_id: chatIdForBackend,
-              model: backendModelId,
-              temperature: 0.3,
-              max_tokens: 800,
-              stream: false,
-              tools_enabled: toolsEnabled,
-              document_ids: documentIds.length > 0 ? documentIds : undefined,
-              // POLÍTICA: file_ids solo del turno actual (no herencia)
-              file_ids:
-                fileIdsForBackend && fileIdsForBackend.length > 0
-                  ? fileIdsForBackend
-                  : undefined,
-              // MVP-LOCK: Send full metadata (file_ids + file info) for persistence
-              metadata: userMessageMetadata,
-            });
+            // Check if streaming is enabled (default: true for better UX)
+            const enableStreaming = true;
+            // console.log("[DEBUG] Streaming enabled:", enableStreaming);
+
+            let response: ChatResponse | undefined;
+
+            if (enableStreaming) {
+              // Streaming path: consume SSE chunks
+              let accumulatedContent = "";
+              // console.log("[DEBUG] Entering streaming path");
+
+              try {
+                // console.log("[DEBUG] Creating stream generator");
+                const streamGenerator = apiClient.sendChatMessageStream(
+                  {
+                    message: msg,
+                    chat_id: chatIdForBackend,
+                    model: backendModelId,
+                    temperature: 0.3,
+                    max_tokens: 800,
+                    stream: true,
+                    tools_enabled: toolsEnabled,
+                    document_ids:
+                      documentIds.length > 0 ? documentIds : undefined,
+                    file_ids:
+                      fileIdsForBackend && fileIdsForBackend.length > 0
+                        ? fileIdsForBackend
+                        : undefined,
+                    metadata: userMessageMetadata,
+                  },
+                  abortController?.signal,
+                );
+
+                let metaData: any = null;
+                // console.log("[DEBUG] Starting to consume events");
+
+                for await (const event of streamGenerator) {
+                  // console.log("[DEBUG] Event received:", event.type);
+
+                  if (event.type === "meta") {
+                    metaData = event.data;
+                    // Update chat_id if we got a new one
+                    if (!currentChatId && event.data.chat_id) {
+                      setCurrentChatId(event.data.chat_id);
+                    }
+                  } else if (event.type === "chunk") {
+                    accumulatedContent += event.data.content;
+                    // console.log("[DEBUG] Chunk - accumulated length:", accumulatedContent.length);
+                    // Update streaming content (flushSync is handled in useOptimizedChat hook)
+                    updateStreamingContent(placeholderId, accumulatedContent);
+                  } else if (event.type === "done") {
+                    response = event.data;
+                  } else if (event.type === "error") {
+                    throw new Error(event.data.error);
+                  }
+                }
+                // console.log("[DEBUG] Stream finished");
+
+                // If we didn't get a done event, construct response from accumulated data
+                if (!response) {
+                  response = {
+                    chat_id: metaData?.chat_id || chatIdForBackend || "",
+                    message_id: metaData?.user_message_id || placeholderId,
+                    content: accumulatedContent,
+                    role: "assistant" as const,
+                    model: metaData?.model || backendModelId,
+                    created_at: new Date().toISOString(),
+                  };
+                }
+
+                // Override content with accumulated content (in case done event has incomplete data)
+                if (accumulatedContent && response) {
+                  response.content = accumulatedContent;
+                }
+              } catch (streamError) {
+                console.error(
+                  "Streaming failed, falling back to non-streaming",
+                  streamError,
+                );
+                // Fallback to non-streaming if streaming fails
+                response = await apiClient.sendChatMessage({
+                  message: msg,
+                  chat_id: chatIdForBackend,
+                  model: backendModelId,
+                  temperature: 0.3,
+                  max_tokens: 800,
+                  stream: false,
+                  tools_enabled: toolsEnabled,
+                  document_ids:
+                    documentIds.length > 0 ? documentIds : undefined,
+                  file_ids:
+                    fileIdsForBackend && fileIdsForBackend.length > 0
+                      ? fileIdsForBackend
+                      : undefined,
+                  metadata: userMessageMetadata,
+                });
+              }
+            } else {
+              // Non-streaming path (fallback)
+              response = await apiClient.sendChatMessage({
+                message: msg,
+                chat_id: chatIdForBackend,
+                model: backendModelId,
+                temperature: 0.3,
+                max_tokens: 800,
+                stream: false,
+                tools_enabled: toolsEnabled,
+                document_ids: documentIds.length > 0 ? documentIds : undefined,
+                file_ids:
+                  fileIdsForBackend && fileIdsForBackend.length > 0
+                    ? fileIdsForBackend
+                    : undefined,
+                metadata: userMessageMetadata,
+              });
+            }
+
+            // Ensure response was set (should always be the case after streaming or non-streaming)
+            if (!response) {
+              throw new Error("Failed to get response from API");
+            }
 
             // POLÍTICA: Limpieza absoluta de attachments post-envío
             // No heredar adjuntos entre turnos
@@ -633,6 +810,7 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
               status: "delivered",
               isStreaming: false,
               task_id: response.task_id,
+              metadata: response.metadata, // Include audit metadata (report_pdf_url, etc.)
             };
 
             // NOTE: File attachments are cleared after a successful backend response
@@ -661,6 +839,7 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
       models,
       toolsEnabled,
       sendOptimizedMessage,
+      updateStreamingContent,
       setCurrentChatId,
       loadChatSessions,
       reconcileConversation,
@@ -671,6 +850,41 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
     ],
   );
 
+  // Copiloto 414: Audit progress handlers
+  const handleStartAudit = React.useCallback(
+    (fileId: string, filename: string) => {
+      setActiveAudit({ fileId, filename });
+      logDebug("[ChatView] Audit started", { fileId, filename });
+    },
+    [],
+  );
+
+  const handleAuditError = React.useCallback(
+    (fileId: string, reason?: string) => {
+      setActiveAudit(null);
+      logError("[ChatView] Audit failed", { fileId, reason });
+    },
+    [],
+  );
+
+  const handleAuditComplete = React.useCallback(() => {
+    setActiveAudit(null);
+    logDebug("[ChatView] Audit completed");
+  }, []);
+
+  // Auto-clear audit progress when new message with validation arrives
+  React.useEffect(() => {
+    if (!activeAudit) return;
+
+    const latestMessage = messages[messages.length - 1];
+    if (
+      latestMessage?.metadata &&
+      "validation_report_id" in latestMessage.metadata
+    ) {
+      handleAuditComplete();
+    }
+  }, [messages, activeAudit, handleAuditComplete]);
+
   const handleSendMessage = React.useCallback(
     async (message: string, attachments?: ChatComposerAttachment[]) => {
       const trimmed = message.trim();
@@ -680,22 +894,34 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
         process.env.NEXT_PUBLIC_ALLOW_FILES_ONLY_SEND !== "false";
 
       // Fix Pack: Allow sending with empty message if files are ready (and flag enabled)
-      const hasReadyFiles = filesV1Attachments.some(
+      const readyFileList = filesV1Attachments.filter(
         (a) => a.status === "READY",
       );
+      const defaultAuditTarget =
+        readyFileList.find(
+          (file) => file.file_id === lastReadyAuditFile?.file_id,
+        ) ?? readyFileList[readyFileList.length - 1];
       // MINIMALISMO FUNCIONAL: Usar archivos automáticamente cuando están listos
-      const shouldUseDefaultPrompt =
-        !trimmed && hasReadyFiles && allowFilesOnlySend;
+      const shouldAutoAudit =
+        !trimmed && allowFilesOnlySend && Boolean(defaultAuditTarget);
 
-      if (!trimmed && !shouldUseDefaultPrompt) return;
+      if (!trimmed && !shouldAutoAudit) return;
 
       setNudgeMessage(null);
       setResearchError(null);
 
-      // Fix Pack: Use default prompt when message is empty but files are ready
-      const effectiveMessage = shouldUseDefaultPrompt
-        ? "Revísalo y dame un resumen"
-        : trimmed;
+      // Copiloto 414: Auto-trigger audit command when files están listos
+      const effectiveMessage =
+        shouldAutoAudit && defaultAuditTarget
+          ? `Auditar archivo: ${defaultAuditTarget.filename}`
+          : trimmed;
+
+      if (shouldAutoAudit && defaultAuditTarget) {
+        handleStartAudit(
+          defaultAuditTarget.file_id,
+          defaultAuditTarget.filename,
+        );
+      }
 
       const pendingAttachments = filesV1Attachments.filter(
         (a) => a.status !== "READY",
@@ -739,6 +965,8 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
       setNudgeMessage,
       setResearchError,
       filesV1Attachments,
+      lastReadyAuditFile,
+      handleStartAudit,
     ],
   );
 
@@ -1153,6 +1381,9 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                 onClose={handleCloseResearchCard}
               />
             )}
+
+            {/* Copiloto 414: Audit progress indicator */}
+            {activeAudit && <AuditProgress filename={activeAudit.filename} />}
           </div>
         )}
 
@@ -1183,6 +1414,10 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
           filesV1Attachments={filesV1Attachments}
           onAddFilesV1Attachment={addFilesV1Attachment}
           onRemoveFilesV1Attachment={removeFilesV1Attachment}
+          lastReadyFile={lastReadyAuditFile}
+          // Copiloto 414: Audit progress callback
+          onStartAudit={handleStartAudit}
+          onAuditError={handleAuditError}
         />
       </div>
     </ChatShell>
