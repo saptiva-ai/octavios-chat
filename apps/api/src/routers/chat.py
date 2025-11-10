@@ -61,6 +61,8 @@ from ..domain import (
     ChatResponseBuilder,
     SimpleChatStrategy
 )
+# TODO: Fix MCP integration - backend.mcp.protocol doesn't exist
+# from backend.mcp.protocol import ToolInvokeContext
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
@@ -2080,12 +2082,11 @@ async def invoke_audit_file_tool(
           "status": "success"
         }
     """
-    from ..services.tools import execute_audit_file_tool
-
     if response:
         response.headers.update(NO_STORE_HEADERS)
 
     user_id = str(current_user.id)
+    request_id = getattr(http_request.state, "request_id", str(uuid4())) if http_request else str(uuid4())
 
     logger.info(
         "Audit file tool invoked from chat",
@@ -2096,28 +2097,62 @@ async def invoke_audit_file_tool(
     )
 
     try:
-        # Execute audit tool
-        result = await execute_audit_file_tool(
-            doc_id=doc_id,
-            user_id=user_id,
-            chat_id=chat_id,
-            policy_id=policy_id,
-        )
+        registry = getattr(http_request.app.state, "mcp_registry", None) if http_request else None
+        invoke_payload = {
+            "doc_id": doc_id,
+            "chat_id": chat_id,
+            "policy_id": policy_id,
+        }
 
-        if not result["success"]:
+        # Execute audit tool
+        result_payload = None
+
+        if registry:
+            tool_response = await registry.invoke(
+                tool_name="audit_file",
+                payload=invoke_payload,
+                context={
+                    "request_id": request_id,
+                    "user_id": user_id,
+                    "session_id": chat_id,
+                    "trace_id": http_request.headers.get("x-trace-id") if http_request else None,
+                    "source": "chat-endpoint",
+                },
+            )
+
+            if not tool_response.ok or not tool_response.output:
+                detail = tool_response.error.message if tool_response.error else "Audit failed"
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=detail,
+                )
+            result_payload = tool_response.output
+        else:
+            from ..services.tools import execute_audit_file_tool
+
+            result_payload = await execute_audit_file_tool(
+                doc_id=doc_id,
+                user_id=user_id,
+                chat_id=chat_id,
+                policy_id=policy_id,
+            )
+
+        success_flag = result_payload.get("success", True)
+
+        if not success_flag:
             logger.error(
                 "Audit tool execution failed",
                 doc_id=doc_id,
                 chat_id=chat_id,
-                error=result.get("error"),
+                error=result_payload.get("error"),
             )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=result.get("error", "Audit failed"),
+                detail=result_payload.get("error", "Audit failed"),
             )
 
         # Get the created message
-        message_id = result["message_id"]
+        message_id = result_payload["message_id"]
         message = await ChatMessageModel.get(message_id)
 
         if not message:
@@ -2152,8 +2187,8 @@ async def invoke_audit_file_tool(
             doc_id=doc_id,
             chat_id=chat_id,
             message_id=message_id,
-            validation_report_id=result.get("validation_report_id"),
-            total_findings=result.get("total_findings"),
+            validation_report_id=result_payload.get("validation_report_id"),
+            total_findings=result_payload.get("total_findings"),
         )
 
         return chat_message
