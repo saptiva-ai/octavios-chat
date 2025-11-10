@@ -68,7 +68,7 @@ async def test_typography_flags_excessive_heading_levels():
 
     config = {
         "enabled": True,
-        "heading_font_threshold": 18,
+        "heading_font_threshold": 16,  # Threshold lowered to capture 6 levels (16,18,20,24,28,32)
         "max_heading_levels": 5,
         "severity_heading": "low",
         "min_line_spacing": 0.5,
