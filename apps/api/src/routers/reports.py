@@ -10,8 +10,11 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from fastapi.responses import FileResponse, StreamingResponse
 
 from ..core.config import get_settings, Settings
+from ..core.auth import get_current_user
 from ..models.task import Task as TaskModel, TaskStatus
+from ..models.validation_report import ValidationReport
 from ..schemas.common import ApiResponse
+from ..services.report_generator import generate_audit_report_pdf
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
@@ -503,6 +506,110 @@ async def delete_research_report(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete report"
+        )
+
+
+@router.get("/audit/{report_id}/download", tags=["audit-reports"])
+async def download_audit_report_pdf(
+    report_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Download audit report PDF on-demand.
+
+    This endpoint generates and serves the PDF report without needing MinIO.
+    Used as fallback when MINIO_STORAGE_ENABLED=false.
+
+    Args:
+        report_id: ValidationReport UUID
+        current_user: Authenticated user from JWT token
+
+    Returns:
+        PDF file response
+
+    Example:
+        GET /api/reports/audit/123e4567-e89b-12d3-a456-426614174000/download
+    """
+    try:
+        # Fetch validation report from MongoDB
+        report = await ValidationReport.get(report_id)
+
+        if not report:
+            logger.warning("Audit report not found", report_id=report_id)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Audit report not found"
+            )
+
+        # Verify ownership
+        user_id = current_user.get("sub") or current_user.get("user_id")
+        if report.user_id != user_id:
+            logger.warning(
+                "Access denied to audit report",
+                report_id=report_id,
+                report_owner=report.user_id,
+                requesting_user=user_id
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to this audit report"
+            )
+
+        # Generate PDF on-demand
+        logger.info(
+            "Generating audit PDF on-demand",
+            report_id=report_id,
+            user_id=user_id
+        )
+
+        pdf_buffer = await generate_audit_report_pdf(
+            report=report,
+            filename=f"audit_report_{report_id}.pdf",
+            document_name=f"Reporte de Auditoría - {report.client_name or 'Capital 414'}"
+        )
+
+        # Create filename with timestamp
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        filename = f"auditoria_{report.client_name or 'capital414'}_{timestamp}.pdf"
+
+        logger.info(
+            "Serving audit PDF on-demand",
+            report_id=report_id,
+            user_id=user_id,
+            filename=filename,
+            pdf_size_bytes=pdf_buffer.getbuffer().nbytes
+        )
+
+        # Create temporary file for response
+        with tempfile.NamedTemporaryFile(mode='w+b', suffix='.pdf', delete=False) as tmp_file:
+            tmp_file.write(pdf_buffer.getvalue())
+            tmp_file_path = tmp_file.name
+
+        # Return PDF as download
+        return FileResponse(
+            path=tmp_file_path,
+            filename=filename,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "X-Report-ID": report_id,
+                "X-Generated-At": datetime.utcnow().isoformat(),
+                "X-Source": "on-demand"  # Indicate this was generated on-demand
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            "Failed to generate audit report PDF",
+            error=str(e),
+            exc_type=type(e).__name__,
+            report_id=report_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate audit report PDF: {str(e)}"
         )
 
 

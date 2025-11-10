@@ -11,11 +11,13 @@ import { ChatComposerAttachment } from "./ChatComposer";
 import { useChat } from "../../../lib/store";
 import { logDebug, logError } from "../../../lib/logger";
 import { apiClient } from "../../../lib/api-client";
+import type { ChatMessage } from "../../../lib/types";
 // Files V1 imports - MINIMALISMO FUNCIONAL: Solo lista, agregar desde tools
 import { FileAttachmentList } from "../../files";
 import type { FileAttachment } from "../../../types/files";
 import type { FeatureFlagsResponse } from "@/lib/types";
-import { useFiles } from "../../../hooks/useFiles";
+import { useFiles, type LastReadyFile } from "../../../hooks/useFiles";
+import { useAuditFlow } from "../../../hooks/useAuditFlow";
 
 interface CompactChatComposerProps {
   value: string;
@@ -41,6 +43,10 @@ interface CompactChatComposerProps {
   onRemoveFilesV1Attachment?: (fileId: string) => void;
   conversationId?: string;
   featureFlags?: FeatureFlagsResponse | null;
+  // Copiloto 414: Audit props
+  lastReadyFile?: LastReadyFile | null;
+  onStartAudit?: (fileId: string, filename: string) => void;
+  onAuditError?: (fileId: string, reason?: string) => void;
 }
 
 // Icons
@@ -149,6 +155,9 @@ export function CompactChatComposer({
   const [uploadingFiles, setUploadingFiles] = React.useState<
     Map<string, number>
   >(new Map()); // filename -> progress%
+  const [pendingAuditCommand, setPendingAuditCommand] = React.useState<
+    string | null
+  >(null);
 
   const taRef = React.useRef<HTMLTextAreaElement>(null);
   const composerRef = React.useRef<HTMLDivElement>(null);
@@ -166,6 +175,13 @@ export function CompactChatComposer({
   const { uploadFile: uploadFileV1 } = useFiles(
     conversationId || currentChatId || undefined,
   );
+
+  // Audit flow integration
+  const { sendAuditForFile } = useAuditFlow({
+    setValue: onChange,
+    onSubmit,
+    conversationId: conversationId || currentChatId || undefined,
+  });
 
   // Finalize creation when user starts typing (guarantee transition creating → draft)
   const handleFirstInput = React.useCallback(() => {
@@ -224,12 +240,28 @@ export function CompactChatComposer({
     prevLoadingRef.current = loading;
   }, [loading]);
 
+  // Handle pending audit command submission
+  React.useEffect(() => {
+    if (pendingAuditCommand && !isSubmitting && !loading) {
+      // Update the input value first
+      onChange(pendingAuditCommand);
+
+      // Submit after a brief delay to ensure state updates
+      const timer = setTimeout(() => {
+        onSubmit();
+        setPendingAuditCommand(null);
+      }, 150);
+
+      return () => clearTimeout(timer);
+    }
+  }, [pendingAuditCommand, isSubmitting, loading, onChange, onSubmit]);
+
   // FE-UX-1: Uploading guard (single definition)
   const isUploading = uploadingFiles.size > 0;
 
   // Fix Pack: READY attachments (single definition)
   const hasReadyFiles = React.useMemo(
-    () => filesV1Attachments.some((a) => a.status === "READY"),
+    () => filesV1Attachments?.some((a) => a.status === "READY") ?? false,
     [filesV1Attachments],
   );
 
@@ -276,7 +308,8 @@ export function CompactChatComposer({
     // Fix Pack: Show feedback if trying to submit without text and without READY files
     if (!canSubmit) {
       const hasText = value.trim().length > 0;
-      const hasReady = filesV1Attachments.some((a) => a.status === "READY");
+      const hasReady =
+        filesV1Attachments?.some((a) => a.status === "READY") ?? false;
 
       if (!hasText && !hasReady) {
         toast.error(
@@ -307,7 +340,8 @@ export function CompactChatComposer({
         taRef.current?.focus();
         // Announce message sent for accessibility
         if (liveRegionRef.current) {
-          const hasFiles = filesV1Attachments.some((a) => a.status === "READY");
+          const hasFiles =
+            filesV1Attachments?.some((a) => a.status === "READY") ?? false;
           const announcement = hasFiles
             ? "Mensaje enviado. Analizando documentos adjuntos."
             : "Mensaje enviado. Esperando respuesta.";
@@ -373,13 +407,15 @@ export function CompactChatComposer({
         return;
       }
 
+      // DEPRECATED: 'audit-file' tool removed - functionality now in file attachment cards
+
       // For other tools, call onAddTool if provided
       if (onAddTool) {
         onAddTool(id);
       }
       setShowToolsMenu(false);
     },
-    [onAddTool],
+    [onAddTool, filesV1Attachments],
   );
 
   // Handle file selection
@@ -1015,19 +1051,20 @@ export function CompactChatComposer({
           {/* Files V1 Section - MINIMALISMO FUNCIONAL: Solo lista (agregar desde tools) */}
           {onAddFilesV1Attachment && (
             <AnimatePresence>
-              {filesV1Attachments.length > 0 && (
+              {(filesV1Attachments?.length ?? 0) > 0 && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
                   transition={{ duration: 0.16, ease: "easeOut" }}
-                  className="mt-3"
+                  className="mt-3 space-y-2"
                 >
                   {/* File Attachments List - Agregar más archivos desde botón + */}
                   {onRemoveFilesV1Attachment && (
                     <FileAttachmentList
                       attachments={filesV1Attachments}
                       onRemove={onRemoveFilesV1Attachment}
+                      onAudit={sendAuditForFile}
                     />
                   )}
                 </motion.div>
@@ -1077,8 +1114,8 @@ export function CompactChatComposer({
                       Analizando con Saptiva Turbo…
                     </span>
                     <span className="text-xs text-primary/70">
-                      {filesV1Attachments.length > 0
-                        ? `Revisando ${filesV1Attachments.length} documento(s)…`
+                      {(filesV1Attachments?.length ?? 0) > 0
+                        ? `Revisando ${filesV1Attachments?.length ?? 0} documento(s)…`
                         : "Generando respuesta…"}
                     </span>
                   </div>

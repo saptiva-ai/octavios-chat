@@ -64,7 +64,8 @@ async def send_chat_message(
             "strategy": "simple" if context.kill_switch_active else "coordinated",
             "session_id": context.session_id
         }):
-            strategy = ChatStrategyFactory.create_strategy(context, chat_service)
+            # ADR-001: Direct instantiation (factory removed - YAGNI)
+            strategy = SimpleChatStrategy(chat_service)
             result = await strategy.process(context)
 
         # 6. Save assistant message

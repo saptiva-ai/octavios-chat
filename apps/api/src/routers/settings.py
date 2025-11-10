@@ -32,7 +32,7 @@ async def set_saptiva_key(payload: SaptivaKeyUpdateRequest, request: Request) ->
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La API key no puede estar vacía.")
 
     validation_message = "Validación omitida"
-    if payload.validate:
+    if payload.validate_key:
         is_valid, validation_message = await validate_saptiva_api_key(api_key)
         if not is_valid:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=validation_message)

@@ -6,6 +6,8 @@ import { logDebug } from "../../lib/logger";
 import { Button, Badge } from "../ui";
 import { StreamingMessage } from "./StreamingMessage";
 import { FileReviewMessage } from "./FileReviewMessage";
+import { MessageAuditCard } from "./MessageAuditCard";
+import { featureFlags } from "../../lib/feature-flags";
 import type {
   ChatMessage as ChatMessageType,
   ChatMessageKind,
@@ -42,6 +44,16 @@ export interface ChatMessageProps {
   onRegenerate?: (messageId: string) => void;
   onStop?: () => void;
   onViewReport?: (taskId: string, taskTitle: string) => void;
+  onViewAuditReport?: (
+    validationReportId: string,
+    documentId: string,
+    filename?: string,
+  ) => void;
+  onReAuditDocument?: (
+    documentId: string,
+    jobId?: string,
+    filename?: string,
+  ) => void;
   className?: string;
   // Additional props for UX-005
   isError?: boolean;
@@ -67,6 +79,8 @@ export function ChatMessage({
   onRegenerate,
   onStop,
   onViewReport,
+  onViewAuditReport,
+  onReAuditDocument,
   className,
   isError = false,
   latency,
@@ -105,6 +119,60 @@ export function ChatMessage({
       review,
     };
     return <FileReviewMessage message={message} />;
+  }
+
+  // Render audit card if message contains validation_report_id (P2.FE.3)
+  // Only render inline if AUDIT_INLINE feature flag is enabled
+  const isAuditMessage =
+    featureFlags.auditInline &&
+    metadata &&
+    typeof metadata === "object" &&
+    "validation_report_id" in metadata &&
+    metadata.validation_report_id;
+
+  if (isAuditMessage) {
+    return (
+      <div
+        className={cn(
+          "group flex gap-3 px-4 py-6 transition-colors duration-150",
+          "hover:bg-white/5",
+          className,
+        )}
+        role="article"
+        aria-label={`Resultado de auditoría - ${formatRelativeTime(timestamp || new Date())}`}
+      >
+        {/* Avatar */}
+        <div
+          className={cn(
+            "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-medium uppercase",
+            "bg-white/10 text-white opacity-60",
+          )}
+        >
+          AI
+        </div>
+
+        {/* Audit Card */}
+        <div className="flex-1 min-w-0">
+          <MessageAuditCard
+            metadata={metadata as any}
+            onViewFull={() =>
+              onViewAuditReport?.(
+                metadata.validation_report_id as string,
+                metadata.document_id as string,
+                metadata.filename as string | undefined,
+              )
+            }
+            onReAudit={() =>
+              onReAuditDocument?.(
+                metadata.document_id as string,
+                metadata.job_id as string | undefined,
+                metadata.filename as string | undefined,
+              )
+            }
+          />
+        </div>
+      </div>
+    );
   }
 
   const handleCopy = async () => {
@@ -197,7 +265,9 @@ export function ChatMessage({
           role="region"
           aria-label="Contenido del mensaje"
         >
-          <div className="whitespace-pre-wrap break-words">
+          <div
+            className={cn("break-words", !isAssistant && "whitespace-pre-wrap")}
+          >
             {isAssistant ? (
               <StreamingMessage
                 content={content}

@@ -1,5 +1,5 @@
 # =========================================
-# MULTI-STAGE DOCKERFILE FOR FASTAPI API
+# MULTI-STAGE DOCKERFILE FOR FASTAPI API (OPTIMIZED)
 # =========================================
 FROM python:3.11-slim as base
 
@@ -17,10 +17,9 @@ WORKDIR /app
 FROM base as deps
 ARG TORCH_CPU_INDEX_URL=https://download.pytorch.org/whl/cpu
 
-# Install system dependencies
+# Install system dependencies for building
 RUN apt-get update && apt-get install -y \
     --no-install-recommends \
-    curl \
     build-essential \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
@@ -50,12 +49,16 @@ RUN pip install --no-cache-dir \
     -r requirements-dev.txt
 
 # Install runtime dependencies (MVP-OCR: Added tesseract-ocr for image text extraction)
+# COPILOTO-414: Added OpenCV for logo detection (dev packages for debugging)
 RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     curl \
     tesseract-ocr \
     tesseract-ocr-spa \
     tesseract-ocr-eng \
+    python3-opencv \
+    libgl1 \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
@@ -82,7 +85,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 CMD ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
 
 # =========================================
-# PRODUCTION STAGE
+# PRODUCTION STAGE (OPTIMIZED)
 # =========================================
 FROM base as production
 
@@ -90,15 +93,20 @@ FROM base as production
 COPY --from=deps /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=deps /usr/local/bin /usr/local/bin
 
-# Install only runtime dependencies (MVP-OCR: Added tesseract-ocr for image text extraction)
+# Install ONLY runtime dependencies (MVP-OCR + COPILOTO-414)
+# OPTIMIZED: Removed -dev packages, only runtime libraries
 RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     curl \
     tesseract-ocr \
     tesseract-ocr-spa \
     tesseract-ocr-eng \
+    python3-opencv \
+    libgl1 \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    && apt-get clean \
+    && apt-get autoremove -y
 
 # Create non-root user
 RUN useradd --create-home --shell /bin/bash --uid 1001 api_user

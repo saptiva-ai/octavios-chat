@@ -35,6 +35,7 @@ Punto de partida para localizar guías, runbooks y reportes del proyecto.
 ---
 
 ## 🧱 Arquitectura & Producto
+- Copiloto 414 (arquitectura + pruebas): [`copiloto-414/`](copiloto-414/)
 - Diagramas LLM y flujos internos: [`arquitectura/`](arquitectura/)
 - Integraciones Web y chat: [`web/`](web/)
 - Document review & Files V1: [`document-review/`](document-review/)

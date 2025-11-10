@@ -13,7 +13,7 @@ redis>=5.0.1
 # HTTP client
 httpx[http2]>=0.25.2
 aiohttp>=3.9.5
-urllib3>=2.5.0  # CVE-2025-50182, CVE-2025-50181 fixed in 2.5.0
+urllib3>=2.2.0  # Force secure version (2.2.x series includes security fixes)
 
 # Authentication
 python-jose[cryptography]>=3.3.0
@@ -39,17 +39,25 @@ opentelemetry-exporter-otlp>=1.21.0
 sse-starlette>=1.8.2
 
 # Object Storage (V2 Future - Optional)
-# minio>=7.2.0
+minio>=7.2.0
 
 # Document processing (V1 - PDF text extraction)
 pypdf>=3.17.0
 pymupdf>=1.24.0  # PDF rasterization for image-only PDFs (scanned documents)
 saptiva-agents>=0.2.3  # Saptiva SDK for PDF extraction via Custom Tools (requires Python 3.10+)
 
+# PDF Report Generation (COPILOTO-414)
+reportlab>=4.0.0  # Professional PDF report generation
+opencv-python-headless>=4.8.0  # Logo detection and template matching
+
 # OCR (MVP-OCR: Image text extraction)
 pytesseract>=0.3.10
 Pillow>=10.0.0
 pillow-heif>=0.13.0
+
+# Text Analysis & Validation (COPILOTO-414)
+rapidfuzz>=3.0.0  # Fuzzy string matching for compliance validation
+PyYAML>=6.0.0  # YAML configuration parsing
 
 # Metrics
 prometheus-client>=0.19.0

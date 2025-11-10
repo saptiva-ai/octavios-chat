@@ -15,10 +15,11 @@ Usage:
     )
 
 Configuration:
-    EXTRACTOR_PROVIDER: "third_party" (default) | "saptiva"
+    EXTRACTOR_PROVIDER: "third_party" (default) | "saptiva" | "huggingface"
 
     third_party: Uses pypdf + pytesseract (current production)
-    saptiva: Uses Saptiva Native Tools API (future)
+    saptiva: Uses Saptiva Native Tools API
+    huggingface: Uses DeepSeek OCR via Hugging Face Spaces
 """
 
 import os
@@ -29,6 +30,7 @@ import structlog
 from .base import TextExtractor
 from .third_party import ThirdPartyExtractor
 from .saptiva import SaptivaExtractor
+from .huggingface import HuggingFaceExtractor
 
 logger = structlog.get_logger(__name__)
 
@@ -48,12 +50,13 @@ def get_text_extractor(*, force_new: bool = False) -> TextExtractor:
                    Useful for testing or config reloading.
 
     Returns:
-        TextExtractor implementation (ThirdPartyExtractor or SaptivaExtractor)
+        TextExtractor implementation (ThirdPartyExtractor, SaptivaExtractor or HuggingFaceExtractor)
 
     Environment Variables:
         EXTRACTOR_PROVIDER: Controls which implementation to use
             - "third_party" (default): pypdf + pytesseract
             - "saptiva": Saptiva Native Tools API
+            - "huggingface": DeepSeek OCR (Hugging Face Space)
 
     Example:
         # In service code
@@ -79,7 +82,7 @@ def get_text_extractor(*, force_new: bool = False) -> TextExtractor:
     provider = (os.getenv("EXTRACTOR_PROVIDER") or "third_party").lower().strip()
 
     # Validate provider value
-    valid_providers = {"third_party", "saptiva"}
+    valid_providers = {"third_party", "saptiva", "huggingface"}
     if provider not in valid_providers:
         logger.warning(
             "Invalid EXTRACTOR_PROVIDER value, falling back to third_party",
@@ -96,6 +99,13 @@ def get_text_extractor(*, force_new: bool = False) -> TextExtractor:
             has_api_key=bool(os.getenv("SAPTIVA_API_KEY")),
         )
         _cached_extractor = SaptivaExtractor()
+    elif provider == "huggingface":
+        logger.info(
+            "Initializing HuggingFaceExtractor (DeepSeek OCR)",
+            endpoint=os.getenv("HF_OCR_ENDPOINT", ""),
+            has_token=bool(os.getenv("HF_TOKEN")),
+        )
+        _cached_extractor = HuggingFaceExtractor()
     else:  # provider == "third_party"
         logger.info(
             "Initializing ThirdPartyExtractor (pypdf + pytesseract)",

@@ -208,25 +208,13 @@ class SimpleChatStrategy(ChatStrategy):
         )
 
 
-class ChatStrategyFactory:
-    """
-    Factory for creating appropriate chat strategy.
-
-    For now, always returns SimpleChatStrategy.
-    Deep Research and Web Search are handled separately.
-    """
-
-    @staticmethod
-    def create_strategy(context: ChatContext, chat_service: ChatService) -> ChatStrategy:
-        """
-        Create chat strategy.
-
-        Args:
-            context: ChatContext with request info.
-            chat_service: ChatService instance for processing.
-
-        Returns:
-            SimpleChatStrategy for all chat interactions.
-        """
-        logger.debug("Creating SimpleChatStrategy")
-        return SimpleChatStrategy(chat_service)
+# ADR-001: ChatStrategyFactory removed (YAGNI principle)
+# Previous implementation always returned SimpleChatStrategy.
+# When multiple strategies are needed, re-introduce factory with real selection logic.
+#
+# To add strategies in the future:
+# 1. Create new strategy class (e.g., RAGChatStrategy)
+# 2. Add selection logic based on context
+# 3. Re-introduce factory pattern
+#
+# See: docs/architecture/decisions/001-remove-chat-strategy-factory.md

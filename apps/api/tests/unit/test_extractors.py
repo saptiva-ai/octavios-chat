@@ -19,6 +19,7 @@ from src.services.extractors import (
     health_check_extractor,
     ThirdPartyExtractor,
     SaptivaExtractor,
+    HuggingFaceExtractor,
     TextExtractor,
     ExtractionError,
     UnsupportedFormatError,
@@ -55,6 +56,13 @@ class TestFactory:
             clear_extractor_cache()
             extractor = get_text_extractor()
             assert isinstance(extractor, SaptivaExtractor)
+
+    def test_factory_returns_huggingface(self):
+        """Factory should return HuggingFaceExtractor when EXTRACTOR_PROVIDER=huggingface."""
+        with patch.dict(os.environ, {"EXTRACTOR_PROVIDER": "huggingface"}):
+            clear_extractor_cache()
+            extractor = get_text_extractor()
+            assert isinstance(extractor, HuggingFaceExtractor)
 
     def test_factory_caches_instance(self):
         """Factory should return same instance on subsequent calls (singleton)."""
@@ -313,8 +321,7 @@ class TestSaptivaExtractor:
 
     @pytest.mark.asyncio
     async def test_saptiva_extract_pdf_success(self):
-        """Should extract text from PDF using base64 encoding."""
-        import httpx
+        """Should extract text from PDF using base64 encoding via SDK."""
         from unittest.mock import AsyncMock
 
         extractor = SaptivaExtractor(
@@ -322,18 +329,29 @@ class TestSaptivaExtractor:
             api_key="test-key-123",
         )
 
-        # Mock httpx client
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "text": "Extracted PDF content",
-            "pages": [{"page": 1, "text": "Extracted PDF content"}],
-            "confidence": 0.98,
-        }
-        mock_response.raise_for_status = MagicMock()
+        class _DummyCache:
+            async def get(self, *_args, **_kwargs):
+                return None
 
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_response)
+            async def set(self, *_args, **_kwargs):
+                return True
+
+        with patch.object(
+            SaptivaExtractor,
+            "_is_pdf_searchable",
+            return_value=False,
+        ), patch(
+            "saptiva_agents.tools.obtener_texto_en_documento",
+            new_callable=AsyncMock,
+        ) as mock_sdk, patch(
+            "src.services.extractors.saptiva.get_extraction_cache",
+            return_value=_DummyCache(),
+        ):
+            mock_sdk.return_value = {
+                "text": "Extracted PDF content",
+                "pages": [{"page": 1, "text": "Extracted PDF content"}],
+                "confidence": 0.98,
+            }
 
             text = await extractor.extract_text(
                 media_type="pdf",
@@ -343,16 +361,7 @@ class TestSaptivaExtractor:
             )
 
             assert text == "Extracted PDF content"
-
-            # Verify API call
-            call_args = mock_client.return_value.__aenter__.return_value.post.call_args
-            assert call_args[0][0] == "https://test.saptiva.ai/v1/tools/extractor-pdf"
-
-            # Verify base64 encoding was used
-            payload = call_args[1]["json"]
-            assert payload["doc_type"] == "pdf"
-            assert "document" in payload
-            assert isinstance(payload["document"], str)  # Base64 string
+            mock_sdk.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_saptiva_extract_image_success(self):
@@ -369,13 +378,27 @@ class TestSaptivaExtractor:
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            "text": "OCR extracted text",
-            "confidence": 0.95,
-            "language_detected": "spa",
+            "model": "Saptiva OCR",
+            "choices": [
+                {
+                    "message": {"content": "OCR extracted text"},
+                    "finish_reason": "stop",
+                }
+            ],
         }
         mock_response.raise_for_status = MagicMock()
 
-        with patch("httpx.AsyncClient") as mock_client:
+        class _DummyCache:
+            async def get(self, *_args, **_kwargs):
+                return None
+
+            async def set(self, *_args, **_kwargs):
+                return True
+
+        with patch(
+            "src.services.extractors.saptiva.get_extraction_cache",
+            return_value=_DummyCache(),
+        ), patch("httpx.AsyncClient") as mock_client:
             mock_client.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_response)
 
             text = await extractor.extract_text(
@@ -389,13 +412,15 @@ class TestSaptivaExtractor:
 
             # Verify OCR endpoint was called
             call_args = mock_client.return_value.__aenter__.return_value.post.call_args
-            assert call_args[0][0] == "https://test.saptiva.ai/v1/tools/ocr"
+            assert call_args[0][0] == "https://test.saptiva.ai/v1/chat/completions/"
 
-            # Verify base64 encoding and language hint
+            # Verify request payload structure
             payload = call_args[1]["json"]
-            assert "image" in payload
-            assert payload["mime_type"] == "image/png"
-            assert payload["language"] == "spa"  # Spanish language hint
+            assert payload["model"] == "Saptiva OCR"
+            content = payload["messages"][0]["content"]
+            assert content[0]["type"] == "text"
+            assert content[1]["type"] == "image_url"
+            assert content[1]["image_url"]["url"].startswith("data:image/png;base64,")
 
     @pytest.mark.asyncio
     async def test_saptiva_health_check_returns_true_when_configured(self):
@@ -497,38 +522,50 @@ class TestSaptivaExtractor:
             api_key="test-key-123",
         )
 
-        # Mock to fail twice then succeed
+        class _DummyCache:
+            async def get(self, *_args, **_kwargs):
+                return None
+
+            async def set(self, *_args, **_kwargs):
+                return True
+
         call_count = 0
 
-        async def mock_post(*args, **kwargs):
+        async def mock_post(*_args, **_kwargs):
             nonlocal call_count
             call_count += 1
 
             if call_count <= 2:
-                # First 2 calls fail with 503
                 mock_resp = MagicMock()
                 mock_resp.status_code = 503
                 mock_resp.text = "Service Unavailable"
                 raise httpx.HTTPStatusError("Server error", request=MagicMock(), response=mock_resp)
-            else:
-                # Third call succeeds
-                mock_resp = MagicMock()
-                mock_resp.status_code = 200
-                mock_resp.json.return_value = {"text": "Success after retries"}
-                mock_resp.raise_for_status = MagicMock()
-                return mock_resp
 
-        with patch("httpx.AsyncClient") as mock_client:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.json.return_value = {
+                "model": "Saptiva OCR",
+                "choices": [{"message": {"content": "Success after retries"}, "finish_reason": "stop"}],
+            }
+            mock_resp.raise_for_status = MagicMock()
+            return mock_resp
+
+        with patch(
+            "src.services.extractors.saptiva.get_extraction_cache",
+            return_value=_DummyCache(),
+        ), patch("httpx.AsyncClient") as mock_client, patch.object(
+            SaptivaExtractor, "_calculate_retry_delay", return_value=0
+        ):
             mock_client.return_value.__aenter__.return_value.post = mock_post
 
             text = await extractor.extract_text(
-                media_type="pdf",
-                data=b"%PDF-1.4 test",
-                mime="application/pdf",
+                media_type="image",
+                data=b"fake_image",
+                mime="image/png",
             )
 
             assert text == "Success after retries"
-            assert call_count == 3  # Verify 2 retries happened
+            assert call_count == 3
 
     @pytest.mark.asyncio
     async def test_saptiva_no_retry_on_client_error(self):
@@ -541,9 +578,16 @@ class TestSaptivaExtractor:
             api_key="test-key-123",
         )
 
+        class _DummyCache:
+            async def get(self, *_args, **_kwargs):
+                return None
+
+            async def set(self, *_args, **_kwargs):
+                return True
+
         call_count = 0
 
-        async def mock_post(*args, **kwargs):
+        async def mock_post(*_args, **_kwargs):
             nonlocal call_count
             call_count += 1
 
@@ -552,18 +596,21 @@ class TestSaptivaExtractor:
             mock_resp.text = "Bad Request"
             raise httpx.HTTPStatusError("Client error", request=MagicMock(), response=mock_resp)
 
-        with patch("httpx.AsyncClient") as mock_client:
+        with patch(
+            "src.services.extractors.saptiva.get_extraction_cache",
+            return_value=_DummyCache(),
+        ), patch("httpx.AsyncClient") as mock_client:
             mock_client.return_value.__aenter__.return_value.post = mock_post
 
             with pytest.raises(ExtractionError) as exc_info:
                 await extractor.extract_text(
-                    media_type="pdf",
-                    data=b"%PDF-1.4 test",
-                    mime="application/pdf",
+                    media_type="image",
+                    data=b"fake_image",
+                    mime="image/png",
                 )
 
             assert "400" in str(exc_info.value)
-            assert call_count == 1  # Should not retry
+            assert call_count == 1
 
     @pytest.mark.asyncio
     async def test_saptiva_generates_idempotency_key(self):
@@ -578,30 +625,11 @@ class TestSaptivaExtractor:
 
         pdf_data = b"%PDF-1.4 test content"
 
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"text": "Test"}
-        mock_response.raise_for_status = MagicMock()
+        key1 = extractor._generate_idempotency_key(pdf_data, "pdf")
+        key2 = extractor._generate_idempotency_key(pdf_data, "pdf")
 
-        captured_headers = None
-
-        async def mock_post(*args, **kwargs):
-            nonlocal captured_headers
-            captured_headers = kwargs.get("headers", {})
-            return mock_response
-
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.post = mock_post
-
-            await extractor.extract_text(
-                media_type="pdf",
-                data=pdf_data,
-                mime="application/pdf",
-            )
-
-            # Verify idempotency key was sent
-            assert "X-Idempotency-Key" in captured_headers
-            assert captured_headers["X-Idempotency-Key"].startswith("saptiva-extract-pdf-")
+        assert key1 == key2
+        assert key1.startswith("saptiva-extract-pdf-")
 
 
 class TestAbstractInterface:
