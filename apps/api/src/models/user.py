@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from beanie import Document
 from pydantic import BaseModel, EmailStr, Field
+from pymongo import IndexModel, ASCENDING
 
 
 class UserPreferences(BaseModel):
@@ -33,8 +34,8 @@ class User(Document):
     class Settings:
         name = "users"
         indexes = [
-            [("username", 1)],  # Unique index on username
-            [("email", 1)],     # Unique index on email
+            IndexModel([("username", ASCENDING)], unique=True),  # Unique index on username
+            IndexModel([("email", ASCENDING)], unique=True),     # Unique index on email
             "created_at",
             "is_active",
         ]
