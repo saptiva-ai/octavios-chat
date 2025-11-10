@@ -23,7 +23,8 @@ class TestChatSessionAttachedFileIds:
 
     def test_chat_session_has_attached_file_ids_field(self):
         """Should have attached_file_ids field with default empty list"""
-        session = ChatSession(
+        # Use .construct() to bypass Beanie initialization in unit tests
+        session = ChatSession.construct(
             id="test-session",
             title="Test Chat",
             user_id="user-123"
@@ -35,7 +36,8 @@ class TestChatSessionAttachedFileIds:
 
     def test_chat_session_stores_file_ids(self):
         """Should store multiple file IDs"""
-        session = ChatSession(
+        # Use .construct() to bypass Beanie initialization in unit tests
+        session = ChatSession.construct(
             id="test-session",
             title="Test Chat",
             user_id="user-123",
@@ -49,7 +51,8 @@ class TestChatSessionAttachedFileIds:
 
     def test_chat_session_file_ids_are_mutable(self):
         """Should allow adding/removing file IDs"""
-        session = ChatSession(
+        # Use .construct() to bypass Beanie initialization in unit tests
+        session = ChatSession.construct(
             id="test-session",
             title="Test Chat",
             user_id="user-123",
@@ -67,7 +70,8 @@ class TestChatSessionAttachedFileIds:
 
     def test_chat_session_serialization_includes_file_ids(self):
         """Should serialize attached_file_ids when converting to dict"""
-        session = ChatSession(
+        # Use .construct() to bypass Beanie initialization in unit tests
+        session = ChatSession.construct(
             id="test-session",
             title="Test Chat",
             user_id="user-123",
