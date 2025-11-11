@@ -4,7 +4,7 @@
  * MVP-LOCK: Now persists attachments by chatId to survive page refreshes
  *
  * Simplified hook for uploading files to /api/files/upload
- * Handles validation, upload, error mapping, and idempotency
+ * Handles validation, upload, error mapping, idempotency, and SSE progress tracking
  *
  * See: VALIDATION_REPORT_V1.md for complete specification
  */
@@ -73,6 +73,13 @@ export function useFiles(chatId?: string): UseFilesReturn {
   );
   const [error, setError] = useState<string | null>(null);
 
+  // SSE tracking
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const processingFileRef = useRef<{
+    file_id: string;
+    filename: string;
+  } | null>(null);
+
   // MVP-LOCK: Initialize attachments from persistent store
   const [attachments, setAttachments] = useState<FileAttachment[]>(() => {
     return filesStore.getForChat(effectiveChatId);
@@ -94,6 +101,16 @@ export function useFiles(chatId?: string): UseFilesReturn {
       count: storedAttachments.length,
     });
   }, [effectiveChatId, filesStore]);
+
+  // Cleanup SSE connection on unmount
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  }, []);
 
   // Rate limit tracking (client-side, informational only)
   const uploadTimestamps = useRef<number[]>([]);
@@ -165,7 +182,191 @@ export function useFiles(chatId?: string): UseFilesReturn {
   }, []);
 
   /**
-   * Upload a single file
+   * Connect to SSE for real-time progress updates
+   */
+  const connectToSSE = useCallback(
+    (
+      fileId: string,
+      filename: string,
+      fileSize: number,
+      conversationId?: string,
+    ) => {
+      // Close any existing connection
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+
+      const traceId = crypto.randomUUID();
+      const eventSourceUrl = `/api/files/events/${fileId}?t=${encodeURIComponent(traceId)}`;
+
+      logDebug("[useFiles] Connecting to SSE", {
+        file_id: fileId,
+        url: eventSourceUrl,
+      });
+
+      try {
+        const eventSource = new EventSource(eventSourceUrl, {
+          withCredentials: true,
+        });
+
+        eventSourceRef.current = eventSource;
+        processingFileRef.current = { file_id: fileId, filename };
+
+        // Set initial progress
+        setUploadProgress({
+          loaded: 0,
+          total: fileSize,
+          percentage: 5, // Show 5% to indicate upload started
+        });
+
+        eventSource.onopen = () => {
+          logDebug("[useFiles] SSE connected", { file_id: fileId });
+        };
+
+        // Handle meta event (initial status)
+        eventSource.addEventListener("meta", (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            logDebug("[useFiles] SSE meta event", data);
+
+            const progress = data.pct || 10;
+            setUploadProgress({
+              loaded: Math.floor((fileSize * progress) / 100),
+              total: fileSize,
+              percentage: progress,
+            });
+          } catch (err) {
+            console.error("[useFiles] Failed to parse meta event", err);
+          }
+        });
+
+        // Handle progress events
+        eventSource.addEventListener("progress", (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            logDebug("[useFiles] SSE progress event", data);
+
+            const progress = Math.min(data.pct || 0, 95); // Cap at 95% until ready
+            setUploadProgress({
+              loaded: Math.floor((fileSize * progress) / 100),
+              total: fileSize,
+              percentage: progress,
+            });
+          } catch (err) {
+            console.error("[useFiles] Failed to parse progress event", err);
+          }
+        });
+
+        // Handle ready event (processing complete)
+        eventSource.addEventListener("ready", (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            logDebug("[useFiles] SSE ready event", data);
+
+            // Show 100% progress
+            setUploadProgress({
+              loaded: fileSize,
+              total: fileSize,
+              percentage: 100,
+            });
+
+            // Create and persist attachment
+            const attachment: FileAttachment = {
+              file_id: fileId,
+              filename: filename,
+              status: "READY",
+              bytes: fileSize,
+              pages: data.pages,
+              mimetype: data.mimetype,
+            };
+
+            const targetChatId = conversationId || effectiveChatId;
+            filesStore.addToChat(targetChatId, attachment);
+
+            logDebug("[useFiles] File ready, persisted to store", {
+              chatId: targetChatId,
+              file_id: fileId,
+            });
+
+            // Toast notification
+            toast.success(
+              `✓ ${filename} listo para analizar en esta conversación`,
+              { duration: 2500 },
+            );
+
+            // Cleanup
+            eventSource.close();
+            eventSourceRef.current = null;
+            processingFileRef.current = null;
+            setIsUploading(false);
+            setUploadProgress(null);
+          } catch (err) {
+            console.error("[useFiles] Failed to parse ready event", err);
+          }
+        });
+
+        // Handle failed event
+        eventSource.addEventListener("failed", (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            logError("[useFiles] SSE failed event", data);
+
+            const errorMessage = data.error?.detail || "Processing failed";
+            setError(`🔧 ${errorMessage}`);
+
+            // Cleanup
+            eventSource.close();
+            eventSourceRef.current = null;
+            processingFileRef.current = null;
+            setIsUploading(false);
+            setUploadProgress(null);
+          } catch (err) {
+            console.error("[useFiles] Failed to parse failed event", err);
+          }
+        });
+
+        // Handle heartbeat (keep-alive)
+        eventSource.addEventListener("heartbeat", (event) => {
+          logDebug("[useFiles] SSE heartbeat", { file_id: fileId });
+        });
+
+        // Handle errors
+        eventSource.onerror = (err) => {
+          console.error("[useFiles] SSE error", err);
+
+          // If we already got the file processed, don't show error
+          if (processingFileRef.current?.file_id !== fileId) {
+            return;
+          }
+
+          setError(
+            "⚠️ Conexión perdida con el servidor. El archivo puede estar procesándose.",
+          );
+
+          // Cleanup after timeout
+          setTimeout(() => {
+            if (eventSourceRef.current === eventSource) {
+              eventSource.close();
+              eventSourceRef.current = null;
+              processingFileRef.current = null;
+              setIsUploading(false);
+              setUploadProgress(null);
+            }
+          }, 5000);
+        };
+      } catch (err: any) {
+        logError("[useFiles] Failed to create EventSource", {
+          error: err.message,
+          file_id: fileId,
+        });
+        setError("⚠️ Error al conectar para actualizaciones de progreso");
+      }
+    },
+    [effectiveChatId, filesStore],
+  );
+
+  /**
+   * Upload a single file with SSE progress tracking
    */
   const uploadFile = useCallback(
     async (
@@ -223,7 +424,7 @@ export function useFiles(chatId?: string): UseFilesReturn {
           formData.append("conversation_id", conversationId);
         }
 
-        // Upload to backend
+        // Upload to backend (non-blocking - returns immediately with file_id)
         const response = await fetch("/api/files/upload", {
           method: "POST",
           body: formData,
@@ -237,7 +438,6 @@ export function useFiles(chatId?: string): UseFilesReturn {
 
         if (!response.ok) {
           // FE-UX-2: Enhanced error handling with actionable messages
-          // Parse error response
           const errorData: { detail?: string; error?: FileError } =
             await response.json().catch(() => ({}));
 
@@ -288,7 +488,7 @@ export function useFiles(chatId?: string): UseFilesReturn {
 
         const ingestResponse: FileIngestResponse = payload.files[0];
 
-        // Check if processing failed
+        // Check if processing failed immediately
         if (ingestResponse.status === "FAILED") {
           const userMessage = ingestResponse.error
             ? getErrorMessage(ingestResponse.error)
@@ -296,49 +496,74 @@ export function useFiles(chatId?: string): UseFilesReturn {
           throw new Error(userMessage);
         }
 
-        setUploadProgress({
-          loaded: file.size,
-          total: file.size,
-          percentage: 100,
-        });
-
         // Track successful upload
         trackUpload();
 
-        logDebug("[useFiles] Upload complete", {
+        logDebug("[useFiles] Upload accepted by server", {
           file_id: ingestResponse.file_id,
           status: ingestResponse.status,
         });
 
-        // Create attachment
-        const attachment: FileAttachment = {
+        // If already READY (cached or instant processing), return immediately
+        if (ingestResponse.status === "READY") {
+          setUploadProgress({
+            loaded: file.size,
+            total: file.size,
+            percentage: 100,
+          });
+
+          const attachment: FileAttachment = {
+            file_id: ingestResponse.file_id,
+            filename: ingestResponse.filename || file.name,
+            status: ingestResponse.status,
+            bytes: ingestResponse.bytes,
+            pages: ingestResponse.pages,
+            mimetype: ingestResponse.mimetype,
+          };
+
+          const targetChatId = conversationId || effectiveChatId;
+          filesStore.addToChat(targetChatId, attachment);
+
+          logDebug("[useFiles] File immediately ready (cached)", {
+            chatId: targetChatId,
+            file_id: attachment.file_id,
+          });
+
+          toast.success(
+            `✓ ${attachment.filename} listo para analizar en esta conversación`,
+            { duration: 2500 },
+          );
+
+          setIsUploading(false);
+          setUploadProgress(null);
+
+          return attachment;
+        }
+
+        // File is still PROCESSING - connect to SSE for real-time updates
+        logDebug("[useFiles] File processing, connecting to SSE", {
+          file_id: ingestResponse.file_id,
+          status: ingestResponse.status,
+        });
+
+        connectToSSE(
+          ingestResponse.file_id,
+          ingestResponse.filename || file.name,
+          file.size,
+          conversationId,
+        );
+
+        // Return a temporary attachment in PROCESSING state
+        const processingAttachment: FileAttachment = {
           file_id: ingestResponse.file_id,
           filename: ingestResponse.filename || file.name,
-          status: ingestResponse.status,
+          status: "PROCESSING",
           bytes: ingestResponse.bytes,
           pages: ingestResponse.pages,
           mimetype: ingestResponse.mimetype,
         };
 
-        // MVP-LOCK: Persist to store immediately after successful upload
-        const targetChatId = conversationId || effectiveChatId;
-
-        filesStore.addToChat(targetChatId, attachment);
-
-        logDebug("[useFiles] Persisted attachment to store after upload", {
-          chatId: targetChatId,
-          file_id: attachment.file_id,
-        });
-
-        // FE-2 MVP: Toast notification when file is ready
-        if (attachment.status === "READY") {
-          toast.success(
-            `✓ ${attachment.filename} listo para analizar en esta conversación`,
-            { duration: 2500 },
-          );
-        }
-
-        return attachment;
+        return processingAttachment;
       } catch (err: any) {
         const errorMessage = err.message || "Failed to upload file";
         setError(errorMessage);
@@ -348,13 +573,20 @@ export function useFiles(chatId?: string): UseFilesReturn {
           error: errorMessage,
         });
 
-        return null;
-      } finally {
         setIsUploading(false);
         setUploadProgress(null);
+
+        return null;
       }
     },
-    [apiClient, checkClientRateLimit, trackUpload, filesStore, effectiveChatId],
+    [
+      apiClient,
+      checkClientRateLimit,
+      trackUpload,
+      filesStore,
+      effectiveChatId,
+      connectToSSE,
+    ],
   );
 
   /**
