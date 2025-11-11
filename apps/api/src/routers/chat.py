@@ -61,6 +61,7 @@ from ..domain import (
     ChatResponseBuilder,
     SimpleChatStrategy
 )
+from ..domain.message_handlers import create_handler_chain
 # TODO: Fix MCP integration - backend.mcp.protocol doesn't exist
 # from backend.mcp.protocol import ToolInvokeContext
 
@@ -1051,316 +1052,49 @@ async def send_chat_message(
             message_id=str(user_message.id),
             has_metadata=user_message.metadata is not None,
             saved_metadata=user_message.metadata
+        )        # ====================================================================
+        # DELEGATE TO HANDLER CHAIN (Chain of Responsibility Pattern)
+        # ====================================================================
+        # The handler chain will decide how to process the message:
+        # 1. AuditCommandHandler - checks for "Auditar archivo:" commands
+        # 2. StandardChatHandler - processes normal chat (fallback)
+
+        handler_chain = create_handler_chain()
+        handler_result = await handler_chain.handle(
+            context=context,
+            chat_service=chat_service,
+            user_id=user_id,
+            chat_session=chat_session,
+            user_message=user_message,
+            current_file_ids=current_file_ids
         )
 
-        # ====================================================================
-        # AUDIT COMMAND DETECTION: Check if user wants to audit a file
-        # ====================================================================
-        # DEBUG: Log message before audit detection
-        logger.info(
-            "DEBUG: Before audit detection",
-            raw_message=context.message,
-            stripped_message=context.message.strip(),
-            starts_with_audit=context.message.strip().startswith("Auditar archivo:"),
-            message_length=len(context.message),
-            first_20_chars=context.message[:20] if len(context.message) >= 20 else context.message
-        )
-
-        if context.message.strip().startswith("Auditar archivo:"):
+        if handler_result:
+            # Handler processed the message successfully
             logger.info(
-                "Audit command detected",
-                message=context.message,
-                user_id=user_id,
-                file_ids=current_file_ids
+                "Message processed by handler chain",
+                strategy=handler_result.strategy_used,
+                processing_time_ms=handler_result.processing_time_ms
             )
 
-            try:
-                # Extract filename from message
-                filename_from_message = context.message.replace("Auditar archivo:", "").strip()
+            # Invalidate caches
+            await cache.invalidate_chat_history(chat_session.id)
 
-                # Find matching document from attached files
-                target_doc = None
-                if current_file_ids:
-                    for file_id in current_file_ids:
-                        doc = await Document.get(file_id)
-                        if doc and doc.filename == filename_from_message:
-                            target_doc = doc
-                            break
+            # Return response
+            return (ChatResponseBuilder()
+                .from_processing_result(handler_result)
+                .with_metadata("processing_time_ms", (time.time() - start_time) * 1000)
+                .build())
 
-                if not target_doc:
-                    error_msg = f"No se encontró el archivo '{filename_from_message}' en los archivos adjuntos."
-                    logger.warning(
-                        "Audit failed: file not found",
-                        filename=filename_from_message,
-                        available_files=current_file_ids
-                    )
+        # If no handler processed (should not happen with StandardChatHandler as fallback),
+        # fall through to legacy strategy execution below
+        logger.warning(
+            "No handler processed the message - this should not happen",
+            message=context.message[:50],
+            session_id=context.session_id
+        )
 
-                    # Save error message
-                    error_assistant_message = await chat_service.add_assistant_message(
-                        chat_session=chat_session,
-                        content=error_msg,
-                        model=context.model,
-                        metadata={"error": "file_not_found"}
-                    )
-
-                    # Return error response
-                    elapsed_time = (time.time() - start_time) * 1000
-                    return (ChatResponseBuilder()
-                        .with_chat_id(str(chat_session.id))
-                        .with_message(error_msg)
-                        .with_model(context.model)
-                        .with_message_id(str(error_assistant_message.id))
-                        .with_latency(elapsed_time)
-                        .with_metadata("user_message_id", str(user_message.id))
-                        .build())
-
-                # Validate document status
-                if target_doc.status != DocumentStatus.READY:
-                    error_msg = f"El archivo '{target_doc.filename}' no está listo para auditoría. Estado actual: {target_doc.status.value}"
-                    logger.warning(
-                        "Audit failed: document not ready",
-                        doc_id=str(target_doc.id),
-                        status=target_doc.status.value
-                    )
-
-                    error_assistant_message = await chat_service.add_assistant_message(
-                        chat_session=chat_session,
-                        content=error_msg,
-                        model=context.model,
-                        metadata={"error": "document_not_ready"}
-                    )
-
-                    elapsed_time = (time.time() - start_time) * 1000
-                    return (ChatResponseBuilder()
-                        .with_chat_id(str(chat_session.id))
-                        .with_message(error_msg)
-                        .with_model(context.model)
-                        .with_message_id(str(error_assistant_message.id))
-                        .with_latency(elapsed_time)
-                        .with_metadata("user_message_id", str(user_message.id))
-                        .build())
-
-                # Get PDF path
-                pdf_path = Path(target_doc.minio_key)
-                temp_pdf_path: Optional[Path] = None
-
-                if not pdf_path.exists():
-                    minio_storage = get_minio_storage()
-                    try:
-                        pdf_path, is_temp = minio_storage.materialize_document(
-                            target_doc.minio_key,
-                            filename=target_doc.filename,
-                        )
-                        if is_temp:
-                            temp_pdf_path = pdf_path
-                    except Exception as storage_exc:
-                        error_msg = "No se pudo recuperar el PDF para auditoría."
-                        logger.error(
-                            "Audit failed: Unable to materialize PDF",
-                            doc_id=str(target_doc.id),
-                            minio_key=target_doc.minio_key,
-                            error=str(storage_exc),
-                        )
-
-                        error_assistant_message = await chat_service.add_assistant_message(
-                            chat_session=chat_session,
-                            content=error_msg,
-                            model=context.model,
-                            metadata={"error": "pdf_not_found"},
-                        )
-
-                        elapsed_time = (time.time() - start_time) * 1000
-                        return (ChatResponseBuilder()
-                            .with_chat_id(str(chat_session.id))
-                            .with_message(error_msg)
-                            .with_model(context.model)
-                            .with_message_id(str(error_assistant_message.id))
-                            .with_latency(elapsed_time)
-                            .with_metadata("user_message_id", str(user_message.id))
-                            .build())
-
-                logger.info(
-                    "PDF path resolved for audit",
-                    doc_id=str(target_doc.id),
-                    pdf_path=str(pdf_path),
-                    source="temp" if temp_pdf_path else "local",
-                )
-
-                try:
-                    # Resolve policy (use auto-detection)
-                    policy = await resolve_policy("auto", document=target_doc)
-
-                    # Run validation
-                    logger.info(
-                        "Running validation for audit command",
-                        doc_id=str(target_doc.id),
-                        filename=target_doc.filename,
-                        policy_id=policy.id
-                    )
-
-                    report = await validate_document(
-                        document=target_doc,
-                        pdf_path=pdf_path,
-                        client_name=policy.client_name,
-                        enable_disclaimer=True,
-                        enable_format=True,
-                        enable_typography=True,  # Phase 2
-                        enable_grammar=True,
-                        enable_logo=True,
-                        enable_color_palette=True,  # Phase 3
-                        enable_entity_consistency=True,  # Phase 4
-                        enable_semantic_consistency=True,  # Phase 5 (FINAL)
-                        policy_config=policy.to_compliance_config(),
-                        policy_id=policy.id,
-                        policy_name=policy.name
-                    )
-
-                    # Save validation report to MongoDB
-                    validation_report = ValidationReport(
-                        document_id=str(target_doc.id),
-                        user_id=user_id,
-                        job_id=report.job_id,
-                        status="done" if report.status == "done" else "error",
-                        client_name=policy.client_name,
-                        auditors_enabled={
-                            "disclaimer": True,
-                            "format": True,
-                            "typography": True,  # Phase 2
-                            "grammar": True,
-                            "logo": True,
-                            "color_palette": True,  # Phase 3
-                            "entity_consistency": True,  # Phase 4
-                            "semantic_consistency": True,  # Phase 5 (FINAL)
-                        },
-                        findings=[f.model_dump() for f in report.findings],
-                        summary=report.summary,
-                        attachments=report.attachments,
-                    )
-
-                    await validation_report.insert()
-
-                    # Link validation report to document
-                    await target_doc.update({"$set": {
-                        "validation_report_id": str(validation_report.id),
-                        "updated_at": datetime.utcnow()
-                    }})
-
-                    logger.info(
-                        "Validation report saved",
-                        report_id=str(validation_report.id),
-                        doc_id=str(target_doc.id),
-                        findings_count=len(report.findings)
-                    )
-
-                    # Format report as markdown
-                    formatted_report = _format_validation_report_as_markdown(report, target_doc.filename)
-
-                    # V2: Upload audit report to MinIO
-                    minio_report_path = None
-                    try:
-                        minio_storage = get_minio_storage()
-                        minio_report_path = minio_storage.upload_audit_report(
-                            user_id=user_id,
-                            report_id=str(validation_report.id),
-                            report_content=formatted_report,
-                            chat_id=str(chat_session.id),
-                            document_id=str(target_doc.id),
-                            metadata={
-                                "filename": target_doc.filename,
-                                "findings_count": str(len(report.findings)),
-                                "policy": policy.name,
-                            }
-                        )
-
-                        logger.info(
-                            "Audit report uploaded to MinIO",
-                            report_id=str(validation_report.id),
-                            minio_path=minio_report_path
-                        )
-
-                    except Exception as minio_exc:
-                        logger.error(
-                            "Failed to upload audit report to MinIO",
-                            report_id=str(validation_report.id),
-                            error=str(minio_exc)
-                        )
-                        # Don't fail the request - report is still in MongoDB
-
-                    # Save assistant message with formatted report
-                    audit_assistant_message = await chat_service.add_assistant_message(
-                        chat_session=chat_session,
-                        content=formatted_report,
-                        model=context.model,
-                        metadata={
-                            "audit": True,
-                            "document_id": str(target_doc.id),
-                            "validation_report_id": str(validation_report.id),
-                            "findings_count": len(report.findings),
-                            "minio_report_path": minio_report_path,
-                        }
-                    )
-
-                    logger.info(
-                        "Audit completed via chat",
-                        doc_id=str(target_doc.id),
-                        findings_count=len(report.findings),
-                        assistant_message_id=str(audit_assistant_message.id)
-                    )
-
-                    # Return formatted response (bypass LLM)
-                    elapsed_time = (time.time() - start_time) * 1000
-                    return (ChatResponseBuilder()
-                        .with_chat_id(str(chat_session.id))
-                        .with_message(formatted_report)
-                        .with_model(context.model)
-                        .with_message_id(str(audit_assistant_message.id))
-                        .with_latency(elapsed_time)
-                        .with_metadata("user_message_id", str(user_message.id))
-                        .with_metadata("audit", True)
-                        .with_metadata("validation_report_id", str(validation_report.id))
-                        .build())
-                finally:
-                    if temp_pdf_path and temp_pdf_path.exists():
-                        try:
-                            temp_pdf_path.unlink()
-                            logger.debug(
-                                "Temporary PDF cleaned up after chat audit",
-                                doc_id=str(target_doc.id),
-                                pdf_path=str(temp_pdf_path),
-                            )
-                        except Exception as cleanup_exc:
-                            logger.warning(
-                                "Failed to cleanup temporary audit PDF",
-                                doc_id=str(target_doc.id),
-                                pdf_path=str(temp_pdf_path),
-                                error=str(cleanup_exc),
-                            )
-
-            except Exception as audit_exc:
-                logger.error(
-                    "Audit command failed",
-                    error=str(audit_exc),
-                    exc_info=True
-                )
-
-                error_msg = f"Error al ejecutar la auditoría: {str(audit_exc)}"
-                error_assistant_message = await chat_service.add_assistant_message(
-                    chat_session=chat_session,
-                    content=error_msg,
-                    model=context.model,
-                    metadata={"error": "audit_execution_failed"}
-                )
-
-                elapsed_time = (time.time() - start_time) * 1000
-                return (ChatResponseBuilder()
-                    .with_chat_id(str(chat_session.id))
-                    .with_message(error_msg)
-                    .with_model(context.model)
-                    .with_message_id(str(error_assistant_message.id))
-                    .with_latency(elapsed_time)
-                    .with_metadata("user_message_id", str(user_message.id))
-                    .with_metadata("error", "audit_execution_failed")
-                    .build())
+        
 
         # 5. Select and execute appropriate strategy with timeout protection
         # BE-PERF-2: Apply timeout to prevent hung LLM calls
