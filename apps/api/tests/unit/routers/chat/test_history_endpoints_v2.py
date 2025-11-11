@@ -12,7 +12,6 @@ Tests:
 import pytest
 from datetime import datetime
 from unittest.mock import AsyncMock, Mock, patch, MagicMock, PropertyMock
-from types import SimpleNamespace
 from fastapi import FastAPI, status, Request
 from fastapi.testclient import TestClient
 from fastapi.responses import JSONResponse
@@ -24,8 +23,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../..', 'src')
 
 from src.routers.chat.endpoints.history_endpoints import router as history_router
 from src.schemas.chat import ChatHistoryResponse, ChatMessage
-from src.models.chat import MessageRole, MessageStatus
+from src.models.chat import MessageRole, MessageStatus, ChatMessage as ChatMessageModel
 from src.core.exceptions import NotFoundError
+from .conftest import MockBeanieQueryBuilder
 
 
 @pytest.fixture
@@ -177,47 +177,32 @@ class TestGetChatHistory:
         chat_id = "test-chat-123"
 
         # Create 100 mock messages for testing pagination
-        # Use SimpleNamespace for clean attribute access
+        # Use Mock without spec to allow flexible attribute access
         mock_messages = []
         for i in range(100):
             created_at = datetime.utcnow()
             updated_at = datetime.utcnow()
             role = MessageRole.USER if i % 2 == 0 else MessageRole.ASSISTANT
-            msg = SimpleNamespace(
-                id=f"msg-{i}",
-                chat_id=chat_id,
-                role=role,
-                content=f"Message {i}",
-                status=MessageStatus.DELIVERED,
-                created_at=created_at,
-                updated_at=updated_at,
-                metadata={},
-                model="saptiva-turbo" if i % 2 == 1 else None,
-                tokens=10,
-                latency_ms=100,
-                task_id=None
-            )
-            # Add model_dump method for FastAPI serialization compatibility
-            # This is required because the endpoint creates ChatMessage objects
-            # which then call model_dump(mode='json')
-            def make_model_dump(msg_obj):
-                def model_dump(mode='json'):
-                    return {
-                        "id": str(msg_obj.id),
-                        "chat_id": msg_obj.chat_id,
-                        "role": msg_obj.role.value if hasattr(msg_obj.role, 'value') else msg_obj.role,
-                        "content": msg_obj.content,
-                        "status": msg_obj.status.value if hasattr(msg_obj.status, 'value') else msg_obj.status,
-                        "created_at": msg_obj.created_at.isoformat() if hasattr(msg_obj.created_at, 'isoformat') else str(msg_obj.created_at),
-                        "updated_at": msg_obj.updated_at.isoformat() if hasattr(msg_obj.updated_at, 'isoformat') else str(msg_obj.updated_at),
-                        "metadata": msg_obj.metadata,
-                        "model": msg_obj.model,
-                        "tokens": msg_obj.tokens,
-                        "latency_ms": msg_obj.latency_ms,
-                        "task_id": str(msg_obj.task_id) if msg_obj.task_id else None
-                    }
-                return model_dump
-            msg.model_dump = make_model_dump(msg)
+
+            # Create Mock object with configure_mock to set all attributes at once
+            msg = Mock()
+            msg.configure_mock(**{
+                'id': f"msg-{i}",
+                'chat_id': chat_id,
+                'role': role,
+                'content': f"Message {i}",
+                'status': MessageStatus.DELIVERED,
+                'created_at': created_at,
+                'updated_at': updated_at,
+                'metadata': {},
+                'model': "saptiva-turbo" if i % 2 == 1 else None,
+                'tokens': 10,
+                'latency_ms': 100,
+                'task_id': None,
+                'file_ids': [],
+                'files': []
+            })
+
             mock_messages.append(msg)
 
         # Create robust query builder that supports chaining
@@ -225,6 +210,10 @@ class TestGetChatHistory:
             messages=mock_messages,
             total_count=100
         )
+
+        # Mock Task model query (for research task enrichment)
+        mock_task_query = AsyncMock()
+        mock_task_query.to_list = AsyncMock(return_value=[])
 
         with patch('src.routers.chat.endpoints.history_endpoints.get_redis_cache') as mock_get_cache, \
              patch('src.routers.chat.endpoints.history_endpoints.HistoryService') as MockHistoryService, \
@@ -243,8 +232,8 @@ class TestGetChatHistory:
             # The endpoint calls: find(...).find(...).sort(...).skip(...).limit(...).to_list()
             MockMessageModel.find = MagicMock(return_value=query_builder)
 
-            # Execute with pagination
-            response = client.get(f"/history/{chat_id}?limit={limit}&offset={offset}")
+            # Execute with pagination - disable research tasks to simplify
+            response = client.get(f"/history/{chat_id}?limit={limit}&offset={offset}&include_research_tasks=false")
 
             # Assertions
             assert response.status_code == status.HTTP_200_OK
@@ -270,45 +259,32 @@ class TestGetChatHistory:
         chat_id = "test-chat-123"
 
         # Create 100 mock messages for pagination testing
-        # Use SimpleNamespace for clean attribute access
+        # Use Mock without spec to allow flexible attribute access
         mock_messages = []
         for i in range(100):
             created_at = datetime.utcnow()
             updated_at = datetime.utcnow()
             role = MessageRole.USER if i % 2 == 0 else MessageRole.ASSISTANT
-            msg = SimpleNamespace(
-                id=f"msg-{i}",
-                chat_id=chat_id,
-                role=role,
-                content=f"Message {i}",
-                status=MessageStatus.DELIVERED,
-                created_at=created_at,
-                updated_at=updated_at,
-                metadata={},
-                model="saptiva-turbo" if i % 2 == 1 else None,
-                tokens=10,
-                latency_ms=100,
-                task_id=None
-            )
-            # Add model_dump method for FastAPI serialization compatibility
-            def make_model_dump(msg_obj):
-                def model_dump(mode='json'):
-                    return {
-                        "id": str(msg_obj.id),
-                        "chat_id": msg_obj.chat_id,
-                        "role": msg_obj.role.value if hasattr(msg_obj.role, 'value') else msg_obj.role,
-                        "content": msg_obj.content,
-                        "status": msg_obj.status.value if hasattr(msg_obj.status, 'value') else msg_obj.status,
-                        "created_at": msg_obj.created_at.isoformat() if hasattr(msg_obj.created_at, 'isoformat') else str(msg_obj.created_at),
-                        "updated_at": msg_obj.updated_at.isoformat() if hasattr(msg_obj.updated_at, 'isoformat') else str(msg_obj.updated_at),
-                        "metadata": msg_obj.metadata,
-                        "model": msg_obj.model,
-                        "tokens": msg_obj.tokens,
-                        "latency_ms": msg_obj.latency_ms,
-                        "task_id": str(msg_obj.task_id) if msg_obj.task_id else None
-                    }
-                return model_dump
-            msg.model_dump = make_model_dump(msg)
+
+            # Create Mock object with configure_mock to set all attributes at once
+            msg = Mock()
+            msg.configure_mock(**{
+                'id': f"msg-{i}",
+                'chat_id': chat_id,
+                'role': role,
+                'content': f"Message {i}",
+                'status': MessageStatus.DELIVERED,
+                'created_at': created_at,
+                'updated_at': updated_at,
+                'metadata': {},
+                'model': "saptiva-turbo" if i % 2 == 1 else None,
+                'tokens': 10,
+                'latency_ms': 100,
+                'task_id': None,
+                'file_ids': [],
+                'files': []
+            })
+
             mock_messages.append(msg)
 
         # Create robust query builder that supports chaining
@@ -334,8 +310,8 @@ class TestGetChatHistory:
             # Setup ChatMessageModel.find() to return the query builder
             MockMessageModel.find = MagicMock(return_value=query_builder)
 
-            # Execute with limit=10, offset=0
-            response = client.get(f"/history/{chat_id}?limit=10&offset=0")
+            # Execute with limit=10, offset=0 - disable research tasks to simplify
+            response = client.get(f"/history/{chat_id}?limit=10&offset=0&include_research_tasks=false")
 
             # Assertions
             assert response.status_code == status.HTTP_200_OK
