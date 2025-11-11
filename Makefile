@@ -1477,12 +1477,22 @@ test-sh:
 ## Run API unit tests
 test-api:
 	@echo "$(YELLOW)Running API tests...$(NC)"
-	@$(DOCKER_COMPOSE_DEV) exec api pytest tests/ -v --cov=src
+	@if [ -n "$(FILE)" ]; then \
+		echo "$(BLUE)Testing specific file/test: $(FILE)$(NC)"; \
+		$(DOCKER_COMPOSE_DEV) exec api pytest $(FILE) $(ARGS); \
+	else \
+		$(DOCKER_COMPOSE_DEV) exec api pytest tests/ -v --cov=src $(ARGS); \
+	fi
 
 ## Run web unit tests
 test-web:
 	@echo "$(YELLOW)Running web tests...$(NC)"
-	@$(DOCKER_COMPOSE_DEV) exec web pnpm test
+	@if [ -n "$(FILE)" ]; then \
+		echo "$(BLUE)Testing specific file/test: $(FILE)$(NC)"; \
+		$(DOCKER_COMPOSE_DEV) exec web pnpm test $(FILE) $(ARGS); \
+	else \
+		$(DOCKER_COMPOSE_DEV) exec web pnpm test $(ARGS); \
+	fi
 
 ## Run E2E tests
 test-e2e: venv-install
