@@ -172,9 +172,13 @@ class TestGetSessionResearchTasks:
         session_id = "unauthorized-session"
 
         with patch('src.routers.chat.endpoints.session_endpoints.HistoryService') as MockHistoryService:
-            # Setup - permission denied
+            # Setup - permission denied (HistoryService raises HTTPException with 404)
+            from fastapi import HTTPException
             MockHistoryService.get_session_with_permission_check = AsyncMock(
-                side_effect=NotFoundError("Session not found", code="SESSION_NOT_FOUND")
+                side_effect=HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Chat session not found"
+                )
             )
 
             # Execute

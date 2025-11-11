@@ -6,7 +6,7 @@ Contains reusable mocks and test data for all chat endpoint tests.
 
 import pytest
 from datetime import datetime
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, patch, MagicMock
 from uuid import uuid4
 
 from src.models.chat import ChatSession, ChatMessage, MessageRole, MessageStatus, FileMetadata
@@ -210,3 +210,30 @@ def mock_streaming_handler():
     handler = AsyncMock()
     handler.handle_stream = AsyncMock()
     return handler
+
+
+@pytest.fixture
+def mock_chat_message_query():
+    """Create a mock Beanie query chain for ChatMessage.find()."""
+    async def async_count():
+        return 100
+
+    async def async_to_list():
+        return []
+
+    # Create a mock query object that supports method chaining
+    query = MagicMock()
+
+    # Make all methods return self for chaining
+    def chain(*args, **kwargs):
+        return query
+
+    query.find = MagicMock(side_effect=chain)
+    query.sort = MagicMock(side_effect=chain)
+    query.skip = MagicMock(side_effect=chain)
+    query.limit = MagicMock(side_effect=chain)
+    query.count = async_count  # Async callable
+    query.to_list = async_to_list  # Async callable
+    query.delete = AsyncMock()
+
+    return query
