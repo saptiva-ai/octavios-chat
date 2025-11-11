@@ -134,15 +134,15 @@ describe("useFiles", () => {
       const { result } = renderHook(() => useFiles());
 
       // Create file larger than 50MB (default limit)
-      const largeContent = "x".repeat(51 * 1024 * 1024);
       const largeFile = createMockFile(
-        largeContent,
+        "content",
         "large.pdf",
         "application/pdf",
       );
-      // Override size for validation
+      // Override size for validation (51MB)
       Object.defineProperty(largeFile, "size", {
         value: 51 * 1024 * 1024,
+        writable: false,
       });
 
       let attachment: FileAttachment | null = null;
@@ -644,6 +644,461 @@ describe("useFiles", () => {
       });
 
       expect(result.current.error).toBeNull();
+    });
+  });
+
+  describe("SSE Progress Tracking", () => {
+    let mockEventSource: any;
+    let eventListeners: Record<string, Function>;
+
+    beforeEach(() => {
+      // Mock EventSource
+      eventListeners = {};
+      mockEventSource = {
+        addEventListener: jest.fn((event: string, handler: Function) => {
+          eventListeners[event] = handler;
+        }),
+        close: jest.fn(),
+        onopen: null,
+        onerror: null,
+      };
+
+      (global as any).EventSource = jest.fn(() => mockEventSource);
+    });
+
+    afterEach(() => {
+      delete (global as any).EventSource;
+    });
+
+    it("connects to SSE when file is PROCESSING", async () => {
+      // Mock response with PROCESSING status
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          files: [
+            {
+              file_id: "file-processing",
+              filename: "test.pdf",
+              status: "PROCESSING",
+              bytes: 1024,
+              mimetype: "application/pdf",
+            },
+          ],
+        }),
+      });
+
+      const { result } = renderHook(() => useFiles());
+      const file = createMockFile("content", "test.pdf", "application/pdf");
+
+      await act(async () => {
+        await result.current.uploadFile(file);
+      });
+
+      // Verify EventSource was created
+      expect((global as any).EventSource).toHaveBeenCalledWith(
+        expect.stringContaining("/api/files/events/file-processing"),
+        { withCredentials: true },
+      );
+
+      // Verify event listeners were registered
+      expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
+        "meta",
+        expect.any(Function),
+      );
+      expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
+        "progress",
+        expect.any(Function),
+      );
+      expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
+        "ready",
+        expect.any(Function),
+      );
+      expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
+        "failed",
+        expect.any(Function),
+      );
+      expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
+        "heartbeat",
+        expect.any(Function),
+      );
+    });
+
+    it("does not connect to SSE when file is immediately READY", async () => {
+      // Mock response with READY status (cached file)
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          files: [
+            {
+              file_id: "file-ready",
+              filename: "cached.pdf",
+              status: "READY",
+              bytes: 1024,
+              pages: 5,
+              mimetype: "application/pdf",
+            },
+          ],
+        }),
+      });
+
+      const { result } = renderHook(() => useFiles());
+      const file = createMockFile("content", "cached.pdf", "application/pdf");
+
+      await act(async () => {
+        await result.current.uploadFile(file);
+      });
+
+      // Verify EventSource was NOT created
+      expect((global as any).EventSource).not.toHaveBeenCalled();
+
+      // Verify progress went to 100% immediately
+      expect(result.current.isUploading).toBe(false);
+      expect(result.current.uploadProgress).toBeNull();
+    });
+
+    it("updates progress on SSE meta event", async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          files: [
+            {
+              file_id: "file-sse",
+              filename: "test.pdf",
+              status: "PROCESSING",
+              bytes: 1000,
+              mimetype: "application/pdf",
+            },
+          ],
+        }),
+      });
+
+      const { result } = renderHook(() => useFiles());
+      const file = createMockFile("content", "test.pdf", "application/pdf");
+      Object.defineProperty(file, "size", { value: 1000 });
+
+      await act(async () => {
+        await result.current.uploadFile(file);
+      });
+
+      // Simulate SSE meta event
+      await act(async () => {
+        const metaHandler = eventListeners["meta"];
+        if (metaHandler) {
+          metaHandler({
+            data: JSON.stringify({
+              file_id: "file-sse",
+              pct: 10,
+              phase: "extract",
+            }),
+          });
+        }
+      });
+
+      // Verify progress was updated
+      expect(result.current.uploadProgress).toEqual({
+        loaded: 100, // 10% of 1000
+        total: 1000,
+        percentage: 10,
+      });
+    });
+
+    it("updates progress on SSE progress events", async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          files: [
+            {
+              file_id: "file-progress",
+              filename: "test.pdf",
+              status: "PROCESSING",
+              bytes: 2000,
+              mimetype: "application/pdf",
+            },
+          ],
+        }),
+      });
+
+      const { result } = renderHook(() => useFiles());
+      const file = createMockFile("content", "test.pdf", "application/pdf");
+      Object.defineProperty(file, "size", { value: 2000 });
+
+      await act(async () => {
+        await result.current.uploadFile(file);
+      });
+
+      // Simulate progress events: 25%, 50%, 75%
+      const progressValues = [25, 50, 75];
+
+      for (const pct of progressValues) {
+        await act(async () => {
+          const progressHandler = eventListeners["progress"];
+          if (progressHandler) {
+            progressHandler({
+              data: JSON.stringify({
+                file_id: "file-progress",
+                pct,
+                phase: "extract",
+              }),
+            });
+          }
+        });
+
+        expect(result.current.uploadProgress?.percentage).toBe(pct);
+        expect(result.current.uploadProgress?.loaded).toBe((2000 * pct) / 100);
+      }
+    });
+
+    it("caps progress at 95% until ready event", async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          files: [
+            {
+              file_id: "file-cap",
+              filename: "test.pdf",
+              status: "PROCESSING",
+              bytes: 1000,
+              mimetype: "application/pdf",
+            },
+          ],
+        }),
+      });
+
+      const { result } = renderHook(() => useFiles());
+      const file = createMockFile("content", "test.pdf", "application/pdf");
+      Object.defineProperty(file, "size", { value: 1000 });
+
+      await act(async () => {
+        await result.current.uploadFile(file);
+      });
+
+      // Try to set progress to 98% (should cap at 95%)
+      await act(async () => {
+        const progressHandler = eventListeners["progress"];
+        if (progressHandler) {
+          progressHandler({
+            data: JSON.stringify({
+              file_id: "file-cap",
+              pct: 98,
+            }),
+          });
+        }
+      });
+
+      // Progress should be capped at 95%
+      expect(result.current.uploadProgress?.percentage).toBe(95);
+    });
+
+    it("completes on SSE ready event", async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          files: [
+            {
+              file_id: "file-complete",
+              filename: "test.pdf",
+              status: "PROCESSING",
+              bytes: 1000,
+              mimetype: "application/pdf",
+            },
+          ],
+        }),
+      });
+
+      const { result } = renderHook(() => useFiles("chat-456"));
+      const file = createMockFile("content", "test.pdf", "application/pdf");
+      Object.defineProperty(file, "size", { value: 1000 });
+
+      await act(async () => {
+        await result.current.uploadFile(file);
+      });
+
+      // Simulate ready event
+      await act(async () => {
+        const readyHandler = eventListeners["ready"];
+        if (readyHandler) {
+          readyHandler({
+            data: JSON.stringify({
+              file_id: "file-complete",
+              status: "READY",
+              pages: 10,
+              mimetype: "application/pdf",
+            }),
+          });
+        }
+      });
+
+      // Verify completion
+      expect(result.current.isUploading).toBe(false);
+      expect(result.current.uploadProgress).toBeNull();
+
+      // Verify file was persisted to store
+      const storedFiles = filesStore.getForChat("chat-456");
+      expect(storedFiles).toHaveLength(1);
+      expect(storedFiles[0].file_id).toBe("file-complete");
+      expect(storedFiles[0].status).toBe("READY");
+
+      // Verify SSE connection was closed
+      expect(mockEventSource.close).toHaveBeenCalled();
+
+      // Verify toast notification
+      expect(toast.success).toHaveBeenCalledWith(
+        expect.stringContaining("test.pdf listo"),
+        { duration: 2500 },
+      );
+    });
+
+    it("handles SSE failed event", async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          files: [
+            {
+              file_id: "file-fail",
+              filename: "test.pdf",
+              status: "PROCESSING",
+              bytes: 1000,
+              mimetype: "application/pdf",
+            },
+          ],
+        }),
+      });
+
+      const { result } = renderHook(() => useFiles());
+      const file = createMockFile("content", "test.pdf", "application/pdf");
+
+      await act(async () => {
+        await result.current.uploadFile(file);
+      });
+
+      // Simulate failed event
+      await act(async () => {
+        const failedHandler = eventListeners["failed"];
+        if (failedHandler) {
+          failedHandler({
+            data: JSON.stringify({
+              file_id: "file-fail",
+              status: "FAILED",
+              error: {
+                code: "EXTRACTION_FAILED",
+                detail: "OCR timeout",
+              },
+            }),
+          });
+        }
+      });
+
+      // Verify error was set
+      expect(result.current.error).toContain("OCR timeout");
+
+      // Verify upload state was reset
+      expect(result.current.isUploading).toBe(false);
+      expect(result.current.uploadProgress).toBeNull();
+
+      // Verify SSE connection was closed
+      expect(mockEventSource.close).toHaveBeenCalled();
+    });
+
+    it("handles SSE connection errors gracefully", async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          files: [
+            {
+              file_id: "file-error",
+              filename: "test.pdf",
+              status: "PROCESSING",
+              bytes: 1000,
+              mimetype: "application/pdf",
+            },
+          ],
+        }),
+      });
+
+      const { result } = renderHook(() => useFiles());
+      const file = createMockFile("content", "test.pdf", "application/pdf");
+
+      await act(async () => {
+        await result.current.uploadFile(file);
+      });
+
+      // Simulate SSE error
+      await act(async () => {
+        if (mockEventSource.onerror) {
+          mockEventSource.onerror(new Error("Connection lost"));
+        }
+      });
+
+      // Verify error message was set
+      expect(result.current.error).toContain("Conexión perdida");
+    });
+
+    it("cleans up SSE connection on unmount", async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          files: [
+            {
+              file_id: "file-unmount",
+              filename: "test.pdf",
+              status: "PROCESSING",
+              bytes: 1000,
+              mimetype: "application/pdf",
+            },
+          ],
+        }),
+      });
+
+      const { result, unmount } = renderHook(() => useFiles());
+      const file = createMockFile("content", "test.pdf", "application/pdf");
+
+      await act(async () => {
+        await result.current.uploadFile(file);
+      });
+
+      // Verify EventSource was created
+      expect((global as any).EventSource).toHaveBeenCalled();
+
+      // Unmount the hook
+      unmount();
+
+      // Verify SSE connection was closed
+      expect(mockEventSource.close).toHaveBeenCalled();
+    });
+
+    it("returns PROCESSING attachment while SSE is active", async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          files: [
+            {
+              file_id: "file-processing-state",
+              filename: "test.pdf",
+              status: "PROCESSING",
+              bytes: 1024,
+              pages: undefined,
+              mimetype: "application/pdf",
+            },
+          ],
+        }),
+      });
+
+      const { result } = renderHook(() => useFiles());
+      const file = createMockFile("content", "test.pdf", "application/pdf");
+
+      let attachment: FileAttachment | null = null;
+
+      await act(async () => {
+        attachment = await result.current.uploadFile(file);
+      });
+
+      // Verify returned attachment has PROCESSING status
+      expect(attachment).not.toBeNull();
+      expect(attachment?.status).toBe("PROCESSING");
+      expect(attachment?.file_id).toBe("file-processing-state");
+
+      // Verify isUploading is still true (SSE active)
+      expect(result.current.isUploading).toBe(true);
     });
   });
 });
