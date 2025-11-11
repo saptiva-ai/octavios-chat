@@ -247,66 +247,82 @@ class TestEscalateToResearch:
             assert data["data"]["kill_switch_active"] is True
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="FastAPI dependency injection patching issue - get_settings not being replaced in dependency chain")
     async def test_escalate_to_research_success(
         self,
-        client,
-        mock_chat_session
+        app,
+        mock_chat_session,
+        mock_settings
     ):
         """Should successfully escalate conversation to research mode"""
         chat_id = "test-chat-id"
 
-        # Create fresh settings object with kill switch disabled
-        from unittest.mock import Mock, MagicMock
-        success_settings = MagicMock()
+        # Setup settings with kill switch disabled
+        success_settings = Mock(spec=type(mock_settings))
         success_settings.deep_research_kill_switch = False
+        success_settings.saptiva_base_url = "https://api.test.com"
+        success_settings.saptiva_api_key = "test-key"
+        success_settings.max_file_size_mb = 50
 
-        with patch.object(success_settings, 'deep_research_kill_switch', False), \
-             patch('src.routers.chat.endpoints.message_endpoints.get_settings') as mock_get_settings, \
-             patch('src.routers.chat.endpoints.message_endpoints.ChatService') as MockChatService:
+        # Use FastAPI dependency_overrides to replace get_settings dependency
+        from src.core.config import get_settings
+        app.dependency_overrides[get_settings] = lambda: success_settings
 
-            # Setup dependencies
-            mock_get_settings.return_value = success_settings
-            mock_chat_service = AsyncMock()
-            mock_chat_service.get_session = AsyncMock(return_value=mock_chat_session)
-            MockChatService.return_value = mock_chat_service
+        try:
+            client = TestClient(app)
 
-            # Execute
-            response = client.post(f"/chat/{chat_id}/escalate")
+            with patch('src.routers.chat.endpoints.message_endpoints.ChatService') as MockChatService:
+                # Setup ChatService
+                mock_chat_service = AsyncMock()
+                mock_chat_service.get_session = AsyncMock(return_value=mock_chat_session)
+                MockChatService.return_value = mock_chat_service
 
-            # Assertions
-            assert response.status_code == status.HTTP_200_OK
-            data = response.json()
-            assert data.get("success") is True
-            # Verify service was called
-            mock_chat_service.get_session.assert_called()
+                # Execute
+                response = client.post(f"/chat/{chat_id}/escalate")
+
+                # Assertions
+                assert response.status_code == status.HTTP_200_OK
+                data = response.json()
+                assert data.get("success") is True
+                # Verify service was called
+                mock_chat_service.get_session.assert_called()
+        finally:
+            # Clean up dependency overrides
+            app.dependency_overrides.clear()
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="FastAPI dependency injection patching issue - get_settings not being replaced in dependency chain")
     async def test_escalate_research_session_not_found(
         self,
-        client
+        app,
+        mock_settings
     ):
         """Should return 404 when chat session not found"""
         chat_id = "nonexistent-chat"
 
-        # Create fresh settings object with kill switch disabled
-        from unittest.mock import MagicMock
-        not_found_settings = MagicMock()
+        # Setup settings with kill switch disabled
+        not_found_settings = Mock(spec=type(mock_settings))
         not_found_settings.deep_research_kill_switch = False
+        not_found_settings.saptiva_base_url = "https://api.test.com"
+        not_found_settings.saptiva_api_key = "test-key"
+        not_found_settings.max_file_size_mb = 50
 
-        with patch.object(not_found_settings, 'deep_research_kill_switch', False), \
-             patch('src.routers.chat.endpoints.message_endpoints.get_settings') as mock_get_settings, \
-             patch('src.routers.chat.endpoints.message_endpoints.ChatService') as MockChatService:
+        # Use FastAPI dependency_overrides to replace get_settings dependency
+        from src.core.config import get_settings
+        app.dependency_overrides[get_settings] = lambda: not_found_settings
 
-            # Setup - session not found
-            mock_get_settings.return_value = not_found_settings
-            mock_chat_service = AsyncMock()
-            mock_chat_service.get_session = AsyncMock(return_value=None)
-            MockChatService.return_value = mock_chat_service
+        try:
+            client = TestClient(app)
 
-            response = client.post(f"/chat/{chat_id}/escalate")
+            with patch('src.routers.chat.endpoints.message_endpoints.ChatService') as MockChatService:
+                # Setup - session not found
+                mock_chat_service = AsyncMock()
+                mock_chat_service.get_session = AsyncMock(return_value=None)
+                MockChatService.return_value = mock_chat_service
 
-            # Assertions - endpoint should return 404 when session not found
-            assert response.status_code == status.HTTP_404_NOT_FOUND
-            assert "not found" in response.json()["detail"].lower()
+                response = client.post(f"/chat/{chat_id}/escalate")
+
+                # Assertions - endpoint should return 404 when session not found
+                assert response.status_code == status.HTTP_404_NOT_FOUND
+                assert "not found" in response.json()["detail"].lower()
+        finally:
+            # Clean up dependency overrides
+            app.dependency_overrides.clear()
