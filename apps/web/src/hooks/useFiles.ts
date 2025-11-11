@@ -81,9 +81,7 @@ export function useFiles(chatId?: string): UseFilesReturn {
   } | null>(null);
 
   // MVP-LOCK: Initialize attachments from persistent store
-  const [attachments, setAttachments] = useState<FileAttachment[]>(() => {
-    return filesStore.getForChat(effectiveChatId);
-  });
+  const [attachments, setAttachments] = useState<FileAttachment[]>([]);
   const lastReadyFile = useMemo(() => {
     const ready = attachments.filter(
       (attachment) => attachment.status === "READY",
@@ -91,7 +89,7 @@ export function useFiles(chatId?: string): UseFilesReturn {
     return ready.length > 0 ? ready[ready.length - 1] : null;
   }, [attachments]);
 
-  // MVP-LOCK: Sync with persistent store when chatId changes
+  // MVP-LOCK: Initialize and sync with persistent store when chatId changes
   useEffect(() => {
     const storedAttachments = filesStore.getForChat(effectiveChatId);
 
