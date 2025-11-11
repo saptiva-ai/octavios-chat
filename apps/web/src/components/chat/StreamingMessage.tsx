@@ -18,11 +18,38 @@ export function StreamingMessage({
   isComplete = false,
   className,
 }: StreamingMessageProps) {
-  // console.log("[DEBUG] StreamingMessage render - length:", content.length, "isStreaming:", isStreaming);
+  const [throttledContent, setThrottledContent] = React.useState(content);
+  const lastUpdateRef = React.useRef<number>(0);
+  const pendingContentRef = React.useRef<string>(content);
 
-  // During real streaming from server, show content directly without artificial delays
-  // The server already sends chunks token-by-token, no need to simulate it
-  const displayedContent = content;
+  // Throttle markdown re-renders during streaming to every 150ms
+  // This provides smooth visual updates without excessive re-renders
+  React.useEffect(() => {
+    if (!isStreaming || isComplete) {
+      // When streaming ends, immediately show final content
+      setThrottledContent(content);
+      return;
+    }
+
+    pendingContentRef.current = content;
+    const now = Date.now();
+    const timeSinceLastUpdate = now - lastUpdateRef.current;
+
+    if (timeSinceLastUpdate >= 150) {
+      // Update immediately if 150ms have passed
+      setThrottledContent(content);
+      lastUpdateRef.current = now;
+    } else {
+      // Schedule update for remaining time
+      const timeout = setTimeout(() => {
+        setThrottledContent(pendingContentRef.current);
+        lastUpdateRef.current = Date.now();
+      }, 150 - timeSinceLastUpdate);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [content, isStreaming, isComplete]);
+
   const showCursor = isStreaming && !isComplete && content.length > 0;
 
   // Mostrar typing indicator si no hay contenido aún
@@ -36,15 +63,11 @@ export function StreamingMessage({
 
   return (
     <div className={cn("relative", className)}>
-      {/* Durante streaming, mostrar texto plano para mejor performance */}
-      {/* Solo renderizar Markdown cuando termine el streaming */}
-      {isStreaming && !isComplete ? (
-        <div className="prose prose-sm max-w-none dark:prose-invert whitespace-pre-wrap text-white">
-          {displayedContent}
-        </div>
-      ) : (
-        <MarkdownMessage content={displayedContent} highlightCode={true} />
-      )}
+      {/* Renderizar Markdown progresivamente durante el streaming con throttle */}
+      <MarkdownMessage
+        content={throttledContent}
+        highlightCode={!isStreaming}
+      />
       {/* Cursor de streaming */}
       {showCursor && (
         <div className="pointer-events-none absolute bottom-0 left-full ml-2 translate-y-1/4">
