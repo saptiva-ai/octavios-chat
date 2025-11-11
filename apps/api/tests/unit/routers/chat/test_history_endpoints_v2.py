@@ -11,7 +11,8 @@ Tests:
 
 import pytest
 from datetime import datetime
-from unittest.mock import AsyncMock, Mock, patch, MagicMock
+from unittest.mock import AsyncMock, Mock, patch, MagicMock, PropertyMock
+from types import SimpleNamespace
 from fastapi import FastAPI, status, Request
 from fastapi.testclient import TestClient
 from fastapi.responses import JSONResponse
@@ -176,21 +177,47 @@ class TestGetChatHistory:
         chat_id = "test-chat-123"
 
         # Create 100 mock messages for testing pagination
+        # Use SimpleNamespace for clean attribute access
         mock_messages = []
         for i in range(100):
-            msg = MagicMock()
-            msg.id = f"msg-{i}"
-            msg.chat_id = chat_id
-            msg.role = MessageRole.USER if i % 2 == 0 else MessageRole.ASSISTANT
-            msg.content = f"Message {i}"
-            msg.status = MessageStatus.DELIVERED
-            msg.created_at = datetime.utcnow()
-            msg.updated_at = datetime.utcnow()
-            msg.metadata = {}
-            msg.model = "saptiva-turbo" if i % 2 == 1 else None
-            msg.tokens = 10
-            msg.latency_ms = 100
-            msg.task_id = None
+            created_at = datetime.utcnow()
+            updated_at = datetime.utcnow()
+            role = MessageRole.USER if i % 2 == 0 else MessageRole.ASSISTANT
+            msg = SimpleNamespace(
+                id=f"msg-{i}",
+                chat_id=chat_id,
+                role=role,
+                content=f"Message {i}",
+                status=MessageStatus.DELIVERED,
+                created_at=created_at,
+                updated_at=updated_at,
+                metadata={},
+                model="saptiva-turbo" if i % 2 == 1 else None,
+                tokens=10,
+                latency_ms=100,
+                task_id=None
+            )
+            # Add model_dump method for FastAPI serialization compatibility
+            # This is required because the endpoint creates ChatMessage objects
+            # which then call model_dump(mode='json')
+            def make_model_dump(msg_obj):
+                def model_dump(mode='json'):
+                    return {
+                        "id": str(msg_obj.id),
+                        "chat_id": msg_obj.chat_id,
+                        "role": msg_obj.role.value if hasattr(msg_obj.role, 'value') else msg_obj.role,
+                        "content": msg_obj.content,
+                        "status": msg_obj.status.value if hasattr(msg_obj.status, 'value') else msg_obj.status,
+                        "created_at": msg_obj.created_at.isoformat() if hasattr(msg_obj.created_at, 'isoformat') else str(msg_obj.created_at),
+                        "updated_at": msg_obj.updated_at.isoformat() if hasattr(msg_obj.updated_at, 'isoformat') else str(msg_obj.updated_at),
+                        "metadata": msg_obj.metadata,
+                        "model": msg_obj.model,
+                        "tokens": msg_obj.tokens,
+                        "latency_ms": msg_obj.latency_ms,
+                        "task_id": str(msg_obj.task_id) if msg_obj.task_id else None
+                    }
+                return model_dump
+            msg.model_dump = make_model_dump(msg)
             mock_messages.append(msg)
 
         # Create robust query builder that supports chaining
@@ -243,21 +270,45 @@ class TestGetChatHistory:
         chat_id = "test-chat-123"
 
         # Create 100 mock messages for pagination testing
+        # Use SimpleNamespace for clean attribute access
         mock_messages = []
         for i in range(100):
-            msg = MagicMock()
-            msg.id = f"msg-{i}"
-            msg.chat_id = chat_id
-            msg.role = MessageRole.USER if i % 2 == 0 else MessageRole.ASSISTANT
-            msg.content = f"Message {i}"
-            msg.status = MessageStatus.DELIVERED
-            msg.created_at = datetime.utcnow()
-            msg.updated_at = datetime.utcnow()
-            msg.metadata = {}
-            msg.model = "saptiva-turbo" if i % 2 == 1 else None
-            msg.tokens = 10
-            msg.latency_ms = 100
-            msg.task_id = None
+            created_at = datetime.utcnow()
+            updated_at = datetime.utcnow()
+            role = MessageRole.USER if i % 2 == 0 else MessageRole.ASSISTANT
+            msg = SimpleNamespace(
+                id=f"msg-{i}",
+                chat_id=chat_id,
+                role=role,
+                content=f"Message {i}",
+                status=MessageStatus.DELIVERED,
+                created_at=created_at,
+                updated_at=updated_at,
+                metadata={},
+                model="saptiva-turbo" if i % 2 == 1 else None,
+                tokens=10,
+                latency_ms=100,
+                task_id=None
+            )
+            # Add model_dump method for FastAPI serialization compatibility
+            def make_model_dump(msg_obj):
+                def model_dump(mode='json'):
+                    return {
+                        "id": str(msg_obj.id),
+                        "chat_id": msg_obj.chat_id,
+                        "role": msg_obj.role.value if hasattr(msg_obj.role, 'value') else msg_obj.role,
+                        "content": msg_obj.content,
+                        "status": msg_obj.status.value if hasattr(msg_obj.status, 'value') else msg_obj.status,
+                        "created_at": msg_obj.created_at.isoformat() if hasattr(msg_obj.created_at, 'isoformat') else str(msg_obj.created_at),
+                        "updated_at": msg_obj.updated_at.isoformat() if hasattr(msg_obj.updated_at, 'isoformat') else str(msg_obj.updated_at),
+                        "metadata": msg_obj.metadata,
+                        "model": msg_obj.model,
+                        "tokens": msg_obj.tokens,
+                        "latency_ms": msg_obj.latency_ms,
+                        "task_id": str(msg_obj.task_id) if msg_obj.task_id else None
+                    }
+                return model_dump
+            msg.model_dump = make_model_dump(msg)
             mock_messages.append(msg)
 
         # Create robust query builder that supports chaining
