@@ -19,8 +19,7 @@ from fastapi import status
 from httpx import AsyncClient
 import asyncio
 
-from src.models.chat import ChatSessionModel, ChatMessageModel, MessageRole, MessageStatus
-from src.models.user import UserModel
+from src.models.chat import ChatSession, ChatMessage, MessageRole, MessageStatus
 
 
 @pytest.fixture
@@ -55,7 +54,7 @@ async def test_chat_session_with_messages(test_user_with_token, integration_clie
     access_token, user_id = test_user_with_token
 
     # Create chat session directly in database
-    session = ChatSessionModel(
+    session = ChatSession(
         user_id=user_id,
         title="Pagination Test Session",
         model="saptiva-turbo",
@@ -69,7 +68,7 @@ async def test_chat_session_with_messages(test_user_with_token, integration_clie
     base_time = datetime.utcnow() - timedelta(hours=1)
 
     for i in range(100):
-        message = ChatMessageModel(
+        message = ChatMessage(
             chat_id=str(session.id),
             role=MessageRole.USER if i % 2 == 0 else MessageRole.ASSISTANT,
             content=f"Test message {i}",
