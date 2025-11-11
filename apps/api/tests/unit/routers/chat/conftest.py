@@ -212,6 +212,73 @@ def mock_streaming_handler():
     return handler
 
 
+class MockBeanieQueryBuilder:
+    """
+    Robust mock for Beanie query chaining.
+
+    Simulates Beanie's query builder with proper method chaining support.
+    Each method returns self to enable fluent interface.
+    """
+    def __init__(self, messages=None, total_count=100):
+        """
+        Initialize mock query builder.
+
+        Args:
+            messages: List of mock message objects to return from to_list()
+            total_count: Total count to return from count()
+        """
+        self._messages = messages or []
+        self._total_count = total_count
+        self._skip_value = 0
+        self._limit_value = None
+        self.find_called_with = []
+        self.sort_called_with = None
+        self.skip_called_with = None
+        self.limit_called_with = None
+
+    def find(self, *conditions):
+        """Mock find method with chaining support."""
+        self.find_called_with.append(conditions)
+        return self
+
+    def sort(self, *args, **kwargs):
+        """Mock sort method with chaining support."""
+        self.sort_called_with = (args, kwargs)
+        return self
+
+    def skip(self, value):
+        """Mock skip method with chaining support."""
+        self._skip_value = value
+        self.skip_called_with = value
+        return self
+
+    def limit(self, value):
+        """Mock limit method with chaining support."""
+        self._limit_value = value
+        self.limit_called_with = value
+        return self
+
+    async def count(self):
+        """Async count method."""
+        return self._total_count
+
+    async def to_list(self):
+        """Async to_list method with pagination support."""
+        # Apply skip and limit to the messages
+        skip_val = self._skip_value or 0
+        limit_val = self._limit_value
+
+        messages = self._messages[skip_val:]
+        if limit_val is not None:
+            messages = messages[:limit_val]
+
+        return messages
+
+    async def delete(self):
+        """Async delete method."""
+        pass
+
+
 @pytest.fixture
 def mock_chat_message_query():
     """Create a mock Beanie query chain for ChatMessage.find()."""

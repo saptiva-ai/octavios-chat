@@ -163,32 +163,41 @@ class TestGetChatHistory:
 
     @pytest.mark.parametrize("limit,offset", [(10, 0), (25, 10), (50, 50)])
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Beanie query chain mocking issue - ChatMessageModel.find() returns cannot properly chain methods in TestClient context")
     async def test_get_chat_history_pagination(
         self,
         limit,
         offset,
         client,
         mock_chat_session,
-        mock_redis_cache
+        mock_redis_cache,
+        mock_chat_messages
     ):
         """Should respect limit and offset parameters"""
         chat_id = "test-chat-123"
 
-        # Create a proper async query mock
-        async def async_count_func():
-            return 100
+        # Create 100 mock messages for testing pagination
+        mock_messages = []
+        for i in range(100):
+            msg = MagicMock()
+            msg.id = f"msg-{i}"
+            msg.chat_id = chat_id
+            msg.role = MessageRole.USER if i % 2 == 0 else MessageRole.ASSISTANT
+            msg.content = f"Message {i}"
+            msg.status = MessageStatus.DELIVERED
+            msg.created_at = datetime.utcnow()
+            msg.updated_at = datetime.utcnow()
+            msg.metadata = {}
+            msg.model = "saptiva-turbo" if i % 2 == 1 else None
+            msg.tokens = 10
+            msg.latency_ms = 100
+            msg.task_id = None
+            mock_messages.append(msg)
 
-        async def async_to_list_func():
-            return []
-
-        query_mock = MagicMock()
-        query_mock.find = MagicMock(return_value=query_mock)
-        query_mock.sort = MagicMock(return_value=query_mock)
-        query_mock.skip = MagicMock(return_value=query_mock)
-        query_mock.limit = MagicMock(return_value=query_mock)
-        query_mock.count = async_count_func
-        query_mock.to_list = async_to_list_func
+        # Create robust query builder that supports chaining
+        query_builder = MockBeanieQueryBuilder(
+            messages=mock_messages,
+            total_count=100
+        )
 
         with patch('src.routers.chat.endpoints.history_endpoints.get_redis_cache') as mock_get_cache, \
              patch('src.routers.chat.endpoints.history_endpoints.HistoryService') as MockHistoryService, \
@@ -203,43 +212,60 @@ class TestGetChatHistory:
                 return_value=mock_chat_session
             )
 
-            # Setup ChatMessageModel.find() to return the query mock
-            MockMessageModel.find = MagicMock(return_value=query_mock)
+            # Setup ChatMessageModel.find() to return the query builder
+            # The endpoint calls: find(...).find(...).sort(...).skip(...).limit(...).to_list()
+            MockMessageModel.find = MagicMock(return_value=query_builder)
 
             # Execute with pagination
             response = client.get(f"/history/{chat_id}?limit={limit}&offset={offset}")
 
             # Assertions
             assert response.status_code == status.HTTP_200_OK
-            # Verify pagination was called correctly
-            query_mock.skip.assert_called_with(offset)
-            query_mock.limit.assert_called_with(limit)
+            data = response.json()
+            # Verify pagination was applied correctly
+            assert query_builder.skip_called_with == offset
+            assert query_builder.limit_called_with == limit
+            # Verify response structure
+            assert "messages" in data
+            assert len(data["messages"]) <= limit
+            assert "total_count" in data
+            assert data["total_count"] == 100
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Beanie query chain mocking issue - ChatMessageModel.find() returns cannot properly chain methods in TestClient context")
     async def test_get_chat_history_has_more_flag(
         self,
         client,
         mock_chat_session,
-        mock_redis_cache
+        mock_redis_cache,
+        mock_chat_messages
     ):
         """Should correctly set has_more flag based on total count"""
         chat_id = "test-chat-123"
 
-        # Create a proper async query mock
-        async def async_count_func():
-            return 100
+        # Create 100 mock messages for pagination testing
+        mock_messages = []
+        for i in range(100):
+            msg = MagicMock()
+            msg.id = f"msg-{i}"
+            msg.chat_id = chat_id
+            msg.role = MessageRole.USER if i % 2 == 0 else MessageRole.ASSISTANT
+            msg.content = f"Message {i}"
+            msg.status = MessageStatus.DELIVERED
+            msg.created_at = datetime.utcnow()
+            msg.updated_at = datetime.utcnow()
+            msg.metadata = {}
+            msg.model = "saptiva-turbo" if i % 2 == 1 else None
+            msg.tokens = 10
+            msg.latency_ms = 100
+            msg.task_id = None
+            mock_messages.append(msg)
 
-        async def async_to_list_func():
-            return [MagicMock() for _ in range(10)]
-
-        query_mock = MagicMock()
-        query_mock.find = MagicMock(return_value=query_mock)
-        query_mock.sort = MagicMock(return_value=query_mock)
-        query_mock.skip = MagicMock(return_value=query_mock)
-        query_mock.limit = MagicMock(return_value=query_mock)
-        query_mock.count = async_count_func
-        query_mock.to_list = async_to_list_func
+        # Create robust query builder that supports chaining
+        # Total count is 100, so has_more should be True (0 + 10 < 100)
+        query_builder = MockBeanieQueryBuilder(
+            messages=mock_messages,
+            total_count=100
+        )
 
         with patch('src.routers.chat.endpoints.history_endpoints.get_redis_cache') as mock_get_cache, \
              patch('src.routers.chat.endpoints.history_endpoints.HistoryService') as MockHistoryService, \
@@ -254,7 +280,8 @@ class TestGetChatHistory:
                 return_value=mock_chat_session
             )
 
-            MockMessageModel.find = MagicMock(return_value=query_mock)
+            # Setup ChatMessageModel.find() to return the query builder
+            MockMessageModel.find = MagicMock(return_value=query_builder)
 
             # Execute with limit=10, offset=0
             response = client.get(f"/history/{chat_id}?limit=10&offset=0")
@@ -263,7 +290,8 @@ class TestGetChatHistory:
             assert response.status_code == status.HTTP_200_OK
             data = response.json()
             assert data["total_count"] == 100
-            assert data["has_more"] is True  # 0 + 10 < 100
+            # With offset=0 and limit=10, and total_count=100: has_more = 0 + 10 < 100 = True
+            assert data["has_more"] is True
 
     @pytest.mark.asyncio
     async def test_get_chat_history_unauthorized(self, client):
