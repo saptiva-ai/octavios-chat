@@ -19,7 +19,7 @@ Añade a `envs/.env`:
 ```bash
 # DeepSeek OCR (opcional - solo si quieres incluirlo en el benchmark)
 HF_OCR_ENDPOINT=https://saptivaDev1-DeepSeek-OCR-Space.hf.space/ocr
-HF_TOKEN=HF_TOKEN_PLACEHOLDER
+HF_TOKEN=your_huggingface_token_here
 ```
 
 **Nota**: Si no configuras DeepSeek, el benchmark solo comparará Tesseract vs Saptiva OCR.
