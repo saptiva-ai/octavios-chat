@@ -49,6 +49,8 @@ from ..services.text_sanitizer import sanitize_response_content
 from ..services.tools import normalize_tools_state
 from ..services.chat_service import ChatService
 from ..services.history_service import HistoryService
+from ..services.chat_helpers import build_chat_context
+from ..services.session_context_manager import SessionContextManager
 from ..services.validation_coordinator import validate_document
 from ..services.policy_manager import resolve_policy
 from ..services.minio_storage import get_minio_storage
@@ -75,223 +77,6 @@ NO_STORE_HEADERS = {
 }
 
 
-def _format_validation_report_as_markdown(report, filename: str) -> str:
-    """
-    Format a validation report as markdown for chat display.
-
-    Args:
-        report: Validation report object with findings and summary
-        filename: Name of the audited file
-
-    Returns:
-        Formatted markdown string
-    """
-    lines = []
-
-    # Header
-    lines.append(f"## 📊 Reporte de Auditoría: {filename}\n")
-
-    # Summary section
-    summary = report.summary or {}
-    total_findings = len(report.findings)
-
-    lines.append("### ✅ Resumen\n")
-    lines.append(f"- **Total de hallazgos**: {total_findings}")
-
-    if "policy_name" in summary:
-        lines.append(f"- **Política aplicada**: {summary['policy_name']}")
-
-    if "disclaimer_coverage" in summary:
-        coverage = summary["disclaimer_coverage"] * 100
-        lines.append(f"- **Cobertura de disclaimers**: {coverage:.1f}%")
-
-    # Findings by severity
-    if "findings_by_severity" in summary:
-        findings_by_sev = summary["findings_by_severity"]
-        if findings_by_sev:
-            lines.append(f"\n**Hallazgos por severidad:**")
-            for severity, count in findings_by_sev.items():
-                emoji = "🔴" if severity == "high" else "🟡" if severity == "medium" else "🟢"
-                lines.append(f"  - {emoji} {severity.capitalize()}: {count}")
-
-    # Detailed findings
-    if report.findings:
-        lines.append(f"\n### 📋 Hallazgos Detallados\n")
-
-        for i, finding in enumerate(report.findings, 1):
-            # Handle both Pydantic objects and dicts
-            if hasattr(finding, 'severity'):
-                # Pydantic Finding object
-                severity = finding.severity
-                issue = finding.issue
-                category = finding.category
-                rule = finding.rule
-                location = finding.location
-                suggestion = finding.suggestion
-            else:
-                # Dictionary (fallback)
-                severity = finding.get("severity", "medium")
-                issue = finding.get("issue", "Sin descripción")
-                category = finding.get("category", "N/A")
-                rule = finding.get("rule", "N/A")
-                location = finding.get("location")
-                suggestion = finding.get("suggestion")
-
-            # Emoji based on severity
-            severity_emoji = {
-                "critical": "🔴",
-                "high": "🔴",
-                "medium": "🟡",
-                "low": "🟢"
-            }.get(severity, "🔵")
-
-            lines.append(f"**{i}. {severity_emoji} {issue}**")
-
-            # Category and rule
-            lines.append(f"   - **Categoría**: {category}")
-            lines.append(f"   - **Regla**: {rule}")
-
-            # Location
-            if location:
-                if hasattr(location, 'page'):
-                    page = location.page
-                else:
-                    page = location.get("page") if isinstance(location, dict) else None
-
-                if page:
-                    lines.append(f"   - **Ubicación**: Página {page}")
-
-            # Suggestion
-            if suggestion:
-                lines.append(f"   - **Sugerencia**: {suggestion}")
-
-            lines.append("")  # Empty line between findings
-    else:
-        lines.append(f"\n### ✅ Sin Hallazgos\n")
-        lines.append("El documento cumple con todas las validaciones configuradas.")
-
-    return "\n".join(lines)
-
-
-async def _is_ready_and_cached(
-    file_id: str,
-    user_id: str,
-    redis_client
-) -> bool:
-    """Check if a document belongs to the user, is READY, and has cached text."""
-
-    if not file_id:
-        return False
-
-    try:
-        document = await Document.get(file_id)
-    except Exception as exc:
-        logger.warning(
-            "wait_ready_document_lookup_failed",
-            file_id=file_id,
-            error=str(exc)
-        )
-        return False
-
-    if not document or document.user_id != user_id:
-        return False
-
-    if document.status != DocumentStatus.READY:
-        return False
-
-    redis_key = f"doc:text:{file_id}"
-
-    try:
-        cached_value = await redis_client.get(redis_key)
-    except Exception as exc:
-        logger.warning(
-            "wait_ready_redis_lookup_failed",
-            file_id=file_id,
-            error=str(exc)
-        )
-        return False
-
-    return bool(cached_value)
-
-
-async def _wait_until_ready_and_cached(
-    file_ids: List[str],
-    user_id: str,
-    redis_client,
-    max_wait_ms: int = 1200,
-    step_ms: int = 150
-) -> None:
-    """Best-effort wait for documents to reach READY status and have cached text."""
-
-    if not file_ids:
-        return
-
-    unique_ids = [fid for fid in dict.fromkeys(file_ids) if fid]
-    if not unique_ids:
-        return
-
-    waited_ms = 0
-    missing: List[str] = unique_ids
-
-    while waited_ms <= max_wait_ms:
-        current_missing: List[str] = []
-
-        for fid in unique_ids:
-            ready = await _is_ready_and_cached(fid, user_id, redis_client)
-            if not ready:
-                current_missing.append(fid)
-
-        if not current_missing:
-            if waited_ms > 0:
-                logger.info(
-                    "wait_ready_completed",
-                    file_ids=unique_ids,
-                    waited_ms=waited_ms
-                )
-            return
-
-        await asyncio.sleep(step_ms / 1000)
-        waited_ms += step_ms
-        missing = current_missing
-
-    if missing:
-        logger.info(
-            "wait_ready_timeout",
-            missing_file_ids=missing,
-            waited_ms=waited_ms,
-            total_ids=len(unique_ids)
-        )
-
-
-def _build_chat_context(
-    request: ChatRequest,
-    user_id: str,
-    settings: Settings
-) -> ChatContext:
-    """
-    Build ChatContext from request.
-
-    Encapsulates all request data into immutable dataclass.
-
-    MVP BE-1: Default to 'Saptiva Turbo' (case-sensitive).
-    Stream flag defaults to False for non-streaming responses.
-    """
-    return ChatContext(
-        user_id=user_id,
-        request_id=str(uuid4()),
-        timestamp=datetime.utcnow(),
-        chat_id=request.chat_id,
-        session_id=None,  # Will be resolved during processing
-        message=request.message,
-        context=request.context,
-        document_ids=(request.file_ids or []) + (request.document_ids or []) if (request.file_ids or request.document_ids) else None,
-        model=request.model or "Saptiva Turbo",  # BE-1: Case-sensitive default
-        tools_enabled=normalize_tools_state(request.tools_enabled),
-        stream=getattr(request, 'stream', False),  # BE-1: Streaming disabled by default
-        temperature=getattr(request, 'temperature', None),
-        max_tokens=getattr(request, 'max_tokens', None),
-        kill_switch_active=settings.deep_research_kill_switch
-    )
 
 
 async def _stream_chat_response(
@@ -927,8 +712,10 @@ async def send_chat_message(
     response.headers.update(NO_STORE_HEADERS)
 
     try:
-        # 1. Build immutable context from request
-        context = _build_chat_context(request, user_id, settings)
+        # ====================================================================
+        # 1. BUILD CONTEXT (using extracted helper)
+        # ====================================================================
+        context = build_chat_context(request, user_id, settings)
 
         logger.info(
             "Processing chat request",
@@ -938,11 +725,15 @@ async def send_chat_message(
             has_documents=bool(context.document_ids)
         )
 
-        # 2. Initialize services
+        # ====================================================================
+        # 2. INITIALIZE SERVICES
+        # ====================================================================
         chat_service = ChatService(settings)
         cache = await get_redis_cache()
 
-        # 3. Get or create session
+        # ====================================================================
+        # 3. GET OR CREATE SESSION
+        # ====================================================================
         chat_session = await chat_service.get_or_create_session(
             chat_id=context.chat_id,
             user_id=context.user_id,
@@ -953,51 +744,22 @@ async def send_chat_message(
         # Update context with resolved session
         context = context.with_session(chat_session.id)
 
-        # FILE CONTEXT PERSISTENCE: Keep only the latest message's attachments
-        request_file_ids = list((request.file_ids or []) + (request.document_ids or []))
-        # Normalize request files to preserve order but remove duplicates
-        request_file_ids = list(dict.fromkeys(request_file_ids)) if request_file_ids else []
-        session_file_ids = list(getattr(chat_session, 'attached_file_ids', []) or [])
+        # ====================================================================
+        # 4. PREPARE SESSION CONTEXT (files) - using SessionContextManager
+        # ====================================================================
+        request_file_ids = list(
+            (request.file_ids or []) + (request.document_ids or [])
+        )
 
-        if request_file_ids:
-            # New message provides files → use them and overwrite session context
-            current_file_ids = request_file_ids
-        else:
-            # No files in request → reuse context from previous message (if any)
-            current_file_ids = session_file_ids
-
-        # OBS-2: Log post-normalización en backend
-        logger.info(
-            "message_normalized",
-            text_len=len(request.message or ""),
-            file_ids_count=len(current_file_ids),
-            file_ids=current_file_ids,
+        current_file_ids = await SessionContextManager.prepare_session_context(
+            chat_session=chat_session,
             request_file_ids=request_file_ids,
-            session_file_ids=session_file_ids,
-            nonce=context.request_id[:8]
+            user_id=user_id,
+            redis_cache=cache,
+            request_id=context.request_id
         )
 
-        await _wait_until_ready_and_cached(
-            current_file_ids,
-            user_id=context.user_id,
-            redis_client=cache.client
-        )
-
-        # Update session's attached_file_ids when new files are provided
-        if request_file_ids and request_file_ids != session_file_ids:
-            await chat_session.update({"$set": {
-                "attached_file_ids": request_file_ids,
-                "updated_at": datetime.utcnow()
-            }})
-            chat_session.attached_file_ids = request_file_ids
-            logger.info(
-                "Updated session attached_file_ids",
-                chat_id=chat_session.id,
-                file_count=len(request_file_ids),
-                replaced_previous=bool(session_file_ids)
-            )
-
-        # Update context with ALL accumulated file IDs (request + session)
+        # Update context with resolved file IDs
         if current_file_ids:
             context = ChatContext(
                 user_id=context.user_id,
@@ -1007,7 +769,7 @@ async def send_chat_message(
                 session_id=context.session_id,
                 message=context.message,
                 context=context.context,
-                document_ids=current_file_ids,  # Latest files (new or reused)
+                document_ids=current_file_ids,
                 model=context.model,
                 tools_enabled=context.tools_enabled,
                 stream=context.stream,
@@ -1016,6 +778,9 @@ async def send_chat_message(
                 kill_switch_active=context.kill_switch_active
             )
 
+        # ====================================================================
+        # 5. ADD USER MESSAGE
+        # ====================================================================
         # 4. Add user message
         # MVP-LOCK: Use metadata from request (contains file_ids AND file info for UI indicator)
         # DEBUG: Log what we received
