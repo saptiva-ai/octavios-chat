@@ -30,6 +30,8 @@ export function useOptimizedChat(options: UseOptimizedChatOptions = {}) {
     null,
   );
   const throttleTimer = useRef<NodeJS.Timeout | null>(null);
+  // FIX ISSUE-001: Promise para sincronizar flush pendiente antes de completar streaming
+  const pendingFlushPromise = useRef<Promise<void> | null>(null);
 
   const { addMessage, updateMessage } = useAppStore();
 
@@ -71,38 +73,33 @@ export function useOptimizedChat(options: UseOptimizedChatOptions = {}) {
   );
 
   // Función para finalizar streaming (DEFINIDA ANTES para evitar ReferenceError)
+  // FIX ISSUE-001: Ahora es async para esperar flush pendiente
   const completeStreaming = useCallback(
-    (messageId: string, finalData: Partial<ChatMessage>) => {
-      // Limpiar cualquier throttle timer pendiente
+    async (messageId: string, finalData: Partial<ChatMessage>) => {
+      // FIX ISSUE-001: Esperar a que termine el flush pendiente para evitar race condition
+      if (pendingFlushPromise.current) {
+        await pendingFlushPromise.current;
+        pendingFlushPromise.current = null;
+      }
+
+      // Limpiar cualquier throttle timer pendiente (por si acaso)
       if (throttleTimer.current !== null) {
         clearTimeout(throttleTimer.current);
         throttleTimer.current = null;
       }
 
-      // Si hay contenido pendiente, aplicarlo antes de completar
-      if (
-        pendingUpdate.current &&
-        pendingUpdate.current.messageId === messageId
-      ) {
-        flushSync(() => {
-          updateMessage(pendingUpdate.current!.messageId, {
-            content: pendingUpdate.current!.content,
-            status: "streaming",
-            isStreaming: true,
-          });
+      // Aplicar finalData (ya no necesitamos aplicar pendingUpdate porque el Promise lo hizo)
+      flushSync(() => {
+        updateMessage(messageId, {
+          ...finalData,
+          status: finalData.status ?? "delivered",
+          isStreaming: false,
         });
-        pendingUpdate.current = null;
-      }
-
-      // Completar el streaming
-      updateMessage(messageId, {
-        ...finalData,
-        status: finalData.status ?? "delivered",
-        isStreaming: false,
       });
 
       // Reset throttle state
       lastUpdateTime.current = 0;
+      pendingUpdate.current = null;
     },
     [updateMessage],
   );
@@ -135,31 +132,37 @@ export function useOptimizedChat(options: UseOptimizedChatOptions = {}) {
         lastUpdateTime.current = now;
         pendingUpdate.current = null;
 
-        // Limpiar timer si existe
+        // Limpiar timer y promise si existen
         if (throttleTimer.current !== null) {
           clearTimeout(throttleTimer.current);
           throttleTimer.current = null;
         }
+        pendingFlushPromise.current = null;
       } else {
         // Programar actualización para el próximo intervalo si no hay timer activo
         if (throttleTimer.current === null) {
           const delay = THROTTLE_MS - timeSinceLastUpdate;
           // console.log("[DEBUG] SCHEDULING TIMER - delay:", delay, "ms");
-          throttleTimer.current = setTimeout(() => {
-            // console.log("[DEBUG] TIMER FIRED - pendingLength:", pendingUpdate.current?.content.length);
-            if (pendingUpdate.current) {
-              flushSync(() => {
-                updateMessage(pendingUpdate.current!.messageId, {
-                  content: pendingUpdate.current!.content,
-                  status: "streaming",
-                  isStreaming: true,
+
+          // FIX ISSUE-001: Crear Promise para que completeStreaming pueda esperar
+          pendingFlushPromise.current = new Promise<void>((resolve) => {
+            throttleTimer.current = setTimeout(() => {
+              // console.log("[DEBUG] TIMER FIRED - pendingLength:", pendingUpdate.current?.content.length);
+              if (pendingUpdate.current) {
+                flushSync(() => {
+                  updateMessage(pendingUpdate.current!.messageId, {
+                    content: pendingUpdate.current!.content,
+                    status: "streaming",
+                    isStreaming: true,
+                  });
                 });
-              });
-              lastUpdateTime.current = Date.now();
-              pendingUpdate.current = null;
-            }
-            throttleTimer.current = null;
-          }, delay);
+                lastUpdateTime.current = Date.now();
+                pendingUpdate.current = null;
+              }
+              throttleTimer.current = null;
+              resolve(); // FIX ISSUE-001: Resolver promise cuando termine el flush
+            }, delay);
+          });
         } else {
           // console.log("[DEBUG] TIMER ALREADY EXISTS - just updating pending");
         }
@@ -317,14 +320,24 @@ export function useOptimizedChat(options: UseOptimizedChatOptions = {}) {
   }, []);
 
   // Limpiar el controlador y timers cuando se desmonte
+  // FIX ISSUE-002: Limpiar pendingFlushPromise para prevenir memory leak
   useEffect(() => {
     return () => {
+      // Limpiar AbortController
       if (currentRequestController.current) {
         currentRequestController.current.abort();
       }
+
+      // Limpiar timer pendiente
       if (throttleTimer.current !== null) {
         clearTimeout(throttleTimer.current);
+        throttleTimer.current = null;
       }
+
+      // Limpiar Promise pendiente y estado
+      pendingFlushPromise.current = null;
+      pendingUpdate.current = null;
+      lastUpdateTime.current = 0;
     };
   }, []);
 

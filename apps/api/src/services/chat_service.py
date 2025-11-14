@@ -328,6 +328,16 @@ class ChatService:
                         # Fallback: save only file_ids without rich metadata
                         files = []
 
+            # FIX ISSUE-003: Clean metadata to prevent duplication
+            # Remove file_ids and files from metadata since they're stored in explicit fields
+            clean_metadata = {"source": "api"}
+            if metadata:
+                clean_metadata = {
+                    k: v for k, v in metadata.items()
+                    if k not in ("file_ids", "files")
+                }
+                clean_metadata["source"] = "api"
+
             # Create message with explicit typed fields
             user_message = ChatMessageModel(
                 chat_id=chat_session.id,
@@ -336,8 +346,8 @@ class ChatService:
                 file_ids=file_ids,
                 files=files,
                 schema_version=2,
-                # Legacy metadata for backwards compatibility
-                metadata={"source": "api"} if not metadata else {**metadata, "source": "api"}
+                # Legacy metadata for backwards compatibility (cleaned)
+                metadata=clean_metadata
             )
 
             # Ensure BSON/JSON serializability before insertion
@@ -437,16 +447,28 @@ class ChatService:
         tokens: Optional[Dict] = None,
         latency_ms: Optional[int] = None
     ) -> ChatMessageModel:
-        """Add assistant message to session and invalidate cache."""
+        """Add assistant message to session and record in unified history."""
+        # FIX ISSUE-003: Clean metadata to prevent duplication (defensive)
+        # Although assistant messages typically don't have file_ids, clean metadata to be safe
+        clean_metadata = {}
+        if metadata:
+            clean_metadata = {
+                k: v for k, v in metadata.items()
+                if k not in ("file_ids", "files")
+            }
+
         ai_message = await chat_session.add_message(
             role=MessageRole.ASSISTANT,
             content=content,
             model=model,
             task_id=task_id,
-            metadata=metadata or {},
+            metadata=clean_metadata,
             tokens=tokens,
             latency_ms=latency_ms
         )
+
+        # NOTE: History recording is handled by chat_session.add_message() (chat.py:236)
+        # No need to call HistoryService.record_chat_message() here
 
         # Invalidate cache
         cache = await get_redis_cache()
