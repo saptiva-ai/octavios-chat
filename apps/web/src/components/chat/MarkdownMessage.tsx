@@ -6,6 +6,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
+import rehypeSanitize from "rehype-sanitize"; // FIX ISSUE-008: Prevent XSS attacks
 import { cn } from "../../lib/utils";
 import type { PluggableList } from "unified";
 import "katex/dist/katex.min.css";
@@ -176,6 +177,10 @@ export function MarkdownMessage({
   const markdownPlugins = React.useMemo(() => {
     const remarkPlugins: PluggableList = [remarkGfm, remarkMath];
     const rehypePlugins: PluggableList = [];
+
+    // FIX ISSUE-008: Sanitize HTML first to prevent XSS
+    rehypePlugins.push(rehypeSanitize);
+
     if (highlightCode) {
       rehypePlugins.push(rehypeHighlight);
     }

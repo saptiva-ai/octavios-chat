@@ -2,6 +2,7 @@
 Unified history service for managing chat + research timeline
 """
 
+import re  # FIX ISSUE-021: For escaping regex special characters
 import structlog
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
@@ -542,8 +543,11 @@ class HistoryService:
 
             # Apply search filter
             if search:
+                # FIX ISSUE-021: Escape regex special characters to prevent ReDoS
+                # Prevents catastrophic backtracking from malicious regex patterns like (a+)+b
+                escaped_search = re.escape(search)
                 # Case-insensitive search in title
-                query = query.find({"title": {"$regex": search, "$options": "i"}})
+                query = query.find({"title": {"$regex": escaped_search, "$options": "i"}})
 
             # Get total count
             total_count = await query.count()

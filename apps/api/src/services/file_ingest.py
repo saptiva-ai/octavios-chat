@@ -9,6 +9,7 @@ import time
 import uuid
 from typing import Optional
 
+import filetype  # FIX ISSUE-011: Magic byte validation
 import structlog
 from fastapi import HTTPException, UploadFile, status
 
@@ -95,7 +96,58 @@ class FileIngestService:
         upload_started = time.time()
         try:
             saved_path, safe_name, bytes_written = await storage.save_upload(file_id, upload, MAX_UPLOAD_BYTES)
+
+            # FIX ISSUE-011: Validate magic bytes to prevent malicious files
+            # Read first 8KB to detect file type (enough for most magic byte signatures)
             with saved_path.open("rb") as file_obj:
+                header = file_obj.read(8192)
+                kind = filetype.guess(header)
+
+                # Validate that actual file type matches declared MIME type
+                if kind is None:
+                    logger.warning(
+                        "Could not detect file type from magic bytes",
+                        filename=upload.filename,
+                        declared_mime=upload.content_type,
+                        file_id=file_id
+                    )
+                    increment_pdf_ingest_error("unknown_magic_bytes")
+                    raise HTTPException(
+                        status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                        detail="Could not verify file type. File may be corrupted or invalid.",
+                    )
+
+                # Normalize MIME types for comparison (handle variations)
+                detected_mime = kind.mime
+                declared_mime = upload.content_type
+
+                # Allow image/jpg -> image/jpeg normalization
+                if declared_mime == "image/jpg":
+                    declared_mime = "image/jpeg"
+
+                if detected_mime != declared_mime:
+                    logger.error(
+                        "File type mismatch - possible malicious file",
+                        filename=upload.filename,
+                        declared_mime=upload.content_type,
+                        detected_mime=detected_mime,
+                        file_id=file_id
+                    )
+                    increment_pdf_ingest_error("mime_mismatch")
+                    raise HTTPException(
+                        status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                        detail=f"File type mismatch: declared '{upload.content_type}' but detected '{detected_mime}'",
+                    )
+
+                logger.info(
+                    "File type validated via magic bytes",
+                    filename=upload.filename,
+                    mime_type=detected_mime,
+                    file_id=file_id
+                )
+
+                # Compute hash
+                file_obj.seek(0)  # Reset to beginning
                 while True:
                     chunk = file_obj.read(1024 * 1024)
                     if not chunk:
