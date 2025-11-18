@@ -64,103 +64,169 @@
 Vista macro de los componentes: primero un mapa de patrones/contendores y luego vistas específicas de contenedores e integraciones.
 
 ### Mapa de arquitectura (alto nivel)
-Diagrama que resume cómo los patrones principales (Chain of Responsibility, Builder, Adapter y Observer) atraviesan los contenedores.
+Diagrama que resume cómo los patrones principales (Chain of Responsibility, Builder, Adapter y Observer) atraviesan los contenedores, incluyendo streaming audit y MCP tools.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#111111','primaryBorderColor': '#4b5563','primaryTextColor': '#f9fafb','lineColor': '#4b5563','secondaryColor': '#ffffff','secondaryBorderColor': '#4b5563','secondaryTextColor': '#111111','tertiaryColor': '#d1d5db','tertiaryBorderColor': '#4b5563','tertiaryTextColor': '#111111'}}}%%
 flowchart TB
-    user((Usuarios internos)):::dark --> web["Next.js 14<br/>App Router + Zustand"]:::light
-    web --> gateway["FastAPI Gateway<br/>Auth · Rate limit · Telemetry"]:::light
-    gateway --> chat["Chat Router<br/>Chain of Responsibility"]:::light
-    gateway --> mcp["FastMCP Adapter<br/>Lazy Loading"]:::light
+    user((Usuarios internos)):::dark --> web["Next.js 14<br/>App Router + Zustand<br/>SSE Streaming"]:::light
+    web --> gateway["FastAPI Gateway<br/>Auth JWT + Blacklist<br/>Rate limit · Telemetry"]:::light
+
+    gateway --> chat["Chat Router<br/>Chain of Responsibility<br/>SSE Events"]:::light
+    gateway --> mcp["FastMCP Adapter<br/>Lazy Loading<br/>5 Tools Productivas"]:::light
+    gateway --> audit_stream["Streaming Audit Handler<br/>Real-time Progress<br/>SSE Events"]:::light
+
     chat --> builder["ChatResponseBuilder<br/>Builder Pattern"]:::light
-    mcp --> tools["Herramientas SAPTIVA / Aletheia<br/>Adapter + Facade"]:::light
-    builder --> persistence[(Mongo · Redis · MinIO<br/>Ports & Adapters)]:::gray
+    mcp --> tools["MCP Tools<br/>audit_file · excel_analyzer<br/>viz_tool · deep_research<br/>extract_document_text"]:::light
+    audit_stream --> coordinator["COPILOTO_414 Coordinator<br/>8 Auditores Especializados"]:::light
+
+    builder --> persistence[(Mongo · Redis · MinIO<br/>Ports & Adapters<br/>JWT Blacklist · Cache)]:::gray
     tools --> persistence
-    gateway --> observers["Observer Layer<br/>Prometheus · OTel · Structlog"]:::light
+    coordinator --> persistence
+
+    gateway --> observers["Observer Layer<br/>Prometheus · OTel · Structlog<br/>MCP Metrics"]:::light
+    mcp --> observers
+    audit_stream --> observers
 
     classDef dark fill:#111111,stroke:#4b5563,color:#f9fafb;
     classDef light fill:#ffffff,stroke:#4b5563,color:#111111;
     classDef gray fill:#e5e7eb,stroke:#4b5563,color:#111111;
 ```
 
-Los usuarios llegan al App Router (State pattern con Zustand), que delega en FastAPI. La capa Gateway aplica autenticación, límite de peticiones e instrumentación. Desde allí nacen dos flujos: chat (`Chain of Responsibility` + `Builder`) y MCP (`Adapter` + `Lazy loading`). Ambos escriben en persistencia mediante `Ports & Adapters`, mientras la capa `Observer` captura métricas/logs.
+Los usuarios llegan al App Router (State pattern con Zustand) que soporta SSE para streaming. FastAPI Gateway aplica autenticación JWT con blacklist, rate limiting e instrumentación. Tres flujos principales: **Chat** con SSE streaming (`Chain of Responsibility` + `Builder`), **MCP** con lazy loading y 5 herramientas productivas (`Adapter`), y **Streaming Audit** con progreso en tiempo real (`Orchestrator`). Todos escriben en persistencia mediante `Ports & Adapters`, mientras la capa `Observer` captura métricas/logs incluyendo telemetría MCP.
 
 ### Contenedores principales
-Diagrama que muestra el flujo usuario → frontend → backend → servicios de estado con una paleta neutra.
+Diagrama detallado que muestra el flujo usuario → frontend → backend → servicios de estado, incluyendo componentes nuevos como thumbnails y streaming handlers.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#111111','primaryBorderColor': '#4b5563','primaryTextColor': '#f9fafb','lineColor': '#4b5563','secondaryColor': '#ffffff','secondaryBorderColor': '#4b5563','secondaryTextColor': '#111111','tertiaryColor': '#d1d5db','tertiaryBorderColor': '#4b5563','tertiaryTextColor': '#111111'}}}%%
 flowchart TB
     user((Usuarios)):::light --> web_ui
 
-    subgraph Frontend["Frontend (Next.js 14)"]
-        web_ui["App Router + UI"]:::light
-        web_clients["HTTP/MCP Clients<br/>+ Zustand"]:::light
+    subgraph Frontend["Frontend (Next.js 14 + App Router)"]
+        web_ui["ChatView<br/>ChatMessage<br/>CompactChatComposer"]:::light
+        web_components["PreviewAttachment<br/>ThumbnailImage<br/>CodeBlock"]:::light
+        web_clients["HTTP/MCP Clients<br/>+ Zustand Stores<br/>SSE Handler"]:::light
     end
 
-    web_ui --> web_clients --> gateway
+    web_ui --> web_components
+    web_components --> web_clients
+    web_clients --> gateway
 
-    subgraph API["Backend (FastAPI)"]
-        gateway["Gateway<br/>Auth · CORS · RateLimit"]:::dark
-        chat_chain["Chat Router<br/>Chain of Responsibility"]:::light
-        response_builder["ChatResponseBuilder<br/>Builder"]:::light
-        mcp_lazy["MCP Adapter<br/>Lazy Loading"]:::light
-        audit_coord["COPILOTO_414<br/>Orchestrator"]:::light
+    subgraph API["Backend (FastAPI + FastMCP)"]
+        gateway["Gateway Middleware<br/>Auth JWT + Blacklist<br/>CORS · RateLimit<br/>Telemetry"]:::dark
+
+        subgraph Handlers["Request Handlers"]
+            chat_chain["Chat Router<br/>StreamingHandler<br/>Chain of Responsibility"]:::light
+            mcp_lazy["MCP Lazy Routes<br/>Discover/Load/Invoke<br/>98% Context Reduction"]:::light
+            audit_stream["Streaming Audit<br/>Real-time SSE Progress<br/>8 Auditores Paralelos"]:::light
+        end
+
+        subgraph Services["Domain Services"]
+            response_builder["ChatResponseBuilder<br/>Builder Pattern"]:::light
+            doc_service["DocumentService<br/>Multi-tier Extraction<br/>Cache + Thumbnails"]:::light
+            validation_coord["ValidationCoordinator<br/>COPILOTO_414<br/>Orchestrator Pattern"]:::light
+            context_mgr["ContextManager<br/>SessionContext<br/>Email Service"]:::light
+        end
     end
 
-    gateway --> chat_chain --> response_builder
+    gateway --> chat_chain
     gateway --> mcp_lazy
-    gateway --> audit_coord
+    gateway --> audit_stream
 
-    subgraph Data["Persistencia interna"]
-        mongo[(MongoDB + Beanie)]:::light
-        redis[(Redis cache + tokens)]:::light
-        minio[(MinIO S3)]:::light
+    chat_chain --> response_builder
+    mcp_lazy --> doc_service
+    audit_stream --> validation_coord
+
+    response_builder --> context_mgr
+    doc_service --> context_mgr
+
+    subgraph Data["Persistencia & Cache"]
+        mongo[(MongoDB + Beanie<br/>Sessions · Messages<br/>Documents · Reports)]:::light
+        redis[(Redis<br/>Cache · JWT Blacklist<br/>MCP Registry · Sessions)]:::light
+        minio[(MinIO S3<br/>Documents · Reports<br/>Thumbnails)]:::light
     end
 
     response_builder --> mongo
     response_builder --> redis
-    mcp_lazy --> redis
-    audit_coord --> minio
+    doc_service --> minio
+    doc_service --> redis
+    validation_coord --> mongo
+    validation_coord --> minio
+    context_mgr --> redis
 
     classDef dark fill:#111111,stroke:#4b5563,color:#f9fafb;
     classDef light fill:#ffffff,stroke:#4b5563,color:#111111;
     classDef gray fill:#e5e7eb,stroke:#4b5563,color:#111111;
 ```
 
-Los usuarios llegan al App Router y a los clientes compartidos (Gateway pattern). El contenedor FastAPI aplica middleware transversales, luego encamina la petición al `Chat Router` (Chain of Responsibility), `ChatResponseBuilder` (Builder) o `MCP Adapter` (Adapter/Lazy Loading). Finalmente se escribe en Mongo/Redis/MinIO (Ports & Adapters) manteniendo cada preocupación aislada.
+El frontend utiliza componentes especializados (ChatMessage con thumbnails, PreviewAttachment con audit button, CodeBlock para syntax highlighting) que se comunican mediante clientes HTTP/MCP con handlers SSE. El Gateway aplica middleware transversales (Auth JWT con blacklist en Redis, CORS, RateLimit, Telemetry). Tres handlers principales: **Chat** con streaming SSE, **MCP** con lazy loading (98% reducción de contexto), y **Streaming Audit** con progreso en tiempo real de 8 auditores. Los servicios de dominio implementan patrones específicos (Builder, Orchestrator) y toda la persistencia queda abstraída mediante Ports & Adapters en Mongo/Redis/MinIO.
 
 ### Integraciones y observabilidad
-Diagrama que destaca cómo el backend se apoya en servicios externos de AI/herramientas y cómo se mide la plataforma.
+Diagrama completo que muestra servicios externos (LLMs, herramientas), persistencia, y stack de observabilidad con métricas MCP.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#111111','primaryBorderColor': '#4b5563','primaryTextColor': '#f9fafb','lineColor': '#4b5563','secondaryColor': '#ffffff','secondaryBorderColor': '#4b5563','secondaryTextColor': '#111111','tertiaryColor': '#d1d5db','tertiaryBorderColor': '#4b5563','tertiaryTextColor': '#111111'}}}%%
-flowchart LR
-    subgraph Core["Núcleo API"]
-        chat_core["Chat Service<br/>Payload builder"]:::dark
-        mcp_core["FastMCP Tools<br/>Excel · Auditoría · Research"]:::dark
-        audit_core["COPILOTO_414<br/>Auditors"]:::dark
+flowchart TB
+    subgraph Core["Núcleo API (FastAPI + FastMCP)"]
+        chat_core["Chat Service<br/>StreamingHandler<br/>SSE Events"]:::dark
+        mcp_core["FastMCP Server<br/>5 Tools Productivas<br/>Lazy Loading"]:::dark
+        audit_core["COPILOTO_414<br/>8 Auditores Streaming<br/>ValidationCoordinator"]:::dark
+        doc_core["Document Service<br/>Extraction Multi-tier<br/>Thumbnail Generation"]:::dark
     end
 
-    chat_core --> saptiva[SAPTIVA LLMs]:::gray
-    chat_core --> aletheia[Aletheia Research]:::gray
-    mcp_core --> languagetool[LanguageTool]:::gray
-    mcp_core --> saptiva
-    audit_core --> languagetool
+    subgraph External["Servicios Externos"]
+        saptiva["SAPTIVA LLMs<br/>Turbo · Cortex · Ops"]:::gray
+        aletheia["Aletheia Research<br/>Deep Research API"]:::gray
+        languagetool["LanguageTool<br/>Grammar Checking"]:::gray
+        smtp["SMTP Service<br/>Email Notifications"]:::gray
+    end
 
-    chat_core --> prom[Prometheus Exporters]:::gray
-    chat_core --> otel[OpenTelemetry Traces]:::gray
+    subgraph Storage["Almacenamiento"]
+        mongo["MongoDB<br/>Sessions · Messages<br/>Documents · Reports"]:::gray
+        redis["Redis<br/>Cache · JWT Blacklist<br/>MCP Registry"]:::gray
+        minio["MinIO S3<br/>Files · Reports<br/>Thumbnails"]:::gray
+    end
+
+    subgraph Observability["Stack de Observabilidad"]
+        prom["Prometheus<br/>Request Metrics<br/>MCP Invocations"]:::gray
+        otel["OpenTelemetry<br/>Distributed Traces<br/>Spans"]:::gray
+        logs["Structlog<br/>JSON Logs<br/>Context Info"]:::gray
+        grafana["Grafana<br/>Dashboards<br/>Alerting"]:::gray
+    end
+
+    chat_core --> saptiva
+    chat_core --> aletheia
+    mcp_core --> saptiva
+    mcp_core --> doc_core
+    audit_core --> languagetool
+    doc_core --> smtp
+
+    chat_core --> mongo
+    chat_core --> redis
+    mcp_core --> redis
+    doc_core --> minio
+    doc_core --> redis
+    audit_core --> mongo
+    audit_core --> minio
+
+    chat_core --> prom
+    chat_core --> otel
+    chat_core --> logs
     mcp_core --> prom
     mcp_core --> otel
-    audit_core --> logs[Structlog → Loki/S3]:::gray
+    audit_core --> logs
+    doc_core --> logs
+
+    prom --> grafana
+    otel --> grafana
 
     classDef dark fill:#111111,stroke:#4b5563,color:#f9fafb;
     classDef light fill:#ffffff,stroke:#4b5563,color:#111111;
     classDef gray fill:#e5e7eb,stroke:#4b5563,color:#111111;
 ```
 
-Componentes: `Chat Service` arma prompts y delega en SAPTIVA, `FastMCP Tools` actúan como Adapter frente a MinIO/Redis y `COPILOTO_414` orquesta auditores específicos. Las salidas se monitorizan mediante Prometheus/OTel/Structlog (Observer pattern) para cerrar el ciclo de observabilidad end-to-end.
+**Arquitectura de integración completa**: El núcleo API integra 4 servicios principales (Chat con SSE streaming, FastMCP con 5 herramientas, COPILOTO_414 con 8 auditores streaming, y Document Service con extracción multi-tier). Se conecta a servicios externos (SAPTIVA LLMs multi-modelo, Aletheia Research, LanguageTool, SMTP), usa almacenamiento triple (MongoDB para datos estructurados, Redis para cache/blacklist/registry, MinIO para archivos/thumbnails), y se monitoriza end-to-end mediante Prometheus (métricas de request + invocaciones MCP), OpenTelemetry (traces distribuidos), Structlog (logs JSON contextuales) y Grafana (dashboards + alertas).
 
 **Patrones y componentes clave**
 - *Chain of Responsibility + Strategy*: `apps/api/src/routers/chat/endpoints/message_endpoints.py` delega en `domain/message_handlers` para escoger streaming/simple.
