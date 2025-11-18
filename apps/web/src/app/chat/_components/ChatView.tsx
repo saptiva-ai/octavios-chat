@@ -11,6 +11,7 @@ import {
   ChatShell,
   ConversationList,
 } from "../../../components/chat";
+import { ErrorBoundary } from "../../../components/ErrorBoundary";
 import {
   DeepResearchWizard,
   type DeepResearchScope,
@@ -143,6 +144,7 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
   } | null>(null);
   const [isStartingResearch, setIsStartingResearch] = React.useState(false);
   const [researchError, setResearchError] = React.useState<string | null>(null);
+  const [isSending, setIsSending] = React.useState(false); // ISSUE-009: Rate limiting
 
   // Audit progress state (Copiloto 414)
   const [activeAudit, setActiveAudit] = React.useState<{
@@ -405,6 +407,20 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
   // Track which chats have already loaded documents (prevent duplicate loads)
   const loadedChatsRef = React.useRef<Set<string>>(new Set());
 
+  // ISSUE-010: Track active streaming AbortController for cleanup
+  const streamAbortControllerRef = React.useRef<AbortController | null>(null);
+
+  // ISSUE-010: Cleanup streaming on unmount to prevent orphaned SSE connections
+  React.useEffect(() => {
+    return () => {
+      if (streamAbortControllerRef.current) {
+        streamAbortControllerRef.current.abort();
+        streamAbortControllerRef.current = null;
+        logDebug("[ChatView] Aborted streaming on unmount");
+      }
+    };
+  }, []);
+
   // Load documents from backend when chat changes (fixes file persistence after refresh)
   React.useEffect(() => {
     const loadChatDocuments = async () => {
@@ -430,13 +446,35 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
 
         // Re-populate filesStore with documents from backend
         // This ensures files persist after page refresh, even if localStorage was cleared
+        // Get fresh state from store to avoid stale closure issues
+        const currentAttachments = filesV1Attachments;
+
+        logDebug("[ChatView] Current attachments in store", {
+          count: currentAttachments.length,
+          fileIds: currentAttachments.map((f) => f.file_id),
+        });
+
+        logDebug("[ChatView] Documents from backend", {
+          count: documents.length,
+          fileIds: documents.map((d) => d.file_id),
+        });
+
         documents.forEach((doc) => {
           // Only add if not already in store (avoid duplicates)
-          const existing = filesV1Attachments.find(
+          const existing = currentAttachments.find(
             (f) => f.file_id === doc.file_id,
           );
           if (!existing) {
+            logDebug("[ChatView] Adding document from backend", {
+              file_id: doc.file_id,
+              filename: doc.filename,
+            });
             addFilesV1Attachment(doc);
+          } else {
+            logDebug("[ChatView] Skipping duplicate document", {
+              file_id: doc.file_id,
+              filename: doc.filename,
+            });
           }
         });
 
@@ -568,9 +606,9 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
               metadata_present: !!userMessageMetadata,
             });
 
-            // Check if streaming is enabled (default: true for better UX)
+            // Check if streaming is enabled (RE-ENABLED with dict fix)
+            // Audit commands NOW support streaming with real-time progress!
             const enableStreaming = true;
-            // console.log("[DEBUG] Streaming enabled:", enableStreaming);
 
             let response: ChatResponse | undefined;
 
@@ -621,7 +659,14 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                   } else if (event.type === "done") {
                     response = event.data;
                   } else if (event.type === "error") {
-                    throw new Error(event.data.error);
+                    // Handle both string and object error formats
+                    const errorMsg =
+                      typeof event.data === "string"
+                        ? event.data
+                        : event.data.error ||
+                          event.data.message ||
+                          JSON.stringify(event.data);
+                    throw new Error(errorMsg);
                   }
                 }
                 // console.log("[DEBUG] Stream finished");
@@ -887,6 +932,12 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
 
   const handleSendMessage = React.useCallback(
     async (message: string, attachments?: ChatComposerAttachment[]) => {
+      // ISSUE-009: Rate limiting - Prevent spam by checking if already sending
+      if (isSending) {
+        logDebug("Message send blocked - already sending");
+        return;
+      }
+
       const trimmed = message.trim();
 
       // Rollback feature flag: Allow disabling files-only send
@@ -935,6 +986,9 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
         return;
       }
 
+      // ISSUE-009: Set sending flag to prevent concurrent sends
+      setIsSending(true);
+
       try {
         await researchGate(effectiveMessage, {
           deepResearchOn: deepResearchEnabled,
@@ -955,9 +1009,13 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
         } catch (sendError) {
           throw sendError;
         }
+      } finally {
+        // ISSUE-009: Always clear sending flag
+        setIsSending(false);
       }
     },
     [
+      isSending,
       deepResearchEnabled,
       sendStandardMessage,
       setPendingWizard,
@@ -1387,38 +1445,61 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
           </div>
         )}
 
-        <ChatInterface
-          key={`chat-${currentChatId}-${selectionEpoch}`}
-          className="flex-1"
-          currentChatId={currentChatId}
-          messages={messages}
-          onSendMessage={handleSendMessage}
-          onRetryMessage={handleRetryMessage}
-          onRegenerateMessage={handleRegenerateMessage}
-          onStopStreaming={handleStopStreaming}
-          onCopyMessage={handleCopyMessage}
-          loading={isLoading}
-          welcomeMessage={welcomeComponent}
-          featureFlags={featureFlags}
-          toolsEnabled={toolsEnabled}
-          onToggleTool={toggleTool}
-          selectedTools={selectedTools}
-          onRemoveTool={handleRemoveTool}
-          onAddTool={handleAddTool}
-          onOpenTools={handleOpenTools}
-          isCreating={isCreatingConversation}
-          isHydrating={
-            currentChatId ? isHydratingByChatId[currentChatId] : false
+        {/* ISSUE-015: Wrap ChatInterface in ErrorBoundary to prevent full UI crash */}
+        <ErrorBoundary
+          fallback={
+            <div className="flex flex-1 flex-col items-center justify-center rounded-2xl border border-red-500/20 bg-red-500/5 p-8 text-center">
+              <div className="mb-4 text-6xl">💬</div>
+              <h2 className="mb-2 text-xl font-semibold text-white">
+                Error en el chat
+              </h2>
+              <p className="mb-6 max-w-md text-sm text-saptiva-light/70">
+                Ocurrió un error al renderizar el chat. Intenta recargar la
+                página.
+              </p>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="rounded-full bg-[#49F7D9] px-6 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+              >
+                Recargar página
+              </button>
+            </div>
           }
-          // Files V1 props - MINIMALISMO FUNCIONAL: Sin toggle
-          filesV1Attachments={filesV1Attachments}
-          onAddFilesV1Attachment={addFilesV1Attachment}
-          onRemoveFilesV1Attachment={removeFilesV1Attachment}
-          lastReadyFile={lastReadyAuditFile}
-          // Copiloto 414: Audit progress callback
-          onStartAudit={handleStartAudit}
-          onAuditError={handleAuditError}
-        />
+        >
+          <ChatInterface
+            key={`chat-${currentChatId}-${selectionEpoch}`}
+            className="flex-1"
+            currentChatId={currentChatId}
+            messages={messages}
+            onSendMessage={handleSendMessage}
+            onRetryMessage={handleRetryMessage}
+            onRegenerateMessage={handleRegenerateMessage}
+            onStopStreaming={handleStopStreaming}
+            onCopyMessage={handleCopyMessage}
+            loading={isLoading}
+            welcomeMessage={welcomeComponent}
+            featureFlags={featureFlags}
+            toolsEnabled={toolsEnabled}
+            onToggleTool={toggleTool}
+            selectedTools={selectedTools}
+            onRemoveTool={handleRemoveTool}
+            onAddTool={handleAddTool}
+            onOpenTools={handleOpenTools}
+            isCreating={isCreatingConversation}
+            isHydrating={
+              currentChatId ? isHydratingByChatId[currentChatId] : false
+            }
+            // Files V1 props - MINIMALISMO FUNCIONAL: Sin toggle
+            filesV1Attachments={filesV1Attachments}
+            onAddFilesV1Attachment={addFilesV1Attachment}
+            onRemoveFilesV1Attachment={removeFilesV1Attachment}
+            lastReadyFile={lastReadyAuditFile}
+            // Copiloto 414: Audit progress callback
+            onStartAudit={handleStartAudit}
+            onAuditError={handleAuditError}
+          />
+        </ErrorBoundary>
       </div>
     </ChatShell>
   );
