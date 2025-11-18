@@ -397,59 +397,198 @@ flowchart TB
 Todo implementa **State Pattern** (Zustand), **Gateway Pattern** (clients), **Observer Pattern** (SSE), y **Strategy Pattern** (message handlers).
 
 ### Backend (FastAPI + MCP)
-Modulariza el tráfico HTTP en routers, separa negocio en servicios y usa patrones específicos (Chain, Builder, Orchestrator, Adapter).
+Arquitectura server-side completa con capas de middleware, routers especializados, servicios de dominio con patrones, MCP tools y persistencia.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#111111','primaryBorderColor': '#4b5563','primaryTextColor': '#f9fafb','lineColor': '#4b5563','secondaryColor': '#ffffff','secondaryBorderColor': '#4b5563','secondaryTextColor': '#111111','tertiaryColor': '#d1d5db','tertiaryBorderColor': '#4b5563','tertiaryTextColor': '#111111'}}}%%
-flowchart LR
-    subgraph Entry["Capa de entrada"]
-        authmw["AuthMiddleware<br/>JWT + blacklist"]:::light
-        ratelimit["RateLimitMiddleware"]:::light
-        telemetrymw["TelemetryMiddleware"]:::light
+flowchart TB
+    client[Cliente HTTP/SSE]:::gray --> gateway
+
+    subgraph Middleware["Middleware Stack (Transversal)"]
+        gateway["ASGI Gateway<br/>CORS · CSP"]:::dark
+        authmw["AuthMiddleware<br/>· JWT Validation<br/>· Blacklist Check<br/>· User Injection"]:::light
+        ratelimit["RateLimitMiddleware<br/>· Per IP/User<br/>· Sliding Window<br/>· Headers"]:::light
+        cache_mw["CacheControlMiddleware<br/>· No-store Policies<br/>· Private Headers"]:::light
+        telemetry["TelemetryMiddleware<br/>· Request ID<br/>· Duration<br/>· Error Tracking"]:::light
     end
 
-    subgraph Routers["Routers FastAPI"]
-        chat_router["Chat Router<br/>Chain of Responsibility"]:::light
-        files_router["Files/Documents"]:::light
-        mcp_router["MCP Lazy Routes"]:::light
-        review_router["Review + COPILOTO"]:::light
+    gateway --> authmw --> ratelimit --> cache_mw --> telemetry --> routers
+
+    subgraph Routers["API Routers (FastAPI)"]
+        subgraph ChatRoutes["Chat Routes"]
+            chat_post["POST /api/chat<br/>· Stream/Non-stream<br/>· Chain of Responsibility"]:::dark
+            chat_get["GET /api/sessions<br/>· List/Get/Delete"]:::light
+        end
+
+        subgraph FileRoutes["File/Document Routes"]
+            file_upload["POST /api/files/upload<br/>· Multipart<br/>· Validation"]:::light
+            file_get["GET /api/documents/:id<br/>· Metadata<br/>· Download"]:::light
+            thumbnail["GET /api/documents/:id/thumbnail<br/>· Image Generation"]:::light
+        end
+
+        subgraph MCPRoutes["MCP Lazy Routes"]
+            mcp_discover["GET /mcp/lazy/discover<br/>· Tool Registry<br/>· Lightweight"]:::dark
+            mcp_load["GET /mcp/lazy/tools/:tool<br/>· Schema Loading<br/>· On-demand"]:::light
+            mcp_invoke["POST /mcp/lazy/invoke<br/>· Tool Execution<br/>· Cancellation"]:::light
+            mcp_admin["GET /mcp/admin/*<br/>· Stats · Unload<br/>· Scoped Access"]:::light
+        end
+
+        subgraph AuthRoutes["Auth Routes"]
+            auth_login["POST /api/auth/login<br/>· JWT Generation"]:::light
+            auth_refresh["POST /api/auth/refresh<br/>· Token Rotation"]:::light
+            auth_reset["POST /api/auth/reset-password<br/>· Email Token"]:::light
+        end
     end
 
-    subgraph Services["Servicios de dominio"]
-        chat_service["ChatService<br/>Builder + Strategy"]:::light
-        session_ctx["SessionContextManager"]:::light
-        doc_service["DocumentService<br/>Redis cache"]:::light
-        storage_srv["Storage + Reaper"]:::light
-        validation_coord["COPILOTO_414 Coordinator"]:::light
-        mcp_server["FastMCP Server<br/>Tools Adapter"]:::light
+    telemetry --> ChatRoutes
+    telemetry --> FileRoutes
+    telemetry --> MCPRoutes
+    telemetry --> AuthRoutes
+
+    subgraph Handlers["Request Handlers (Domain)"]
+        streaming_h["StreamingHandler<br/>· SSE Events<br/>· Async Generator<br/>· Error Recovery"]:::dark
+        message_h["MessageHandlers<br/>· Standard/RAG/Audit<br/>· Strategy Pattern"]:::light
+        audit_stream_h["AuditStreamHandler<br/>· Progress Events<br/>· 8 Auditors"]:::light
     end
 
-    subgraph Data["Persistencia"]
-        mongo[(MongoDB + Beanie)]:::light
-        redis[(Redis cache + tokens)]:::light
-        minio[(MinIO S3)]:::light
+    chat_post --> streaming_h
+    chat_post --> message_h
+    chat_post --> audit_stream_h
+
+    subgraph CoreServices["Core Domain Services"]
+        chat_svc["ChatService<br/>· Builder Pattern<br/>· Prompt Assembly<br/>· History Management"]:::dark
+        doc_svc["DocumentService<br/>· Multi-tier Extraction<br/>· pypdf → SDK → OCR<br/>· Redis Cache (1h)"]:::dark
+        session_svc["SessionContextManager<br/>· Context Assembly<br/>· Tool Normalization"]:::light
+        history_svc["HistoryService<br/>· Event Timeline<br/>· Unified Log"]:::light
     end
 
-    Entry --> Routers --> Services
-    chat_router --> chat_service
-    chat_service --> session_ctx
-    chat_service --> doc_service
-    doc_service --> redis
-    files_router --> storage_srv --> minio
-    review_router --> validation_coord --> minio
-    validation_coord --> redis
-    mcp_router --> mcp_server
-    mcp_server --> validation_coord
-    mcp_server --> doc_service
-    chat_service --> mongo
-    session_ctx --> redis
+    streaming_h --> chat_svc
+    message_h --> chat_svc
+    chat_svc --> session_svc
+    chat_svc --> doc_svc
+    chat_svc --> history_svc
+
+    subgraph ValidationServices["COPILOTO_414 Services"]
+        valid_coord["ValidationCoordinator<br/>· Orchestrator Pattern<br/>· 8 Parallel Auditors<br/>· Policy Resolution"]:::dark
+
+        subgraph Auditors["Specialized Auditors"]
+            disclaimer["Disclaimer<br/>Fuzzy Match"]:::light
+            format["Format<br/>PyMuPDF"]:::light
+            grammar["Grammar<br/>LanguageTool"]:::light
+            logo["Logo<br/>OpenCV"]:::light
+        end
+    end
+
+    audit_stream_h --> valid_coord
+    valid_coord --> Auditors
+
+    subgraph MCPServices["MCP Server (FastMCP)"]
+        mcp_server["FastMCP Core<br/>· Tool Registry<br/>· Schema Validation<br/>· Lazy Loading"]:::dark
+
+        subgraph MCPTools["5 Production Tools"]
+            audit_tool["audit_file<br/>COPILOTO_414"]:::light
+            excel_tool["excel_analyzer<br/>Data Analysis"]:::light
+            viz_tool["viz_tool<br/>Visualization"]:::light
+            research_tool["deep_research<br/>Aletheia API"]:::light
+            extract_tool["extract_document_text<br/>Multi-tier"]:::light
+        end
+
+        mcp_adapter["FastMCP Adapter<br/>· HTTP Bridge<br/>· Auth Integration<br/>· Telemetry"]:::light
+    end
+
+    mcp_discover --> mcp_server
+    mcp_load --> mcp_server
+    mcp_invoke --> mcp_adapter
+    mcp_adapter --> mcp_server
+    mcp_server --> MCPTools
+    audit_tool --> valid_coord
+    extract_tool --> doc_svc
+
+    subgraph StorageServices["Storage & Support Services"]
+        storage["Storage Service<br/>· Temp Files<br/>· Background Reaper<br/>· Disk Limits"]:::light
+        minio_svc["MinioStorageService<br/>· S3 Operations<br/>· Presigned URLs<br/>· Bucket Management"]:::light
+        thumbnail_svc["ThumbnailService<br/>· Image Generation<br/>· PDF First Page"]:::light
+        email_svc["EmailService<br/>· SMTP Client<br/>· Template Rendering"]:::light
+        context_mgr["ContextManager<br/>· Session State<br/>· Redis Cache"]:::light
+    end
+
+    file_upload --> storage
+    storage --> minio_svc
+    thumbnail --> thumbnail_svc
+    thumbnail_svc --> minio_svc
+    auth_reset --> email_svc
+    session_svc --> context_mgr
+
+    subgraph Persistence["Persistence Layer (Ports & Adapters)"]
+        subgraph MongoCollections["MongoDB (Beanie ODM)"]
+            sessions_col[("chat_sessions<br/>chat_messages")]:::light
+            docs_col[("documents<br/>validation_reports")]:::light
+            users_col[("users<br/>password_reset")]:::light
+            history_col[("history_events")]:::light
+        end
+
+        subgraph RedisKeys["Redis (Cache & State)"]
+            extract_cache["extract:text:{id}<br/>1h TTL"]:::light
+            token_blacklist["token:blacklist:{jti}"]:::light
+            mcp_registry["mcp:tools:registry"]:::light
+            session_cache["session:context:{id}"]:::light
+        end
+
+        subgraph MinioBuckets["MinIO S3 (Objects)"]
+            docs_bucket["documents/<br/>user_id/chat_id/"]:::light
+            reports_bucket["audit-reports/<br/>user_id/report_id/"]:::light
+            thumbs_bucket["thumbnails/<br/>user_id/file_id/"]:::light
+        end
+    end
+
+    chat_svc --> sessions_col
+    history_svc --> history_col
+    doc_svc --> docs_col
+    doc_svc --> extract_cache
+    auth_login --> users_col
+    authmw --> token_blacklist
+    mcp_server --> mcp_registry
+    context_mgr --> session_cache
+    storage --> docs_bucket
+    valid_coord --> reports_bucket
+    thumbnail_svc --> thumbs_bucket
+
+    subgraph External["External Services"]
+        saptiva["SAPTIVA APIs<br/>Turbo · Cortex · Ops"]:::gray
+        aletheia["Aletheia Research<br/>Deep Research"]:::gray
+        languagetool["LanguageTool<br/>Grammar Check"]:::gray
+        smtp["SMTP Server<br/>Email Delivery"]:::gray
+    end
+
+    chat_svc --> saptiva
+    research_tool --> aletheia
+    grammar --> languagetool
+    email_svc --> smtp
 
     classDef dark fill:#111111,stroke:#4b5563,color:#f9fafb;
     classDef light fill:#ffffff,stroke:#4b5563,color:#111111;
     classDef gray fill:#e5e7eb,stroke:#4b5563,color:#111111;
 ```
 
-La capa Entry aplica políticas (Auth, RateLimit, Telemetry), los routers enrutan por dominio y los servicios encapsulan reglas de negocio usando patrones como Builder (ChatService), Strategy (manejadores de chat) y Orchestrator (ValidationCoordinator). La persistencia queda abstraída como Ports (Mongo, Redis, MinIO), manteniendo bajo acoplamiento.
+**Arquitectura backend por capas (8 niveles)**:
+
+1. **Middleware Stack**: Gateway ASGI → Auth JWT (blacklist check) → RateLimit (sliding window) → CacheControl → Telemetry (request tracking)
+
+2. **API Routers**: 4 grupos de rutas (Chat, Files, MCP Lazy, Auth) cada uno con endpoints especializados y validaciones
+
+3. **Request Handlers**: StreamingHandler (SSE async), MessageHandlers (Strategy pattern), AuditStreamHandler (progress events)
+
+4. **Core Services**: ChatService (Builder), DocumentService (multi-tier extraction), SessionContextManager, HistoryService
+
+5. **COPILOTO_414**: ValidationCoordinator (Orchestrator) con 8 auditores paralelos (Disclaimer, Format, Grammar, Logo, Typography, Color, Entity, Semantic)
+
+6. **MCP Server**: FastMCP core con 5 herramientas productivas, lazy loading (98% reducción), HTTP adapter con auth/telemetry
+
+7. **Storage Services**: Storage (temp + reaper), MinioStorage (S3), ThumbnailService, EmailService, ContextManager
+
+8. **Persistence**: MongoDB (4 collections), Redis (4 key patterns), MinIO (3 buckets) - Ports & Adapters pattern
+
+**Patrones implementados**: Chain of Responsibility (chat), Builder (responses), Strategy (handlers), Orchestrator (validation), Adapter (MCP), Lazy Loading (tools), Observer (telemetry), Ports & Adapters (persistence).
 
 ### Integración Frontend ↔ Backend
 Conexiones clave: REST, SSE y MCP; se incluyen dependencias externas (LLMs y herramientas) y dónde se instrumenta.
