@@ -15,6 +15,7 @@ import os
 import json
 from typing import AsyncGenerator
 from datetime import datetime
+from asyncio import Queue, create_task, CancelledError
 
 import structlog
 
@@ -26,6 +27,10 @@ from ....services.chat_helpers import build_chat_context
 from ....services.session_context_manager import SessionContextManager
 from ....services.document_service import DocumentService
 from ....services.saptiva_client import get_saptiva_client
+from ....services.validation_coordinator import validate_document_streaming
+from ....services.policy_manager import resolve_policy
+from ....services.minio_storage import get_minio_storage
+from ....models.document import Document
 from ....domain import ChatContext
 
 logger = structlog.get_logger(__name__)
@@ -137,87 +142,295 @@ class StreamingHandler:
                 metadata=user_message_metadata if user_message_metadata else None
             )
 
-            # Check for audit command (not supported in streaming)
+            # Check for audit command (NOW supported in streaming!)
             if context.message.strip().startswith("Auditar archivo:"):
-                async for event in self._handle_audit_error(
-                    chat_service, chat_session, context
+                async for event in self._stream_audit_response(
+                    chat_service, chat_session, context, user_message
                 ):
                     yield event
                 return
 
             # Stream chat response
             async for event in self._stream_chat_response(
-                context, chat_service, chat_session, cache
+                context, chat_service, chat_session, cache, user_message
             ):
                 yield event
 
         except Exception as exc:
+            import traceback
+            # ISSUE-020: Enhanced error logging with full context
+            error_details = {
+                "error_type": type(exc).__name__,
+                "error_message": str(exc),
+                "traceback": traceback.format_exc(),
+                "user_id": user_id,
+                "model": request.model if request.model else "default",
+                "stream": request.stream if hasattr(request, 'stream') else None
+            }
+
+            # Add context fields if available (may not exist if error during context creation)
+            if 'context' in locals():
+                error_details.update({
+                    "chat_id": context.chat_id,
+                    "session_id": getattr(context, 'session_id', None),
+                    "message_preview": context.message[:100] if context.message else None,
+                    "request_id": context.request_id,
+                })
+
             logger.error(
-                "Streaming chat failed",
-                error=str(exc),
-                exc_type=type(exc).__name__,
+                "🚨 STREAMING CHAT FAILED - CRITICAL ERROR",
+                **error_details,
                 exc_info=True
             )
+
+            # Also print to stderr for immediate visibility (ISSUE-020: with context)
+            print(f"\n{'='*80}")
+            print(f"🚨 STREAMING ERROR: {type(exc).__name__}")
+            print(f"Message: {str(exc)}")
+            print(f"User: {user_id}")
+            if 'context' in locals():
+                print(f"Chat ID: {context.chat_id}")
+                print(f"Model: {context.model}")
+                print(f"Message Preview: {context.message[:100] if context.message else 'N/A'}")
+            print(f"Traceback:\n{traceback.format_exc()}")
+            print(f"{'='*80}\n")
 
             yield {
                 "event": "error",
                 "data": json.dumps({
                     "error": type(exc).__name__,
-                    "message": str(exc)
+                    "message": str(exc),
+                    "details": "Check server logs for full traceback"
                 })
             }
 
-    async def _handle_audit_error(
+    async def _stream_audit_response(
         self,
         chat_service: ChatService,
         chat_session,
-        context: ChatContext
+        context: ChatContext,
+        user_message
     ) -> AsyncGenerator[dict, None]:
         """
-        Handle audit command error (not supported in streaming).
+        Stream audit validation progress in real-time.
 
         Args:
             chat_service: ChatService instance
             chat_session: ChatSession model
             context: ChatContext with request data
+            user_message: Saved user message model
 
         Yields:
-            Error SSE event
+            SSE events for audit progress
         """
-        logger.warning(
-            "Audit command not supported in streaming mode",
+        logger.info(
+            "Streaming audit command",
             message=context.message,
-            user_id=context.user_id
+            user_id=context.user_id,
+            file_ids=context.document_ids
         )
 
-        error_msg = (
-            "⚠️ La auditoría de archivos no está disponible en modo streaming. "
-            "Por favor, desactiva el streaming e intenta nuevamente."
+        # Extract filename from command: "Auditar archivo: filename.pdf"
+        filename = context.message.strip().replace("Auditar archivo:", "").strip()
+
+        # Find document by filename in document_ids
+        document = None
+        if context.document_ids and len(context.document_ids) > 0:
+            doc_service = DocumentService()
+            for file_id in context.document_ids:
+                try:
+                    doc = await Document.get(file_id)
+                    if doc and doc.filename == filename:
+                        document = doc
+                        break
+                except Exception as e:
+                    logger.warning(f"Could not load document {file_id}: {e}")
+
+        if not document:
+            error_msg = f"❌ No se encontró el archivo: {filename}"
+            await chat_service.add_assistant_message(
+                chat_session=chat_session,
+                content=error_msg,
+                model=context.model,
+                metadata={"error": "document_not_found"}
+            )
+            yield {
+                "event": "error",
+                "data": json.dumps({
+                    "error": "document_not_found",
+                    "message": error_msg
+                })
+            }
+            return
+
+        # Resolve policy
+        try:
+            policy = await resolve_policy("auto", document=document)
+        except Exception as e:
+            logger.error(f"Failed to resolve policy: {e}")
+            policy = await resolve_policy("414-std")
+
+        # Materialize PDF
+        minio_storage = get_minio_storage()
+        pdf_path, is_temp = minio_storage.materialize_document(
+            document.minio_key,
+            filename=document.filename
         )
 
-        # Save error message
-        await chat_service.add_assistant_message(
-            chat_session=chat_session,
-            content=error_msg,
-            model=context.model,
-            metadata={"error": "audit_not_supported_in_streaming"}
-        )
-
-        # Yield error event
+        # Yield metadata event
         yield {
-            "event": "error",
+            "event": "meta",
             "data": json.dumps({
-                "error": "audit_not_supported_in_streaming",
-                "message": error_msg
+                "chat_id": str(chat_session.id),
+                "user_message_id": str(user_message.id),
+                "model": context.model,
+                "audit_streaming": True,
+                "document_id": str(document.id),
+                "filename": document.filename,
             })
         }
+
+        accumulated_content = []
+        last_job_id = None  # Track job_id from validation_complete event
+
+        try:
+            # Stream validation progress
+            async for audit_event in validate_document_streaming(
+                document=document,
+                pdf_path=pdf_path,
+                client_name=policy.client_name,
+                enable_disclaimer=True,
+                enable_format=True,
+                enable_typography=True,
+                enable_grammar=True,
+                enable_logo=True,
+                enable_color_palette=True,
+                enable_entity_consistency=True,
+                enable_semantic_consistency=True,
+                policy_config=policy.to_compliance_config(),
+                policy_id=policy.id,
+                policy_name=policy.name,
+            ):
+                event_type = audit_event.get("type")
+
+                if event_type == "validation_start":
+                    content = f"🔍 **Iniciando auditoría de {audit_event['filename']}**\n\n"
+                    content += f"Total de auditores: {audit_event['total_auditors']}\n\n"
+                    accumulated_content.append(content)
+
+                elif event_type == "fragments_extracted":
+                    content = f"✅ Fragmentos extraídos: {audit_event['fragments_count']} ({audit_event['duration_ms']}ms)\n\n"
+                    accumulated_content.append(content)
+
+                elif event_type == "auditor_start":
+                    content = f"⏳ **[{audit_event['current']}/{audit_event['total_auditors']}] {audit_event['auditor_name']}**\n"
+                    accumulated_content.append(content)
+
+                elif event_type == "auditor_complete":
+                    findings_count = len(audit_event.get("findings", []))
+                    duration = audit_event.get("duration_ms", 0)
+                    content = f"✅ Completado - {findings_count} hallazgos ({duration}ms)\n\n"
+                    accumulated_content.append(content)
+
+                elif event_type == "auditor_error":
+                    error = audit_event.get("error", "Error desconocido")
+                    content = f"❌ Error: {error}\n\n"
+                    accumulated_content.append(content)
+
+                elif event_type == "validation_complete":
+                    # Capture job_id for metadata
+                    last_job_id = audit_event.get("job_id")
+
+                    summary = audit_event.get("summary", {})
+                    total_findings = summary.get("total_findings", 0)
+                    duration = audit_event.get("duration_ms", 0)
+
+                    content = f"\n---\n\n"
+                    content += f"## 📊 Resumen de Auditoría\n\n"
+                    content += f"**Total de hallazgos:** {total_findings}\n"
+                    content += f"**Duración total:** {duration}ms\n\n"
+
+                    findings_by_severity = summary.get("findings_by_severity", {})
+                    content += f"**Por severidad:**\n"
+                    content += f"- 🔴 Crítico: {findings_by_severity.get('critical', 0)}\n"
+                    content += f"- 🟠 Alto: {findings_by_severity.get('high', 0)}\n"
+                    content += f"- 🟡 Medio: {findings_by_severity.get('medium', 0)}\n"
+                    content += f"- 🟢 Bajo: {findings_by_severity.get('low', 0)}\n\n"
+
+                    content += f"**Job ID:** `{last_job_id}`\n"
+
+                    accumulated_content.append(content)
+
+                # Yield SSE chunk event
+                yield {
+                    "event": "chunk",
+                    "data": json.dumps({
+                        "content": accumulated_content[-1],  # Only send the new content
+                        "audit_event": audit_event,  # Include full audit event for frontend processing
+                    })
+                }
+
+            # Save final response
+            full_content = "".join(accumulated_content)
+            assistant_message = await chat_service.add_assistant_message(
+                chat_session=chat_session,
+                content=full_content,
+                model=context.model,
+                metadata={
+                    "audit_completed": True,
+                    "document_id": str(document.id),
+                    "filename": document.filename,
+                    "job_id": last_job_id,
+                }
+            )
+
+            # Yield done event
+            yield {
+                "event": "done",
+                "data": json.dumps({
+                    "message_id": str(assistant_message.id),
+                    "content": full_content,
+                    "model": context.model,
+                    "chat_id": str(chat_session.id),
+                })
+            }
+
+        except Exception as exc:
+            logger.error(
+                "Audit streaming failed",
+                error=str(exc),
+                exc_info=True
+            )
+
+            error_msg = f"❌ Error durante la auditoría: {str(exc)}"
+            await chat_service.add_assistant_message(
+                chat_session=chat_session,
+                content=error_msg,
+                model=context.model,
+                metadata={"error": "audit_execution_failed"}
+            )
+
+            yield {
+                "event": "error",
+                "data": json.dumps({
+                    "error": "audit_execution_failed",
+                    "message": error_msg,
+                    "details": str(exc)
+                })
+            }
+
+        finally:
+            # Clean up temporary PDF file
+            if is_temp and pdf_path.exists():
+                pdf_path.unlink()
 
     async def _stream_chat_response(
         self,
         context: ChatContext,
         chat_service: ChatService,
         chat_session,
-        cache
+        cache,
+        user_message
     ) -> AsyncGenerator[dict, None]:
         """
         Stream chat response from Saptiva API.
@@ -227,6 +440,7 @@ class StreamingHandler:
             chat_service: ChatService instance
             chat_session: ChatSession model
             cache: Redis cache instance
+            user_message: User message model with ID
 
         Yields:
             SSE events with message chunks and completion
@@ -254,33 +468,129 @@ class StreamingHandler:
                     )
                 )
 
-        # Initialize Saptiva client
-        saptiva_client = get_saptiva_client(self.settings)
+        # Initialize Saptiva client (singleton managed async factory)
+        saptiva_client = await get_saptiva_client()
 
         # Prepare system message with document context
         system_message = "Eres un asistente útil."
         if document_context:
             system_message += f"\n\nContexto de documentos:\n{document_context}"
 
-        # Stream from Saptiva
+        # ISSUE-004: Implement backpressure with producer-consumer pattern
+        # Queue with maxsize=10 provides backpressure when client is slow
+        event_queue: Queue = Queue(maxsize=10)
         full_response = ""
+        producer_error = None
 
-        async for chunk in saptiva_client.stream_chat(
-            messages=[
-                {"role": "system", "content": system_message},
-                {"role": "user", "content": context.message}
-            ],
-            model=context.model,
-            temperature=context.temperature,
-            max_tokens=context.max_tokens
-        ):
-            # Yield chunk to client
-            yield {
-                "event": "message",
-                "data": json.dumps({"chunk": chunk})
-            }
+        async def producer():
+            """
+            Producer task: reads chunks from Saptiva and puts them in queue.
 
-            full_response += chunk
+            If queue is full (slow consumer), put() will block, providing backpressure.
+            This prevents unbounded memory growth on the server.
+            """
+            nonlocal full_response, producer_error
+
+            try:
+                logger.info(
+                    "Starting Saptiva stream (producer)",
+                    model=context.model,
+                    user_id=context.user_id,
+                    has_document_context=bool(document_context)
+                )
+
+                # Send metadata event first
+                await event_queue.put({
+                    "event": "meta",
+                    "data": json.dumps({
+                        "chat_id": str(chat_session.id),
+                        "user_message_id": str(user_message.id),
+                        "model": context.model
+                    })
+                })
+
+                async for chunk in saptiva_client.chat_completion_stream(
+                    messages=[
+                        {"role": "system", "content": system_message},
+                        {"role": "user", "content": context.message}
+                    ],
+                    model=context.model,
+                    temperature=context.temperature,
+                    max_tokens=context.max_tokens
+                ):
+                    # Extract content from chunk
+                    # choices is a List[Dict] according to SaptivaStreamChunk model
+                    content = ""
+                    if hasattr(chunk, 'choices') and chunk.choices:
+                        choice = chunk.choices[0]  # This is a dict
+                        if isinstance(choice, dict):
+                            delta = choice.get('delta', {})
+                            if isinstance(delta, dict):
+                                content = delta.get('content', '')
+                        # Fallback for object-style access (shouldn't happen)
+                        elif hasattr(choice, 'delta'):
+                            delta = choice.delta
+                            if hasattr(delta, 'content'):
+                                content = delta.content or ''
+
+                    if content:
+                        # Backpressure: this blocks if queue is full (maxsize=10)
+                        await event_queue.put({
+                            "event": "chunk",
+                            "data": json.dumps({"content": content})
+                        })
+                        full_response += content
+
+                # Signal end of stream
+                await event_queue.put(None)
+
+                logger.info(
+                    "Producer completed successfully",
+                    response_length=len(full_response)
+                )
+
+            except CancelledError:
+                logger.info("Producer cancelled by consumer")
+                raise
+            except Exception as e:
+                logger.error(
+                    "Producer error",
+                    error=str(e),
+                    exc_type=type(e).__name__
+                )
+                producer_error = e
+                # Signal error to consumer
+                await event_queue.put(None)
+
+        # Start producer task
+        producer_task = create_task(producer())
+
+        try:
+            # Consumer loop: yield events from queue
+            while True:
+                event = await event_queue.get()
+
+                if event is None:  # End signal
+                    break
+
+                yield event
+
+        finally:
+            # Cleanup: cancel producer if consumer exits early
+            if not producer_task.done():
+                producer_task.cancel()
+                try:
+                    await producer_task
+                except CancelledError:
+                    logger.info("Producer task cancelled in cleanup")
+
+            # Check if producer had an error
+            if producer_error:
+                logger.error(
+                    "Producer error detected in cleanup",
+                    error=str(producer_error)
+                )
+                raise producer_error
 
         # Save assistant message
         assistant_message = await chat_service.add_assistant_message(
