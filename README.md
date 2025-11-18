@@ -277,59 +277,124 @@ flowchart TB
 Tres vistas complementarias: frontend, backend y cómo se comunican. Cada diagrama resalta los módulos principales y el patrón de diseño aplicado.
 
 ### Frontend (Next.js 14)
-Compuesto por App Router + componentes client-side con Zustand como capa de estado y clientes HTTP centralizados.
+Arquitectura client-side completa con App Router, componentes especializados, gestión de estado con Zustand, y clientes HTTP/MCP con SSE.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#111111','primaryBorderColor': '#4b5563','primaryTextColor': '#f9fafb','lineColor': '#4b5563','secondaryColor': '#ffffff','secondaryBorderColor': '#4b5563','secondaryTextColor': '#111111','tertiaryColor': '#d1d5db','tertiaryBorderColor': '#4b5563','tertiaryTextColor': '#111111'}}}%%
-flowchart LR
-    persona((Usuarios internos)):::gray --> home
+flowchart TB
+    user((Usuarios)):::gray --> router
 
-    subgraph Pages["App Router"]
-        home["Landing /app/page.tsx"]:::light
-        chat_page["Chat layout + composer"]:::light
-        review["Document Review UI"]:::light
+    subgraph AppRouter["App Router (Next.js 14)"]
+        router["Layout Root<br/>Server Components"]:::dark
+        chat_route["/chat/[id]<br/>Dynamic Route"]:::light
+        auth_route["/login · /reset-password<br/>Auth Pages"]:::light
+        api_routes["/api/*<br/>Proxy Routes<br/>Backend Rewrites"]:::light
     end
 
-    subgraph Stores["Zustand Stores"]
-        chat_store["useChatStore<br/>messages · tools · SSE"]:::light
-        files_store["files-store<br/>uploads + progress"]:::light
-        research_store["research-store<br/>deep research tasks"]:::light
+    router --> chat_route
+    router --> auth_route
+    router --> api_routes
+
+    subgraph ChatUI["Chat Interface"]
+        chat_view["ChatView<br/>Main Container<br/>SSE Handler"]:::dark
+
+        subgraph Messages["Message Display"]
+            chat_msg["ChatMessage<br/>User/Assistant/System<br/>Thumbnails + Audit"]:::light
+            stream_msg["StreamingMessage<br/>Real-time Typing<br/>Markdown Renderer"]:::light
+            file_msg["FileReviewMessage<br/>Audit Results Display"]:::light
+            audit_card["MessageAuditCard<br/>COPILOTO_414 Summary"]:::light
+        end
+
+        subgraph Input["Message Input"]
+            composer["CompactChatComposer<br/>Direct Submit<br/>Auto-audit Command"]:::light
+            attachments["PreviewAttachment<br/>Thumbnail Display<br/>Audit Button"]:::light
+            thumbnail["ThumbnailImage<br/>Authenticated Fetch<br/>Blob URL"]:::light
+        end
+
+        subgraph Display["Content Display"]
+            markdown["MarkdownMessage<br/>Syntax Highlighting<br/>Code Blocks"]:::light
+            code_block["CodeBlock<br/>Language Detection<br/>Copy Button"]:::light
+        end
     end
 
-    subgraph Clients["Shared Clients"]
-        api_client["HTTP apiClient<br/>interceptors + retries"]:::light
-        mcp_client["MCPClient<br/>list/get/invoke/health"]:::light
-        auth_store["Auth store<br/>persist + refresh tokens"]:::light
+    chat_route --> chat_view
+    chat_view --> Messages
+    chat_view --> Input
+    chat_view --> Display
+    composer --> attachments
+    attachments --> thumbnail
+    chat_msg --> stream_msg
+    stream_msg --> markdown
+    markdown --> code_block
+
+    subgraph State["Zustand State Management"]
+        chat_store["useChatStore<br/>· Messages CRUD<br/>· SSE Events<br/>· Tool Selection<br/>· Model Config"]:::dark
+        files_store["useFilesStore<br/>· Upload Queue<br/>· Progress Tracking<br/>· File Metadata"]:::light
+        research_store["useResearchStore<br/>· Deep Research Tasks<br/>· Progress Monitor"]:::light
+        auth_store["useAuthStore<br/>· JWT Tokens<br/>· Refresh Logic<br/>· User Session"]:::dark
     end
 
-    subgraph Components["UI Crítica"]
-        dropzone["FileDropzone<br/>(validaciones)"]:::light
-        result_tabs["ResultTabs<br/>auditoría"]:::light
-        composer["ChatComposer<br/>commands + attachments"]:::light
-    end
-
-    home --> chat_page
-    home --> auth_store
-    chat_page --> composer
-    review --> dropzone
-    review --> result_tabs
-
+    chat_view --> chat_store
     composer --> chat_store
-    dropzone --> files_store
-    result_tabs --> files_store
+    attachments --> files_store
+    auth_route --> auth_store
+
+    subgraph Network["Network Layer"]
+        api_client["apiClient<br/>· Axios Instance<br/>· Interceptors<br/>· Auto-retry<br/>· Error Handling"]:::dark
+        mcp_client["mcpClient<br/>· Discover Tools<br/>· Load Schemas<br/>· Invoke with Cancel<br/>· Health Check"]:::light
+        sse_handler["SSE Handler<br/>· EventSource<br/>· Reconnect Logic<br/>· Event Parsing"]:::light
+    end
+
     chat_store --> api_client
-    chat_store --> mcp_client
+    chat_store --> sse_handler
     files_store --> api_client
     research_store --> mcp_client
     auth_store --> api_client
-    auth_store --> mcp_client
+    mcp_client --> api_client
+
+    subgraph Hooks["Custom Hooks"]
+        use_chat["useOptimizedChat<br/>Message Batching<br/>Debounce"]:::light
+        use_audit["useAuditFlow<br/>Trigger Audit<br/>Track Progress"]:::light
+        use_file["useFileUpload<br/>Multipart Upload<br/>Progress Events"]:::light
+    end
+
+    chat_view --> use_chat
+    composer --> use_audit
+    attachments --> use_file
+
+    subgraph Backend["Backend APIs"]
+        fastapi["FastAPI<br/>Gateway"]:::gray
+    end
+
+    api_client --> fastapi
+    sse_handler --> fastapi
+    api_routes --> fastapi
 
     classDef dark fill:#111111,stroke:#4b5563,color:#f9fafb;
     classDef light fill:#ffffff,stroke:#4b5563,color:#111111;
     classDef gray fill:#e5e7eb,stroke:#4b5563,color:#111111;
 ```
 
-Los módulos del App Router despachan acciones que terminan en los stores de Zustand (State pattern). Los clientes compartidos implementan un Gateway para REST/MCP con interceptores y reintentos, y los componentes críticos consumen los stores para mantener una UI reactiva sin acoplarse a la red.
+**Arquitectura frontend detallada por capas**:
+
+1. **App Router (Next.js 14)**: Enrutamiento con Server Components, rutas dinámicas para chat, páginas de auth y proxies API que reescriben a backend.
+
+2. **Chat Interface**:
+   - **ChatView** orquesta toda la UI con handler SSE integrado
+   - **Message Display**: ChatMessage con thumbnails/audit, StreamingMessage con typing real-time, FileReviewMessage y MessageAuditCard para COPILOTO_414
+   - **Message Input**: CompactChatComposer con auto-submit para auditoría, PreviewAttachment con botón de audit, ThumbnailImage con fetch autenticado
+   - **Content Display**: MarkdownMessage con syntax highlighting y CodeBlock con detección de lenguaje
+
+3. **Zustand State**: 4 stores especializados (chat, files, research, auth) con persistencia, hidratación y sincronización optimista.
+
+4. **Network Layer**:
+   - **apiClient** con Axios, interceptors JWT, auto-retry y manejo de errores
+   - **mcpClient** para descubrir/cargar/invocar herramientas MCP con cancelación
+   - **SSE Handler** con EventSource, reconnect automático y parsing de eventos
+
+5. **Custom Hooks**: useOptimizedChat (batching + debounce), useAuditFlow (trigger + progress), useFileUpload (multipart + eventos).
+
+Todo implementa **State Pattern** (Zustand), **Gateway Pattern** (clients), **Observer Pattern** (SSE), y **Strategy Pattern** (message handlers).
 
 ### Backend (FastAPI + MCP)
 Modulariza el tráfico HTTP en routers, separa negocio en servicios y usa patrones específicos (Chain, Builder, Orchestrator, Adapter).
