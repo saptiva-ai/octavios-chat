@@ -35,17 +35,87 @@ interface MarkdownMessageProps {
 }
 
 const defaultComponents = {
-  a: ({ node: _, ...props }: any) => (
-    <a
-      {...props}
-      className={cn(
-        "text-saptiva-mint underline decoration-dotted underline-offset-2 hover:text-saptiva-light transition-colors",
-        props.className,
-      )}
-      target="_blank"
-      rel="noreferrer"
-    />
-  ),
+  a: ({ node: _, href, children, ...props }: any) => {
+    // Detect audit report download links
+    const isAuditReportDownload = href?.match(
+      /\/api\/reports\/audit\/([^/]+)\/download/,
+    );
+
+    if (isAuditReportDownload) {
+      const reportId = isAuditReportDownload[1];
+
+      return (
+        <button
+          onClick={async (e) => {
+            e.preventDefault();
+            try {
+              // Get auth token from localStorage
+              const authData = localStorage.getItem("auth-storage");
+              const token = authData
+                ? JSON.parse(authData)?.state?.token
+                : null;
+
+              if (!token) {
+                alert("Debes iniciar sesión para descargar el reporte");
+                return;
+              }
+
+              // Fetch the PDF with authentication
+              const response = await fetch(href, {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              });
+
+              if (!response.ok) {
+                throw new Error("Error al descargar el reporte");
+              }
+
+              // Create a blob and download
+              const blob = await response.blob();
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `reporte-auditoria-${reportId}.pdf`;
+              document.body.appendChild(a);
+              a.click();
+              window.URL.revokeObjectURL(url);
+              document.body.removeChild(a);
+            } catch (error) {
+              console.error("Error downloading audit report:", error);
+              alert(
+                "Error al descargar el reporte. Por favor intenta nuevamente.",
+              );
+            }
+          }}
+          className={cn(
+            "inline-flex items-center gap-2 px-4 py-2 rounded-md",
+            "bg-saptiva-mint/10 hover:bg-saptiva-mint/20",
+            "text-saptiva-mint font-medium",
+            "border border-saptiva-mint/30",
+            "transition-colors cursor-pointer",
+            props.className,
+          )}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    // Regular links
+    return (
+      <a
+        {...props}
+        href={href}
+        className={cn(
+          "text-saptiva-mint underline decoration-dotted underline-offset-2 hover:text-saptiva-light transition-colors",
+          props.className,
+        )}
+        target="_blank"
+        rel="noreferrer"
+      />
+    );
+  },
   code: ({
     inline,
     className,
