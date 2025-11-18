@@ -45,9 +45,17 @@ async def audit_grammar(
         }
 
     language = grammar_config.get("language", "es")
-    severity_map = grammar_config.get("severity", {}) or {}
-    spelling_severity = severity_map.get("spelling", "low")
-    grammar_severity = severity_map.get("grammar", "medium")
+    severity_config = grammar_config.get("severity", {})
+
+    # Handle both dict and string severity formats
+    if isinstance(severity_config, dict):
+        spelling_severity = severity_config.get("spelling", "low")
+        grammar_severity = severity_config.get("grammar", "medium")
+    else:
+        # If severity is a string, use it for both
+        default_severity = severity_config if isinstance(severity_config, str) else "low"
+        spelling_severity = default_severity
+        grammar_severity = default_severity
     max_issues_per_page = grammar_config.get("max_issues_per_page", 30)
     top_examples = grammar_config.get("top_examples", 5)
     disabled_rules = grammar_config.get("disabled_rules")
