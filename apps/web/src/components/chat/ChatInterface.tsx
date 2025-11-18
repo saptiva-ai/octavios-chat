@@ -469,6 +469,7 @@ export function ChatInterface({
                 value={inputValue}
                 onChange={setInputValue}
                 onSubmit={handleSend}
+                onSendMessageDirect={onSendMessage}
                 onCancel={loading ? onStopStreaming : undefined}
                 disabled={disabled}
                 loading={loading}
@@ -539,6 +540,7 @@ export function ChatInterface({
               value={inputValue}
               onChange={setInputValue}
               onSubmit={handleSend}
+              onSendMessageDirect={onSendMessage}
               onCancel={loading ? onStopStreaming : undefined}
               disabled={disabled}
               loading={loading}

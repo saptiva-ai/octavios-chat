@@ -12,14 +12,16 @@ from uuid import uuid4
 import structlog
 from fastapi import HTTPException, status
 
-from ..core.config import Settings
+from ..core.config import Settings, get_settings
 from ..core.telemetry import trace_span, metrics_collector
 from ..models.task import Task as TaskModel, TaskStatus
 from ..models.history import HistoryEventType
 from ..schemas.research import (
     DeepResearchRequest,
     DeepResearchResult,
-    ResearchMetrics
+    ResearchMetrics,
+    DeepResearchParams,
+    ResearchType,
 )
 from ..services.aletheia_client import get_aletheia_client
 from ..services.history_service import HistoryService
@@ -193,6 +195,7 @@ class DeepResearchService:
         )
 
         return task
+
 
     async def start_aletheia_research(
         self,
@@ -661,3 +664,33 @@ class DeepResearchService:
             "total_count": total_count,
             "has_more": offset + len(tasks) < total_count
         }
+
+
+async def create_research_task(
+    *,
+    query: str,
+    user_id: str,
+    chat_id: Optional[str],
+    max_iterations: int,
+    focus_areas: Optional[List[str]] = None,
+) -> TaskModel:
+    """Helper used by MCP tool to create a deep-research task."""
+
+    settings = get_settings()
+    service = DeepResearchService(settings)
+
+    params = DeepResearchParams(
+        max_iterations=max_iterations,
+        focus_areas=focus_areas or None,
+    )
+    request = DeepResearchRequest(
+        query=query,
+        chat_id=chat_id,
+        params=params,
+        research_type=ResearchType.DEEP_RESEARCH,
+        stream=True,
+        explicit=True,
+    )
+
+    await service.validate_research_request(request, user_id)
+    return await service.create_research_task(request, user_id)

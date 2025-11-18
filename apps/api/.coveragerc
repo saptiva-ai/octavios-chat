@@ -1,4 +1,5 @@
 [run]
+data_file = /tmp/.coverage
 source = src
 omit =
     src/core/auth.py

@@ -20,6 +20,10 @@ import { buildModelList, getDefaultModelSlug } from "../modelMap";
 import { getAllModels } from "../../config/modelCatalog";
 import { createDefaultToolsState, normalizeToolsState } from "../tool-mapping";
 
+// ISSUE-018: UUID format validation
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const mergeToolsState = (seed?: Record<string, boolean>) => {
   const extraKeys = seed ? Object.keys(seed) : [];
   const base = createDefaultToolsState(extraKeys);
@@ -118,6 +122,14 @@ export const useChatStore = create<ChatState>()(
           nextId: string,
           draftToolsEnabled?: Record<string, boolean>,
         ) => {
+          // ISSUE-018: Validate chat_id format (UUID or temp-*)
+          const isValidId =
+            nextId.startsWith("temp-") || UUID_REGEX.test(nextId);
+          if (!isValidId) {
+            logWarn("switchChat: Invalid chat_id format", { nextId });
+            return;
+          }
+
           const {
             currentChatId,
             selectionEpoch,
