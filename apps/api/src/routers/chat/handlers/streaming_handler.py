@@ -13,6 +13,7 @@ Responsibilities:
 
 import os
 import json
+from pathlib import Path
 from typing import AsyncGenerator
 from datetime import datetime
 from asyncio import Queue, create_task, CancelledError
@@ -270,12 +271,55 @@ class StreamingHandler:
             logger.error(f"Failed to resolve policy: {e}")
             policy = await resolve_policy("414-std")
 
-        # Materialize PDF
-        minio_storage = get_minio_storage()
-        pdf_path, is_temp = minio_storage.materialize_document(
-            document.minio_key,
-            filename=document.filename
-        )
+        # Materialize PDF - follow pattern from audit_handler.py
+        pdf_path = Path(document.minio_key)
+        is_temp = False
+
+        if not pdf_path.exists():
+            minio_storage = get_minio_storage()
+            if minio_storage:
+                try:
+                    pdf_path, is_temp = minio_storage.materialize_document(
+                        document.minio_key,
+                        filename=document.filename
+                    )
+                except Exception as storage_exc:
+                    logger.error(
+                        "Failed to materialize PDF from MinIO",
+                        doc_id=str(document.id),
+                        error=str(storage_exc)
+                    )
+                    error_msg = f"❌ Error al cargar el archivo: {str(storage_exc)}"
+                    await chat_service.add_assistant_message(
+                        chat_session=chat_session,
+                        content=error_msg,
+                        model=context.model,
+                        metadata={"error": "pdf_materialization_failed"}
+                    )
+                    yield {
+                        "event": "error",
+                        "data": json.dumps({
+                            "error": "pdf_materialization_failed",
+                            "message": error_msg
+                        })
+                    }
+                    return
+            else:
+                error_msg = "❌ Sistema de almacenamiento no disponible"
+                await chat_service.add_assistant_message(
+                    chat_session=chat_session,
+                    content=error_msg,
+                    model=context.model,
+                    metadata={"error": "storage_unavailable"}
+                )
+                yield {
+                    "event": "error",
+                    "data": json.dumps({
+                        "error": "storage_unavailable",
+                        "message": error_msg
+                    })
+                }
+                return
 
         # Yield metadata event
         yield {
