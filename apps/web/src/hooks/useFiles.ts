@@ -147,6 +147,17 @@ export function useFiles(chatId?: string): UseFilesReturn {
   const clearAttachments = useCallback(() => {
     setAttachments([]);
     filesStore.clearForChat(effectiveChatId);
+
+    // FIX: Also clear "draft" key to prevent orphaned attachments after new chat creation
+    // Scenario: User uploads file (stored under "draft"), sends message (creates chatId),
+    // clear is called with new chatId, but "draft" key remains in localStorage
+    if (effectiveChatId !== "draft") {
+      filesStore.clearForChat("draft");
+      logDebug("[useFiles] Also cleared draft attachments", {
+        primaryChatId: effectiveChatId,
+      });
+    }
+
     logDebug("[useFiles] Cleared attachments from store", {
       chatId: effectiveChatId,
     });
