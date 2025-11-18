@@ -128,7 +128,7 @@ class ChatRequest(BaseModel):
     model: Optional[str] = Field(None, description="Model to use for response")
     temperature: Optional[float] = Field(None, ge=0.0, le=2.0, description="Temperature setting")
     max_tokens: Optional[int] = Field(None, ge=1, le=8192, description="Max tokens")
-    stream: bool = Field(default=False, description="Enable streaming response")
+    stream: bool = Field(default=True, description="Enable streaming response")
     tools_enabled: Dict[str, bool] = Field(default_factory=dict, description="Tools to enable")
     enabled_tools: Optional[Dict[str, bool]] = Field(default=None, alias='enabled_tools')
     context: Optional[Dict[str, Any]] = Field(None, description="Additional context (dict)")

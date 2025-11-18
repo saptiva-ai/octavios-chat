@@ -18,6 +18,7 @@ from ..services.chat_service import ChatService
 from ..services.document_service import DocumentService
 from ..services.text_sanitizer import sanitize_response_content
 from ..services.saptiva_client import get_saptiva_client
+from ..services.context_manager import ContextManager
 from .chat_context import ChatContext, ChatProcessingResult, MessageMetadata
 
 
@@ -84,17 +85,25 @@ class SimpleChatStrategy(ChatStrategy):
             has_documents=bool(context.document_ids)
         )
 
-        # V1: Retrieve and format documents from Redis cache
-        # BE-2: Track warnings for expired documents
-        # BE-PERF-1: Apply global limits from environment
-        document_context = None
+        # Phase 2 MCP Integration: Initialize unified context manager
+        # Combines document context + tool results with consistent size limits
         doc_warnings = []
         context_metadata = {"used_docs": 0, "used_chars": 0}
 
         # BE-PERF-1: Load guardrails from environment
         max_docs_per_chat = int(os.getenv("MAX_DOCS_PER_CHAT", "3"))
         max_total_doc_chars = int(os.getenv("MAX_TOTAL_DOC_CHARS", "16000"))
+        max_tool_chars = int(os.getenv("MAX_TOOL_CONTEXT_CHARS", "8000"))
+        max_total_chars = int(os.getenv("MAX_TOTAL_CONTEXT_CHARS", "24000"))
 
+        # Initialize ContextManager for unified context aggregation
+        context_mgr = ContextManager(
+            max_document_chars=max_total_doc_chars,
+            max_tool_chars=max_tool_chars,
+            max_total_chars=max_total_chars
+        )
+
+        # 1. Add document context (if documents attached)
         if context.document_ids:
             async with trace_span("retrieve_documents_from_cache", {
                 "document_count": len(context.document_ids)
@@ -116,16 +125,25 @@ class SimpleChatStrategy(ChatStrategy):
                             + ", ".join(missing_doc_ids)
                         )
 
-                    # BE-PERF-1: Unpack tuple (content, warnings, metadata)
-                    document_context, doc_warnings, context_metadata = DocumentService.extract_content_for_rag_from_cache(
-                        doc_texts=doc_texts,
-                        max_chars_per_doc=8000,
-                        max_total_chars=max_total_doc_chars,
-                        max_docs=max_docs_per_chat
-                    )
+                    # Add each document to context manager
+                    for doc_id, doc_data in doc_texts.items():
+                        text = doc_data.get("text", "")
+                        filename = doc_data.get("filename", doc_id)
+                        if text:
+                            context_mgr.add_document_context(
+                                doc_id=doc_id,
+                                text=text,
+                                filename=filename
+                            )
 
                     if preselection_warnings:
                         doc_warnings.extend(preselection_warnings)
+
+                    # Update context_metadata for logging
+                    context_metadata["used_docs"] = len(doc_texts)
+                    context_metadata["used_chars"] = sum(
+                        len(doc_data.get("text", "")) for doc_data in doc_texts.values()
+                    )
 
                     if doc_warnings:
                         logger.warning(
@@ -137,10 +155,9 @@ class SimpleChatStrategy(ChatStrategy):
                         )
 
                     logger.info(
-                        "Retrieved documents for RAG from cache with limits",
+                        "Retrieved documents for context manager",
                         document_count=len(doc_texts),
                         expired_count=len([w for w in doc_warnings if "expiró" in w]),
-                        context_length=len(document_context) if document_context else 0,
                         used_docs=context_metadata.get("used_docs"),
                         used_chars=context_metadata.get("used_chars"),
                         max_docs=max_docs_per_chat,
@@ -153,15 +170,42 @@ class SimpleChatStrategy(ChatStrategy):
                         user_id=context.user_id
                     )
 
+        # 2. Add tool results (if tools were executed)
+        if context.tool_results:
+            for tool_key, tool_result in context.tool_results.items():
+                context_mgr.add_tool_result(
+                    tool_name=tool_key,
+                    result=tool_result
+                )
+
+            logger.info(
+                "Added tool results to context manager",
+                tool_count=len(context.tool_results),
+                user_id=context.user_id
+            )
+
+        # 3. Build unified context string for LLM injection
+        unified_context, unified_metadata = context_mgr.build_context_string()
+
+        logger.info(
+            "Built unified context for LLM",
+            total_sources=unified_metadata["total_sources"],
+            document_sources=unified_metadata["document_sources"],
+            tool_sources=unified_metadata["tool_sources"],
+            total_chars=unified_metadata["total_chars"],
+            truncated=unified_metadata["truncated"]
+        )
+
         async with trace_span("simple_chat_inference"):
             # Use ChatService to process with Saptiva
+            # Phase 2 MCP: Pass unified context (documents + tool results)
             coordinated_response = await self.chat_service.process_with_saptiva(
                 message=context.message,
                 model=context.model,
                 user_id=context.user_id,
                 chat_id=context.session_id or "",
                 tools_enabled=context.tools_enabled,
-                document_context=document_context
+                document_context=unified_context if unified_context else None
             )
 
         # Extract response content from SaptivaResponse object
@@ -178,11 +222,15 @@ class SimpleChatStrategy(ChatStrategy):
         # Build metadata
         # BE-2: Include document warnings in decision_metadata
         # BE-PERF-1: Include context metadata (used_docs, used_chars)
+        # Phase 2 MCP: Include unified context metadata (documents + tools)
         decision_metadata = coordinated_response.get("decision") or {}
         if doc_warnings:
             decision_metadata["document_warnings"] = doc_warnings
         if context_metadata:
             decision_metadata["context_stats"] = context_metadata
+        # Add unified context metadata from ContextManager
+        if unified_metadata:
+            decision_metadata["unified_context"] = unified_metadata
 
         metadata = MessageMetadata(
             message_id=coordinated_response.get("message_id", ""),

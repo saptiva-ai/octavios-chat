@@ -1,15 +1,28 @@
 "use client";
 
+/**
+ * MarkdownMessage Component
+ *
+ * CHANGELOG:
+ * - 2025-01-17: Integrado CodeBlock con react-syntax-highlighter (portado de Vercel)
+ * - Reemplazado rehype-highlight con CodeBlock custom
+ * - Agregado copy button a bloques de código
+ */
+
 import * as React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
 import rehypeSanitize from "rehype-sanitize"; // FIX ISSUE-008: Prevent XSS attacks
 import { cn } from "../../lib/utils";
 import type { PluggableList } from "unified";
 import "katex/dist/katex.min.css";
+import {
+  CodeBlock,
+  CodeBlockCopyButton,
+  getLanguageFromClassName,
+} from "./CodeBlock";
 
 interface MarkdownMessageProps {
   content: string;
@@ -39,8 +52,8 @@ const defaultComponents = {
     children,
     ...props
   }: React.HTMLAttributes<HTMLElement> & { inline?: boolean }) => {
-    const languageMatch = /language-(\w+)/.exec(className || "");
-    if (inline || !languageMatch) {
+    // Inline code (dentro de párrafos)
+    if (inline) {
       return (
         <code
           {...props}
@@ -54,16 +67,14 @@ const defaultComponents = {
       );
     }
 
+    // Bloques de código (fenced code blocks)
+    const language = getLanguageFromClassName(className);
+    const codeString = String(children).replace(/\n$/, ""); // Remove trailing newline
+
     return (
-      <pre
-        {...props}
-        className={cn(
-          "relative overflow-x-auto rounded-xl border border-white/10 bg-black/60 p-4 font-mono text-sm leading-relaxed",
-          className,
-        )}
-      >
-        <code>{children}</code>
-      </pre>
+      <CodeBlock code={codeString} language={language} className="my-4">
+        <CodeBlockCopyButton />
+      </CodeBlock>
     );
   },
   blockquote: ({ className, ...props }: React.HTMLAttributes<HTMLElement>) => (
@@ -181,15 +192,15 @@ export function MarkdownMessage({
     // FIX ISSUE-008: Sanitize HTML first to prevent XSS
     rehypePlugins.push(rehypeSanitize);
 
-    if (highlightCode) {
-      rehypePlugins.push(rehypeHighlight);
-    }
+    // NOTE: Removed rehypeHighlight - now using CodeBlock component instead
+    // Syntax highlighting is handled by react-syntax-highlighter in CodeBlock
+
     rehypePlugins.push(rehypeKatex);
     return {
       remark: remarkPlugins,
       rehype: rehypePlugins,
     };
-  }, [highlightCode]);
+  }, []);
 
   return (
     <div className={cn("prose prose-invert max-w-none text-sm", className)}>

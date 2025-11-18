@@ -20,7 +20,7 @@ from fastapi import (
     Request,
     status,
 )
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 
 from ..core.auth import get_current_user
 from ..core.redis_cache import get_redis_cache
@@ -28,6 +28,7 @@ from ..models.user import User
 from ..models.document import Document, DocumentStatus
 from ..schemas.document import IngestResponse, PageContentResponse, DocumentMetadata
 from ..services.file_ingest import file_ingest_service
+from ..services.thumbnail_service import thumbnail_service
 
 # V2 Future: MinIO persistent storage
 # from ..services.minio_service import minio_service
@@ -143,6 +144,8 @@ async def upload_document_legacy(
 @router.get("", response_model=list[DocumentMetadata])
 async def list_documents(
     conversation_id: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -150,6 +153,8 @@ async def list_documents(
 
     Args:
         conversation_id: Optional filter by conversation/chat session
+        limit: Maximum number of documents to return (default: 50)
+        offset: Number of documents to skip (default: 0)
     """
     from ..models.chat import ChatSession
 
@@ -169,15 +174,22 @@ async def list_documents(
                 detail="Not authorized to access this conversation",
             )
 
-        # Get documents by IDs from session
+        # ISSUE-012: Apply pagination to session documents
+        # Get documents by IDs from session with pagination
+        file_ids_page = session.attached_file_ids[offset : offset + limit]
         documents = []
-        for doc_id in session.attached_file_ids:
+        for doc_id in file_ids_page:
             doc = await Document.get(doc_id)
             if doc and doc.user_id == str(current_user.id):
                 documents.append(doc)
     else:
-        # List all user's documents
-        documents = await Document.find(Document.user_id == str(current_user.id)).to_list()
+        # ISSUE-012: List user's documents with pagination
+        documents = (
+            await Document.find(Document.user_id == str(current_user.id))
+            .skip(offset)
+            .limit(limit)
+            .to_list()
+        )
 
     # Convert to response format
     return [
@@ -231,6 +243,82 @@ async def get_document(
         status=doc.status.value,
         created_at=doc.created_at.isoformat(),
         minio_url=None,  # V1: Always None for temp storage
+    )
+
+
+@router.get("/{doc_id}/thumbnail", responses={
+    200: {
+        "content": {"image/jpeg": {}},
+        "description": "JPEG thumbnail (256x384px portrait, quality 85%)"
+    },
+    404: {"description": "Document not found or thumbnail generation failed"}
+})
+async def get_document_thumbnail(
+    doc_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get high-quality portrait thumbnail for document preview
+
+    - **PDFs**: First page rasterized to 256x384px JPEG (portrait, 2x DPI)
+    - **Images**: Resized to max 256x384px JPEG (portrait)
+    - **Other files**: Returns 404
+
+    Thumbnails are generated on-the-fly (not cached).
+    Used by frontend PreviewAttachment component.
+    """
+    doc = await Document.get(doc_id)
+
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        )
+
+    # Check ownership
+    if doc.user_id != str(current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this document",
+        )
+
+    # Get file path (V1: stored in minio_key as filesystem path)
+    file_path = Path(doc.minio_key)
+
+    if not file_path.exists():
+        logger.warning("Document file not found on disk", doc_id=doc_id, path=str(file_path))
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document file not found",
+        )
+
+    # Generate thumbnail
+    thumbnail_bytes = await thumbnail_service.generate_thumbnail(
+        file_path=file_path,
+        mimetype=doc.content_type
+    )
+
+    if not thumbnail_bytes:
+        logger.warning("Failed to generate thumbnail", doc_id=doc_id, mimetype=doc.content_type)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Thumbnail generation not supported for this file type",
+        )
+
+    logger.info(
+        "Serving thumbnail",
+        doc_id=doc_id,
+        filename=doc.filename,
+        bytes=len(thumbnail_bytes)
+    )
+
+    return Response(
+        content=thumbnail_bytes,
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "public, max-age=3600",  # Cache for 1 hour
+            "Content-Disposition": f'inline; filename="thumbnail_{doc.filename}.jpg"'
+        }
     )
 
 

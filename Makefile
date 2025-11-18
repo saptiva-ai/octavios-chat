@@ -13,6 +13,8 @@ debug-containers debug-api debug-models \
 debug-file-sync debug-endpoints debug-logs-errors debug-network debug-full \
 troubleshoot resources resources-monitor docker-cleanup docker-cleanup-aggressive \
 test-sh lint-sh fix-sh audit-tests test-integration test-unit-host test-benchmark convert-markdown \
+test-mcp test-mcp-integration test-mcp-unit test-mcp-all test-mcp-lazy test-mcp-performance test-mcp-performance-benchmark test-mcp-stress \
+test-mcp-performance-save-baseline test-mcp-performance-compare test-mcp-marker test-diff test-mcp-diff \
 ci-status ci-logs ci-logs-failed ci-watch ci-list ci-rerun ci-jobs \
 obs-up obs-down obs-logs obs-restart obs-status obs-clean venv-install
 
@@ -21,8 +23,8 @@ obs-up obs-down obs-logs obs-restart obs-status obs-clean venv-install
 # ============================================================================
 
 # Project defaults
-DEFAULT_PROJECT_DISPLAY_NAME := CopilotOS
-DEFAULT_COMPOSE_PROJECT_NAME := octavios
+DEFAULT_PROJECT_DISPLAY_NAME := Octavios Chat Capital414
+DEFAULT_COMPOSE_PROJECT_NAME := octavios-chat-capital414
 
 # Environment
 DEV_ENV_FILE := envs/.env
@@ -41,7 +43,7 @@ include $(DEV_ENV_FILE)
 endif
 
 # Production env variables ONLY for deployment targets (not dev commands)
-# This prevents PROJECT_NAME conflicts between dev (octavios) and prod (octavios-prod)
+# This prevents PROJECT_NAME conflicts between dev (octavios-chat-capital414) and prod (octavios-chat-capital414-prod)
 ifeq ($(filter deploy% push% backup%-prod restore%-prod,$(MAKECMDGOALS)),)
 # NOT a deployment command, skip .env.prod
 else
@@ -1536,6 +1538,91 @@ test-api-file:
 test-api-parallel:
 	@echo "$(YELLOW)Running API tests in parallel...$(NC)"
 	@$(DOCKER_COMPOSE_DEV) exec api pytest tests/ -v -n auto
+
+## Run MCP tests only
+test-mcp:
+	@echo "$(YELLOW)Running MCP tests...$(NC)"
+	@$(DOCKER_COMPOSE_DEV) exec api pytest tests/mcp/ -v -m mcp $(ARGS)
+	@echo "$(GREEN)✅ MCP tests completed$(NC)"
+
+## Run MCP integration tests only
+test-mcp-integration:
+	@echo "$(YELLOW)Running MCP integration tests...$(NC)"
+	@$(DOCKER_COMPOSE_DEV) exec api pytest tests/integration/test_mcp_tools_integration.py -v -m integration $(ARGS)
+	@echo "$(GREEN)✅ MCP integration tests completed$(NC)"
+
+## Run MCP unit tests only (exclude integration)
+test-mcp-unit:
+	@echo "$(YELLOW)Running MCP unit tests...$(NC)"
+	@$(DOCKER_COMPOSE_DEV) exec api pytest tests/mcp/ -v -m "not integration" $(ARGS)
+	@echo "$(GREEN)✅ MCP unit tests completed$(NC)"
+
+## Run ALL MCP tests (unit + integration)
+test-mcp-all:
+	@echo "$(YELLOW)Running ALL MCP tests (unit + integration)...$(NC)"
+	@$(DOCKER_COMPOSE_DEV) exec api pytest tests/mcp/ tests/integration/test_mcp_tools_integration.py -v $(ARGS)
+	@echo "$(GREEN)✅ All MCP tests completed$(NC)"
+
+## Run MCP lazy loading tests only
+test-mcp-lazy:
+	@echo "$(YELLOW)Running MCP lazy loading tests...$(NC)"
+	@$(DOCKER_COMPOSE_DEV) exec api pytest tests/mcp/test_lazy_registry.py tests/mcp/test_lazy_routes.py -v $(ARGS)
+	@echo "$(GREEN)✅ MCP lazy loading tests completed$(NC)"
+
+## Run MCP performance tests
+test-mcp-performance:
+	@echo "$(YELLOW)Running MCP performance tests...$(NC)"
+	@$(DOCKER_COMPOSE_DEV) exec api pytest tests/performance/test_mcp_performance.py -v -m performance $(ARGS)
+	@echo "$(GREEN)✅ MCP performance tests completed$(NC)"
+
+## Run MCP performance tests with benchmarks
+test-mcp-performance-benchmark:
+	@echo "$(YELLOW)Running MCP performance tests with benchmarks...$(NC)"
+	@$(DOCKER_COMPOSE_DEV) exec api pytest tests/performance/test_mcp_performance.py -v -m performance --benchmark-only --benchmark-verbose $(ARGS)
+	@echo "$(GREEN)✅ MCP performance benchmarks completed$(NC)"
+
+## Run MCP stress tests (slow, heavy load)
+test-mcp-stress:
+	@echo "$(YELLOW)Running MCP stress tests (this may take a while)...$(NC)"
+	@$(DOCKER_COMPOSE_DEV) exec api pytest tests/performance/test_mcp_performance.py -v -m "performance and slow" $(ARGS)
+	@echo "$(GREEN)✅ MCP stress tests completed$(NC)"
+
+## Save baseline performance metrics
+test-mcp-performance-save-baseline:
+	@echo "$(YELLOW)Saving baseline performance metrics...$(NC)"
+	@$(DOCKER_COMPOSE_DEV) exec api pytest tests/performance/test_mcp_performance.py -m performance --benchmark-only --benchmark-save=baseline --benchmark-autosave
+	@echo "$(GREEN)✅ Baseline saved$(NC)"
+
+## Compare performance against baseline
+test-mcp-performance-compare:
+	@echo "$(YELLOW)Comparing performance against baseline...$(NC)"
+	@$(DOCKER_COMPOSE_DEV) exec api pytest tests/performance/test_mcp_performance.py -m performance --benchmark-only --benchmark-compare=baseline --benchmark-compare-fail=mean:10%
+	@echo "$(GREEN)✅ Performance comparison completed$(NC)"
+
+## Run MCP tests with specific marker (e.g., make test-mcp-marker MARKER=mcp_security)
+test-mcp-marker:
+	@if [ -z "$(MARKER)" ]; then \
+		echo "$(RED)Error: MARKER parameter required$(NC)"; \
+		echo "$(YELLOW)Usage: make test-mcp-marker MARKER=mcp_security$(NC)"; \
+		echo "$(YELLOW)Available markers: mcp, mcp_tools, mcp_security, mcp_tasks, mcp_versioning$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)Running MCP tests with marker: $(MARKER)$(NC)"
+	@$(DOCKER_COMPOSE_DEV) exec api pytest tests/ -v -m $(MARKER) $(ARGS)
+
+## Run diff-coverage tests (only tests for changed files)
+test-diff:
+	@echo "$(YELLOW)Running diff-coverage tests...$(NC)"
+	@echo "$(BLUE)Comparing against branch: $(or $(BASE),main)$(NC)"
+	@$(DOCKER_COMPOSE_DEV) exec api pytest tests/ -v --diff-coverage --diff-base=$(or $(BASE),main) $(ARGS)
+	@echo "$(GREEN)✅ Diff-coverage tests completed$(NC)"
+
+## Run MCP diff-coverage tests (only MCP tests for changed files)
+test-mcp-diff:
+	@echo "$(YELLOW)Running MCP diff-coverage tests...$(NC)"
+	@echo "$(BLUE)Comparing against branch: $(or $(BASE),main)$(NC)"
+	@$(DOCKER_COMPOSE_DEV) exec api pytest tests/mcp/ -v --diff-coverage --diff-base=$(or $(BASE),main) --mcp-only $(ARGS)
+	@echo "$(GREEN)✅ MCP diff-coverage tests completed$(NC)"
 
 ## Run OCR benchmark (compare Tesseract, Saptiva, DeepSeek)
 test-benchmark:

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
-from typing import List
+from typing import List, Dict, Any, Optional
 
 import structlog
 
@@ -338,6 +338,52 @@ async def extract_text_from_file(file_path: Path, content_type: str) -> List[Pag
         pages = _fallback_mock_pages()
 
     return pages
+
+
+def _serialize_pages(pages: List[PageContent]) -> List[Dict[str, Any]]:
+    serialized: List[Dict[str, Any]] = []
+    for page in pages:
+        text = page.text_md or ""
+        serialized.append(
+            {
+                "page_number": page.page,
+                "text": text,
+                "word_count": len(text.split()) if text else 0,
+            }
+        )
+    return serialized
+
+
+async def extract_text_from_pdf(
+    *,
+    pdf_path: Path,
+    doc_id: Optional[str] = None,
+    cache_ttl_seconds: int = 3600,
+) -> Dict[str, Any]:
+    """
+    Backward-compatible helper for MCP tool. Uses the hybrid extraction pipeline
+    and returns a dict similar to the legacy implementation.
+    """
+    pages = await extract_text_from_file(pdf_path, "application/pdf")
+    text = "\n\n".join(page.text_md or "" for page in pages)
+
+    return {
+        "doc_id": doc_id,
+        "text": text,
+        "method": "hybrid",
+        "pages": _serialize_pages(pages),
+        "metadata": {
+            "total_pages": len(pages),
+            "cache_ttl_seconds": cache_ttl_seconds,
+        },
+    }
+
+
+async def extract_text_from_document(**kwargs) -> Dict[str, Any]:
+    """
+    Legacy alias so existing imports continue working.
+    """
+    return await extract_text_from_pdf(**kwargs)
 
 
 def _fallback_mock_pages() -> List[PageContent]:

@@ -210,8 +210,9 @@ def build_tools_context(
     return markdown, schemas
 
 
-# Catálogo de herramientas disponibles (ejemplo - puedes extenderlo)
+# Catálogo de herramientas disponibles (incluye MCP tools integradas)
 DEFAULT_AVAILABLE_TOOLS = {
+    # === Web & Research Tools ===
     "web_search": {
         "name": "web_search",
         "description": "Buscar información actualizada en la web mediante motor de búsqueda",
@@ -233,7 +234,7 @@ DEFAULT_AVAILABLE_TOOLS = {
     },
     "deep_research": {
         "name": "deep_research",
-        "description": "Investigación profunda multi-paso con síntesis de información",
+        "description": "Investigación profunda multi-paso con síntesis de información usando Aletheia",
         "parameters": {
             "type": "object",
             "properties": {
@@ -244,13 +245,155 @@ DEFAULT_AVAILABLE_TOOLS = {
                 "depth": {
                     "type": "string",
                     "enum": ["shallow", "medium", "deep"],
-                    "description": "Profundidad de investigación",
+                    "description": "Profundidad de investigación (shallow: 1-2 iteraciones, medium: 3-4, deep: 5+)",
                     "default": "medium"
+                },
+                "focus_areas": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Áreas específicas en las que enfocarse (opcional)"
                 }
             },
             "required": ["query"]
         }
     },
+
+    # === Document Tools (MCP) ===
+    "audit_file": {
+        "name": "audit_file",
+        "description": "Validar documentos PDF contra políticas de compliance COPILOTO_414 (disclaimers, formato, logos, gramática)",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "doc_id": {
+                    "type": "string",
+                    "description": "ID del documento a validar"
+                },
+                "policy_id": {
+                    "type": "string",
+                    "enum": ["auto", "414-std", "414-strict", "banamex", "afore-xxi"],
+                    "default": "auto",
+                    "description": "Política de compliance a aplicar"
+                },
+                "enable_disclaimer": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Activar auditor de disclaimers"
+                },
+                "enable_format": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Activar auditor de formato"
+                },
+                "enable_logo": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Activar auditor de logos"
+                }
+            },
+            "required": ["doc_id"]
+        }
+    },
+    "extract_document_text": {
+        "name": "extract_document_text",
+        "description": "Extraer texto de documentos PDF e imágenes usando estrategia multi-tier (pypdf → Saptiva PDF SDK → OCR)",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "doc_id": {
+                    "type": "string",
+                    "description": "ID del documento del cual extraer texto"
+                },
+                "method": {
+                    "type": "string",
+                    "enum": ["auto", "pypdf", "saptiva_sdk", "ocr"],
+                    "default": "auto",
+                    "description": "Método de extracción"
+                },
+                "include_metadata": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Incluir metadatos del documento en la respuesta"
+                }
+            },
+            "required": ["doc_id"]
+        }
+    },
+
+    # === Data Analytics Tools (MCP) ===
+    "excel_analyzer": {
+        "name": "excel_analyzer",
+        "description": "Analizar archivos Excel: estadísticas, agregaciones, validación de datos, preview",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "doc_id": {
+                    "type": "string",
+                    "description": "ID del documento Excel"
+                },
+                "sheet_name": {
+                    "type": "string",
+                    "description": "Nombre de la hoja (default: primera hoja)"
+                },
+                "operations": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": ["stats", "aggregate", "validate", "preview"]
+                    },
+                    "description": "Operaciones a realizar",
+                    "default": ["stats", "preview"]
+                },
+                "aggregate_columns": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Columnas para agregar (para operación 'aggregate')"
+                }
+            },
+            "required": ["doc_id"]
+        }
+    },
+    "viz_tool": {
+        "name": "viz_tool",
+        "description": "Generar especificaciones de gráficos interactivos (Plotly/ECharts) a partir de datos",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "chart_type": {
+                    "type": "string",
+                    "enum": ["bar", "line", "pie", "scatter", "heatmap", "histogram"],
+                    "description": "Tipo de gráfico"
+                },
+                "data_source": {
+                    "type": "object",
+                    "properties": {
+                        "type": {
+                            "type": "string",
+                            "enum": ["inline", "excel", "sql"]
+                        },
+                        "doc_id": {"type": "string"},
+                        "data": {"type": "array"}
+                    },
+                    "required": ["type"]
+                },
+                "x_column": {
+                    "type": "string",
+                    "description": "Nombre de la columna para eje X"
+                },
+                "y_column": {
+                    "type": "string",
+                    "description": "Nombre de la columna para eje Y"
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Título del gráfico"
+                }
+            },
+            "required": ["chart_type", "data_source"]
+        }
+    },
+
+    # === Utility Tools ===
     "calculator": {
         "name": "calculator",
         "description": "Realizar cálculos matemáticos precisos",

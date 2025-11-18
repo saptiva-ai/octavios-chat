@@ -7,13 +7,11 @@ services:
       - /bin/sh
       - -c
       - |
-        # Install dependencies if node_modules is empty (first run with named volume)
-        if [ ! -d "node_modules/next" ]; then
-          echo "🟡 Installing dependencies (first run)..."
-          cd /app && pnpm install --frozen-lockfile
-        fi
+        # Always install/update dependencies (ensures consistency with package.json)
+        echo "🟡 Installing dependencies..."
+        cd /app && pnpm install --frozen-lockfile
         # Start development server
-        pnpm dev --hostname 0.0.0.0 --port 3000
+        cd /app/apps/web && pnpm dev --hostname 0.0.0.0 --port 3000
     environment:
       - NODE_ENV=development
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8001}
@@ -34,13 +32,18 @@ services:
     user: "${UID:-1000}:${GID:-1000}"  # Run as host user for volume permissions
     build:
       target: development  # Use development stage with pytest and testing tools
+    env_file:
+      - ../envs/.env
     volumes:
       # Mount source code for hot reload
       - ../apps/api/src:/app/src:ro
       - ../apps/api/tests:/app/tests:ro
+      - ../apps/api/pytest.ini:/app/pytest.ini:ro
+      - ../.coveragerc:/app/.coveragerc:ro
     environment:
       - DEEP_RESEARCH_ENABLED=${DEEP_RESEARCH_ENABLED:-true}
-      - PYTHONPATH=/app/src  # Add src to Python path for tests
+      - PYTHONPATH=/usr/local/lib/python3.11/site-packages:/app/src  # Ensure vendor MCP takes precedence
+      - COVERAGE_FILE=/tmp/.coverage
 
 volumes:
   web_node_modules:
