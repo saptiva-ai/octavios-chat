@@ -20,21 +20,28 @@ import pathlib
 env_path = pathlib.Path(__file__).parent.parent.parent.parent.parent / "envs" / ".env"
 load_dotenv(env_path)
 
-# Override connection URLs for tests running on host (not inside Docker)
-# Docker maps: mongodb:27017 -> localhost:27018, redis:6379 -> localhost:6380
-# Set MONGODB_URL using individual env vars, pointing to host-mapped ports
-if "MONGODB_USER" in os.environ and "MONGODB_PASSWORD" in os.environ:
-    mongo_user = os.environ["MONGODB_USER"]
-    mongo_pass = os.environ["MONGODB_PASSWORD"]
-    mongo_db = os.environ.get("MONGODB_DATABASE", "copilotos")
-    os.environ["MONGODB_URL"] = f"mongodb://{mongo_user}:{mongo_pass}@localhost:27018/{mongo_db}?authSource=admin"
+# Check if running inside Docker container
+def is_running_in_docker():
+    """Check if code is running inside a Docker container."""
+    return os.path.exists('/.dockerenv') or os.path.exists('/run/.containerenv')
 
-# Set REDIS_URL with password, pointing to host-mapped port
-redis_pass = os.environ.get("REDIS_PASSWORD", "")
-if redis_pass:
-    os.environ["REDIS_URL"] = f"redis://:{redis_pass}@localhost:6380"
-else:
-    os.environ["REDIS_URL"] = "redis://localhost:6380"
+# Override connection URLs ONLY if running on host (not inside Docker)
+# Docker maps: mongodb:27017 -> localhost:27018, redis:6379 -> localhost:6380
+if not is_running_in_docker():
+    # Running on host - use port-forwarded addresses
+    if "MONGODB_USER" in os.environ and "MONGODB_PASSWORD" in os.environ:
+        mongo_user = os.environ["MONGODB_USER"]
+        mongo_pass = os.environ["MONGODB_PASSWORD"]
+        mongo_db = os.environ.get("MONGODB_DATABASE", "copilotos")
+        os.environ["MONGODB_URL"] = f"mongodb://{mongo_user}:{mongo_pass}@localhost:27018/{mongo_db}?authSource=admin"
+
+    # Set REDIS_URL with password, pointing to host-mapped port
+    redis_pass = os.environ.get("REDIS_PASSWORD", "")
+    if redis_pass:
+        os.environ["REDIS_URL"] = f"redis://:{redis_pass}@localhost:6380"
+    else:
+        os.environ["REDIS_URL"] = "redis://localhost:6380"
+# If running inside Docker, use the environment variables as-is (mongodb:27017, redis:6379)
 
 from src.main import app
 from src.models.user import User
@@ -167,7 +174,7 @@ async def authenticated_client(client: AsyncClient, test_user: Dict[str, str]) -
     response = await client.post(
         "/api/auth/login",
         json={
-            "email": test_user["email"],
+            "identifier": test_user["email"],  # Use identifier (email or username)
             "password": test_user["password"]
         }
     )

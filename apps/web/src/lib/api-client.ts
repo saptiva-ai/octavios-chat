@@ -469,24 +469,53 @@ class ApiClient {
   }
 
   // Chat endpoints
-  async sendChatMessage(request: ChatRequest): Promise<ChatResponse> {
+  async sendChatMessage(
+    request: ChatRequest,
+    retries: number = 2,
+  ): Promise<ChatResponse> {
     // FE-3 MVP: Force 'Saptiva Turbo' default if model not specified
     const payload = { model: "Saptiva Turbo", ...request };
-    try {
-      const response = await this.client.post<ChatResponse>(
-        "/api/chat",
-        payload,
-      );
-      return response.data;
-    } catch (e: any) {
-      // Fix Pack: Defensive logging for debugging file_ids issues
-      console.error("POST /api/chat failed", {
-        status: e?.response?.status,
-        data: e?.response?.data,
-        payload,
-      });
-      throw e;
+
+    // ISSUE-026: Retry logic with exponential backoff
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const response = await this.client.post<ChatResponse>(
+          "/api/chat",
+          payload,
+        );
+        return response.data;
+      } catch (e: any) {
+        // Determine if we should retry
+        const shouldRetry =
+          !e.response || // Network error
+          (e.response.status >= 500 && e.response.status < 600); // Server error
+
+        const isLastAttempt = attempt === retries;
+
+        if (!shouldRetry || isLastAttempt) {
+          // Fix Pack: Defensive logging for debugging file_ids issues
+          console.error("POST /api/chat failed", {
+            status: e?.response?.status,
+            data: e?.response?.data,
+            payload,
+            attempt: attempt + 1,
+            totalAttempts: retries + 1,
+          });
+          throw e;
+        }
+
+        // Exponential backoff: 1s, 2s, max 5s
+        const delay = Math.min(1000 * Math.pow(2, attempt), 5000);
+        console.warn(`POST /api/chat failed, retrying in ${delay}ms`, {
+          attempt: attempt + 1,
+          status: e?.response?.status,
+        });
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
     }
+
+    // This should never be reached, but TypeScript requires it
+    throw new Error("Unexpected: retry loop exited without return");
   }
 
   /**
@@ -773,15 +802,19 @@ class ApiClient {
    */
   async listDocuments(
     conversationId?: string,
+    limit: number = 50,
+    offset: number = 0,
   ): Promise<Array<import("@/types/files").FileAttachment>> {
     try {
-      const params = conversationId
-        ? new URLSearchParams({ conversation_id: conversationId })
-        : undefined;
+      // ISSUE-012: Add pagination parameters
+      const params = new URLSearchParams();
+      if (conversationId) {
+        params.set("conversation_id", conversationId);
+      }
+      params.set("limit", limit.toString());
+      params.set("offset", offset.toString());
 
-      const url = params
-        ? `/api/documents?${params.toString()}`
-        : "/api/documents";
+      const url = `/api/documents?${params.toString()}`;
 
       const response = await this.client.get(url, {
         withCredentials: true,

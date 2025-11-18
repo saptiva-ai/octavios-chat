@@ -55,6 +55,28 @@ class RefreshResponse(BaseModel):
     expires_in: int = Field(..., description="Seconds until the token expires")
 
 
+class ForgotPasswordRequest(BaseModel):
+    """Forgot password request schema"""
+    email: str = Field(..., min_length=3, max_length=255, description="User email address")
+
+
+class ForgotPasswordResponse(BaseModel):
+    """Forgot password response schema"""
+    message: str = Field(..., description="Success message")
+    email: str = Field(..., description="Email address where reset link was sent")
+
+
+class ResetPasswordRequest(BaseModel):
+    """Reset password request schema"""
+    token: str = Field(..., min_length=1, description="Password reset token")
+    new_password: str = Field(..., min_length=8, max_length=255, description="New password")
+
+
+class ResetPasswordResponse(BaseModel):
+    """Reset password response schema"""
+    message: str = Field(..., description="Success message")
+
+
 # Forward reference resolution
 from .user import User  # noqa: E402
 AuthResponse.model_rebuild()

@@ -38,6 +38,7 @@ class ChatContext:
 
     # Optional fields with defaults
     document_ids: Optional[List[str]] = None  # Attached documents for RAG
+    tool_results: Dict[str, Any] = field(default_factory=dict)  # MCP tool results for context injection
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     kill_switch_active: bool = False
@@ -54,6 +55,7 @@ class ChatContext:
             message=self.message,
             context=self.context,
             document_ids=self.document_ids,
+            tool_results=self.tool_results,
             model=self.model,
             tools_enabled=self.tools_enabled,
             stream=self.stream,
