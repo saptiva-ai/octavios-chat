@@ -19,7 +19,7 @@ from datetime import datetime
 from typing import Dict
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response, BackgroundTasks
 from sse_starlette.sse import EventSourceResponse
 
 from ....core.config import get_settings, Settings
@@ -336,6 +336,7 @@ async def send_chat_message(
     request: ChatRequest,
     http_request: Request,
     response: Response,
+    background_tasks: BackgroundTasks,
     settings: Settings = Depends(get_settings)
 ):
     """
@@ -358,7 +359,7 @@ async def send_chat_message(
     if getattr(request, 'stream', False):
         streaming_handler = StreamingHandler(settings)
         return EventSourceResponse(
-            streaming_handler.handle_stream(request, user_id),
+            streaming_handler.handle_stream(request, user_id, background_tasks),
             media_type="text/event-stream"
         )
 
