@@ -14,11 +14,12 @@ Responsibilities:
 import os
 import json
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 from datetime import datetime
 from asyncio import Queue, create_task, CancelledError
 
 import structlog
+from fastapi import BackgroundTasks
 
 from ....core.config import Settings
 from ....core.redis_cache import get_redis_cache
@@ -33,6 +34,8 @@ from ....services.policy_manager import resolve_policy
 from ....services.minio_storage import get_minio_storage
 from ....models.document import Document
 from ....domain import ChatContext
+from ....mcp.tools.ingest_files import IngestFilesTool
+from ....mcp.tools.get_segments import GetRelevantSegmentsTool
 
 logger = structlog.get_logger(__name__)
 
@@ -57,7 +60,8 @@ class StreamingHandler:
     async def handle_stream(
         self,
         request: ChatRequest,
-        user_id: str
+        user_id: str,
+        background_tasks: Optional[BackgroundTasks] = None
     ) -> AsyncGenerator[dict, None]:
         """
         Handle streaming SSE response for chat request.
@@ -131,6 +135,43 @@ class StreamingHandler:
                     max_tokens=context.max_tokens,
                     kill_switch_active=context.kill_switch_active
                 )
+
+                # NEW: Ingest files using IngestFilesTool (async processing)
+                if background_tasks and current_file_ids:
+                    try:
+                        ingest_tool = IngestFilesTool()
+                        result = await ingest_tool.execute(
+                            payload={
+                                "conversation_id": chat_session.id,
+                                "file_refs": current_file_ids
+                            },
+                            context={"background_tasks": background_tasks}
+                        )
+
+                        logger.info(
+                            "Document ingestion dispatched",
+                            session_id=chat_session.id,
+                            file_count=len(current_file_ids),
+                            ingested=result.get("ingested", 0),
+                            status=result.get("status")
+                        )
+
+                        # Optionally: Yield SSE event to inform user
+                        # yield {
+                        #     "event": "system",
+                        #     "data": json.dumps({
+                        #         "message": result.get("message", "Processing documents..."),
+                        #         "documents": result.get("documents", [])
+                        #     })
+                        # }
+
+                    except Exception as ingest_exc:
+                        logger.error(
+                            "Document ingestion failed",
+                            session_id=chat_session.id,
+                            error=str(ingest_exc),
+                            exc_info=True
+                        )
 
             # Add user message
             user_message_metadata = request.metadata.copy() if request.metadata else {}
@@ -491,32 +532,51 @@ class StreamingHandler:
         """
         # FIX-001: Wrap entire streaming logic in try-catch for proper error propagation
         try:
-            # Prepare document context for RAG
+            # NEW: Prepare document context for RAG using GetRelevantSegmentsTool
             document_context = None
             doc_warnings = []
 
             if context.document_ids:
                 try:
-                    doc_texts = await DocumentService.get_document_text_from_cache(
-                        document_ids=context.document_ids,
-                        user_id=context.user_id
+                    # Use new GetRelevantSegmentsTool for semantic retrieval
+                    get_segments_tool = GetRelevantSegmentsTool()
+                    segments_result = await get_segments_tool.execute(
+                        payload={
+                            "conversation_id": context.session_id,
+                            "question": context.message,
+                            "max_segments": 5
+                        }
                     )
 
-                    if doc_texts:
-                        max_docs = int(os.getenv("MAX_DOCS_PER_CHAT", "3"))
-                        max_chars = int(os.getenv("MAX_TOTAL_DOC_CHARS", "16000"))
+                    segments = segments_result.get("segments", [])
 
-                        document_context, doc_warnings, _ = (
-                            DocumentService.extract_content_for_rag_from_cache(
-                                doc_texts=doc_texts,
-                                max_chars_per_doc=8000,
-                                max_total_chars=max_chars,
-                                max_docs=max_docs
-                            )
+                    if segments:
+                        # Build context from retrieved segments
+                        segment_texts = []
+                        for seg in segments:
+                            source = f"**{seg['doc_name']}** (relevancia: {seg['score']:.2f})"
+                            segment_texts.append(f"{source}\n{seg['text']}")
+
+                        document_context = "\n\n---\n\n".join(segment_texts)
+
+                        logger.info(
+                            "Document segments retrieved for RAG",
+                            session_id=context.session_id,
+                            segments_count=len(segments),
+                            ready_docs=segments_result.get("ready_docs", 0),
+                            total_docs=segments_result.get("total_docs", 0)
                         )
+                    else:
+                        # No segments available - documents might be processing
+                        message = segments_result.get("message", "")
+                        if "procesando" in message.lower() or "processing" in message.lower():
+                            doc_warnings.append(
+                                "⏳ Los documentos se están procesando. Estarán disponibles en breve."
+                            )
+
                 except Exception as doc_exc:
                     logger.error(
-                        "Document context extraction failed - continuing without documents",
+                        "Document segment retrieval failed - continuing without documents",
                         error=str(doc_exc),
                         exc_type=type(doc_exc).__name__,
                         document_ids=context.document_ids,
