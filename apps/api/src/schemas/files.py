@@ -50,3 +50,6 @@ class FileEventPayload(BaseModel):
     trace_id: Optional[str] = None
     status: Optional[FileStatus] = None
     error: Optional[FileError] = None
+    # Additional metadata for READY events
+    mimetype: Optional[str] = None
+    pages: Optional[int] = None

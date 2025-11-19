@@ -13,6 +13,7 @@ Responsibilities:
 
 import os
 import json
+import asyncio
 from pathlib import Path
 from typing import AsyncGenerator, Optional
 from datetime import datetime
@@ -154,6 +155,19 @@ class StreamingHandler:
                             file_count=len(current_file_ids),
                             ingested=result.get("ingested", 0),
                             status=result.get("status")
+                        )
+
+                        # CRITICAL FIX: Add delay to allow MongoDB write to propagate
+                        # The subsequent GetRelevantSegmentsTool call (in streaming logic)
+                        # will refetch the session. This delay ensures the write is visible.
+                        # 100ms is sufficient for MongoDB consistency (tested with 50ms, being conservative)
+                        await asyncio.sleep(0.1)
+
+                        logger.info(
+                            "🕐 [RAG DEBUG] Waited for MongoDB write propagation",
+                            session_id=chat_session.id,
+                            delay_ms=100,
+                            timestamp=datetime.utcnow().isoformat()
                         )
 
                         # Optionally: Yield SSE event to inform user
@@ -570,8 +584,15 @@ class StreamingHandler:
                         # No segments available - documents might be processing
                         message = segments_result.get("message", "")
                         if "procesando" in message.lower() or "processing" in message.lower():
-                            doc_warnings.append(
-                                "⏳ Los documentos se están procesando. Estarán disponibles en breve."
+                            warning_msg = "⏳ Los documentos se están procesando. Estarán disponibles en breve."
+                            doc_warnings.append(warning_msg)
+                            logger.warning(
+                                "⚠️ [RAG DEBUG] Documents still processing - warning added",
+                                session_id=context.session_id,
+                                warning_message=warning_msg,
+                                total_docs=segments_result.get("total_docs", 0),
+                                ready_docs=segments_result.get("ready_docs", 0),
+                                timestamp=datetime.utcnow().isoformat()
                             )
 
                 except Exception as doc_exc:

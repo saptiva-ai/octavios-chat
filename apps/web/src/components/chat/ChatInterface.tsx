@@ -121,6 +121,7 @@ export function ChatInterface({
   const prevChatIdRef = React.useRef(currentChatId);
   const mountChatIdRef = React.useRef(currentChatId);
 
+
   // Log component mount/unmount for debugging re-selection
   React.useEffect(() => {
     const mountChatId = mountChatIdRef.current;
@@ -464,6 +465,7 @@ export function ChatInterface({
                 ¿Cómo puedo ayudarte, {user?.username || "Usuario"}?
               </h1>
 
+
               {/* Composer in hero mode - NO onActivate, NO focus triggers */}
               <CompactChatComposer
                 value={inputValue}
@@ -534,6 +536,7 @@ export function ChatInterface({
                 <div ref={messagesEndRef} />
               </div>
             </section>
+
 
             {/* Composer at bottom in chat mode */}
             <CompactChatComposer

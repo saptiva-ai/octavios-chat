@@ -180,7 +180,7 @@ export function ChatComposerV2({
       <div
         ref={composerRef}
         className={cn(
-          'relative rounded-2xl bg-neutral-900/70 backdrop-blur transition-all duration-200',
+          'relative rounded-[2rem] bg-neutral-900/70 backdrop-blur transition-all duration-200',
           'border border-white/10 focus-within:ring-2 focus-within:ring-white/20',
           isCenter
             ? 'w-full max-w-[640px] mx-auto'

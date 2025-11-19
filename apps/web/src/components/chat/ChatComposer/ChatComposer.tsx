@@ -671,7 +671,7 @@ export function ChatComposer({
         <div
           ref={composerRef}
           className={cn(
-            "grid grid-rows-[auto_auto] gap-2 rounded-2xl border border-zinc-700/50 bg-zinc-900/70 p-2 shadow-sm transition-all duration-200 backdrop-blur supports-[backdrop-filter]:bg-zinc-900/60 sm:p-3",
+            "grid grid-rows-[auto_auto] gap-2 rounded-[2rem] border border-zinc-700/50 bg-zinc-900/70 p-2 shadow-sm transition-all duration-200 backdrop-blur supports-[backdrop-filter]:bg-zinc-900/60 sm:p-3",
             "hover:shadow-md focus-within:shadow-md",
           )}
         >

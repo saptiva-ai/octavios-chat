@@ -181,35 +181,54 @@ class DocumentProcessingService:
         """
 
         logger.info(
-            "Starting document processing",
+            "🚀 [RAG DEBUG] Starting document processing",
             conversation_id=conversation_id,
-            doc_id=doc_id
+            doc_id=doc_id,
+            timestamp=datetime.utcnow().isoformat()
         )
 
         try:
-            # Step 1: Validate and update status
+            # Step 1: Validate session has the document
             session = await self._get_session(conversation_id)
-            doc_state = await self._validate_document_in_session(session, doc_id)
+            document = await self._validate_document_in_session(session, doc_id)
 
-            await self._mark_processing(session, doc_state)
-
-            # Step 2: Extract text
-            document = await self._get_document_from_storage(doc_id)
-            extracted_text = await self._extract_text(document)
-
-            # Step 3: Segment text
-            segments = self._segment_text(extracted_text)
-
-            # Step 4: Cache segments
-            await self._cache_segments(doc_id, segments)
-
-            # Step 5: Mark as ready
-            await self._mark_ready(session, doc_state, len(segments))
+            # Step 2: Mark as processing (update Document model directly)
+            document.status = "processing"
+            await document.save()
 
             logger.info(
-                "Document processing complete",
+                "⏳ [RAG DEBUG] Document marked as PROCESSING",
+                doc_id=str(document.id),
+                status=document.status,
+                timestamp=datetime.utcnow().isoformat()
+            )
+
+            # Step 3: Extract text
+            extracted_text = await self._extract_text(document)
+
+            # Step 4: Segment text
+            segments = self._segment_text(extracted_text)
+
+            # Step 5: Cache segments
+            await self._cache_segments(doc_id, segments)
+
+            # Step 6: Mark as ready (update Document model directly)
+            document.status = "ready"
+            await document.save()
+
+            logger.info(
+                "🎯 [RAG DEBUG] Document marked as READY",
+                doc_id=str(document.id),
+                status=document.status,
+                segments=len(segments),
+                timestamp=datetime.utcnow().isoformat()
+            )
+
+            logger.info(
+                "✅ [RAG DEBUG] Document processing complete",
                 doc_id=doc_id,
-                segments=len(segments)
+                segments=len(segments),
+                timestamp=datetime.utcnow().isoformat()
             )
 
         except Exception as e:
@@ -267,11 +286,18 @@ class DocumentProcessingService:
         session: ChatSession,
         doc_id: str
     ) -> Any:  # DocumentState
-        """Validate document exists in session."""
-        doc_state = session.get_document(doc_id)
-        if not doc_state:
+        """Validate document exists in session's attached_file_ids."""
+        # NEW: Check attached_file_ids instead of documents field
+        if doc_id not in session.attached_file_ids:
             raise ValueError(f"Document {doc_id} not in session {session.id}")
-        return doc_state
+
+        # Fetch the actual Document from the database
+        from ..models.document import Document
+        doc = await Document.get(doc_id)
+        if not doc:
+            raise ValueError(f"Document {doc_id} not found in database")
+
+        return doc
 
     async def _mark_processing(self, session: ChatSession, doc_state: Any) -> None:
         """Update DocumentState to PROCESSING."""
@@ -279,9 +305,10 @@ class DocumentProcessingService:
         await session.save()
 
         logger.info(
-            "Document marked as processing",
+            "⏳ [RAG DEBUG] Document marked as PROCESSING",
             doc_id=doc_state.doc_id,
-            status=doc_state.status.value
+            status=doc_state.status.value,
+            timestamp=datetime.utcnow().isoformat()
         )
 
     async def _get_document_from_storage(self, doc_id: str) -> Document:
@@ -305,11 +332,12 @@ class DocumentProcessingService:
             raise ValueError("Text extraction returned empty result")
 
         logger.info(
-            "Text extracted successfully",
+            "📄 [RAG DEBUG] Text extraction complete",
             doc_id=str(document.id),
             text_length=len(extracted_text),
             pages=len(pages),
-            filename=document.filename
+            filename=document.filename,
+            timestamp=datetime.utcnow().isoformat()
         )
 
         return extracted_text
@@ -323,17 +351,28 @@ class DocumentProcessingService:
         return segments
 
     async def _cache_segments(self, doc_id: str, segments: List[Dict[str, Any]]) -> None:
-        """Cache segments in Redis."""
+        """
+        Cache segments in Redis.
+
+        TTL Strategy:
+        - 7 days (604800s) for production (Capital 414 use case)
+        - Corporate documents are queried repeatedly over days/weeks
+        - Reduces PDF reprocessing overhead (pypdf/OCR)
+        - Acceptable memory usage: ~5MB per doc × 100 docs = 500MB max
+        """
         cache = await get_redis_cache()
         cache_key = f"doc_segments:{doc_id}"
 
-        await cache.set(cache_key, segments, ttl=3600)  # 1 hour
+        # Capital 414: 7-day TTL for corporate document cache
+        await cache.set(cache_key, segments, ttl=604800)  # 7 days (optimized for reuse)
 
         logger.info(
-            "Segments cached",
+            "💾 [RAG DEBUG] Segments cached in Redis",
             doc_id=doc_id,
             cache_key=cache_key,
-            segments=len(segments)
+            segments=len(segments),
+            ttl_days=7,
+            timestamp=datetime.utcnow().isoformat()
         )
 
     async def _mark_ready(
@@ -347,10 +386,11 @@ class DocumentProcessingService:
         await session.save()
 
         logger.info(
-            "Document marked as ready",
+            "🎯 [RAG DEBUG] Document marked as READY",
             doc_id=doc_state.doc_id,
             status=doc_state.status.value,
-            segments=segments_count
+            segments=segments_count,
+            timestamp=datetime.utcnow().isoformat()
         )
 
     async def _mark_failed(
@@ -361,18 +401,19 @@ class DocumentProcessingService:
     ) -> None:
         """Mark document as FAILED with error message."""
         try:
-            session = await ChatSession.get(conversation_id)
-            if session:
-                doc_state = session.get_document(doc_id)
-                if doc_state:
-                    doc_state.mark_failed(error=error[:500])
-                    await session.save()
+            # NEW: Update Document model directly instead of DocumentState
+            from ..models.document import Document
+            document = await Document.get(doc_id)
+            if document:
+                document.status = "failed"
+                document.error_message = error[:500]
+                await document.save()
 
-                    logger.info(
-                        "Document marked as failed",
-                        doc_id=doc_id,
-                        error=error[:100]
-                    )
+                logger.info(
+                    "Document marked as failed",
+                    doc_id=doc_id,
+                    error=error[:100]
+                )
         except Exception as save_error:
             logger.error(
                 "Failed to mark document as failed",
