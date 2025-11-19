@@ -7,11 +7,14 @@ Replaces synchronous document processing with async worker-based ingestion.
 from typing import Any, Dict, List, Optional
 import structlog
 
+from fastapi import BackgroundTasks
+
 from ..protocol import ToolSpec, ToolCategory, ToolCapability
 from ..tool import Tool
 from ...models.chat import ChatSession
 from ...models.document import Document
 from ...models.document_state import DocumentState, ProcessingStatus
+from ...services.document_processing_service import create_document_processing_service
 
 logger = structlog.get_logger(__name__)
 
@@ -204,19 +207,30 @@ class IngestFilesTool(Tool):
 
                     ingested_docs.append(doc_state)
 
-                    # 3. Dispatch async processing task
-                    # TODO: Implement Celery task dispatch
-                    # from ...services.document_tasks import process_document_task
-                    # process_document_task.delay(
-                    #     conversation_id=conversation_id,
-                    #     doc_id=file_ref
-                    # )
+                    # 3. Dispatch background processing task
+                    background_tasks = context.get("background_tasks") if context else None
+                    if background_tasks and isinstance(background_tasks, BackgroundTasks):
+                        # Create service and dispatch processing
+                        processing_service = create_document_processing_service(
+                            segmentation_strategy="word_based"
+                        )
 
-                    logger.info(
-                        "Document added to session (worker dispatch pending)",
-                        doc_id=file_ref,
-                        filename=doc_state.name
-                    )
+                        background_tasks.add_task(
+                            processing_service.process_document,
+                            conversation_id=conversation_id,
+                            doc_id=file_ref
+                        )
+                        logger.info(
+                            "Document processing dispatched",
+                            doc_id=file_ref,
+                            filename=doc_state.name,
+                            strategy="word_based"
+                        )
+                    else:
+                        logger.warning(
+                            "BackgroundTasks not available, document won't be processed",
+                            doc_id=file_ref
+                        )
 
                 except Exception as e:
                     logger.error(
