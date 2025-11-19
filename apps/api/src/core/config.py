@@ -342,7 +342,7 @@ class Settings(BaseSettings):
 
     # Prompt Registry (System Prompts por Modelo)
     prompt_registry_path: str = Field(
-        default="apps/api/prompts/registry.yaml",
+        default="/app/prompts/registry.yaml",
         description="Ruta al archivo YAML de registro de prompts"
     )
     enable_model_system_prompt: bool = Field(

@@ -489,173 +489,253 @@ class StreamingHandler:
         Yields:
             SSE events with message chunks and completion
         """
-        # Prepare document context for RAG
-        document_context = None
-        doc_warnings = []
+        # FIX-001: Wrap entire streaming logic in try-catch for proper error propagation
+        try:
+            # Prepare document context for RAG
+            document_context = None
+            doc_warnings = []
 
-        if context.document_ids:
-            doc_texts = await DocumentService.get_document_text_from_cache(
-                document_ids=context.document_ids,
-                user_id=context.user_id
+            if context.document_ids:
+                try:
+                    doc_texts = await DocumentService.get_document_text_from_cache(
+                        document_ids=context.document_ids,
+                        user_id=context.user_id
+                    )
+
+                    if doc_texts:
+                        max_docs = int(os.getenv("MAX_DOCS_PER_CHAT", "3"))
+                        max_chars = int(os.getenv("MAX_TOTAL_DOC_CHARS", "16000"))
+
+                        document_context, doc_warnings, _ = (
+                            DocumentService.extract_content_for_rag_from_cache(
+                                doc_texts=doc_texts,
+                                max_chars_per_doc=8000,
+                                max_total_chars=max_chars,
+                                max_docs=max_docs
+                            )
+                        )
+                except Exception as doc_exc:
+                    logger.error(
+                        "Document context extraction failed - continuing without documents",
+                        error=str(doc_exc),
+                        exc_type=type(doc_exc).__name__,
+                        document_ids=context.document_ids,
+                        user_id=context.user_id
+                    )
+                    # Don't fail the entire request - continue without document context
+                    doc_warnings.append(
+                        f"No se pudieron cargar los documentos adjuntos: {str(doc_exc)[:100]}"
+                    )
+
+            # Initialize Saptiva client (singleton managed async factory)
+            saptiva_client = await get_saptiva_client()
+
+            # FIX-001: Use centralized prompt registry instead of hardcoded string
+            # This ensures consistent Saptiva branding across all models
+            from ....core.prompt_registry import get_prompt_registry
+            prompt_registry = get_prompt_registry()
+
+            # Resolve system prompt for this model
+            system_prompt, model_params = prompt_registry.resolve(
+                model=context.model,
+                tools_markdown=None,  # Tools are handled separately
+                channel="chat"
             )
 
-            if doc_texts:
-                max_docs = int(os.getenv("MAX_DOCS_PER_CHAT", "3"))
-                max_chars = int(os.getenv("MAX_TOTAL_DOC_CHARS", "16000"))
+            # Add document context if available
+            if document_context:
+                system_prompt += f"\n\n**Documentos adjuntos por el usuario:**\n{document_context}"
 
-                document_context, doc_warnings, _ = (
-                    DocumentService.extract_content_for_rag_from_cache(
-                        doc_texts=doc_texts,
-                        max_chars_per_doc=8000,
-                        max_total_chars=max_chars,
-                        max_docs=max_docs
+            logger.info(
+                "Resolved system prompt for streaming",
+                model=context.model,
+                prompt_hash=model_params.get("_metadata", {}).get("system_hash"),
+                has_documents=bool(document_context)
+            )
+
+            # ISSUE-004: Implement backpressure with producer-consumer pattern
+            # Queue with maxsize=10 provides backpressure when client is slow
+            event_queue: Queue = Queue(maxsize=10)
+            full_response = ""
+            producer_error = None
+
+            async def producer():
+                """
+                Producer task: reads chunks from Saptiva and puts them in queue.
+
+                If queue is full (slow consumer), put() will block, providing backpressure.
+                This prevents unbounded memory growth on the server.
+                """
+                nonlocal full_response, producer_error
+
+                try:
+                    logger.info(
+                        "Starting Saptiva stream (producer)",
+                        model=context.model,
+                        user_id=context.user_id,
+                        has_document_context=bool(document_context)
                     )
-                )
 
-        # Initialize Saptiva client (singleton managed async factory)
-        saptiva_client = await get_saptiva_client()
+                    # Send metadata event first
+                    await event_queue.put({
+                        "event": "meta",
+                        "data": json.dumps({
+                            "chat_id": str(chat_session.id),
+                            "user_message_id": str(user_message.id),
+                            "model": context.model
+                        })
+                    })
 
-        # Prepare system message with document context
-        system_message = "Eres un asistente útil."
-        if document_context:
-            system_message += f"\n\nContexto de documentos:\n{document_context}"
+                    # FIX-001: Use resolved system_prompt (not hardcoded system_message)
+                    # Use model_params for temperature/max_tokens (registry overrides context)
+                    async for chunk in saptiva_client.chat_completion_stream(
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": context.message}
+                        ],
+                        model=context.model,
+                        temperature=model_params.get("temperature", context.temperature),
+                        max_tokens=model_params.get("max_tokens", context.max_tokens)
+                    ):
+                        # Extract content from chunk
+                        # choices is a List[Dict] according to SaptivaStreamChunk model
+                        content = ""
+                        if hasattr(chunk, 'choices') and chunk.choices:
+                            choice = chunk.choices[0]  # This is a dict
+                            if isinstance(choice, dict):
+                                delta = choice.get('delta', {})
+                                if isinstance(delta, dict):
+                                    content = delta.get('content', '')
+                            # Fallback for object-style access (shouldn't happen)
+                            elif hasattr(choice, 'delta'):
+                                delta = choice.delta
+                                if hasattr(delta, 'content'):
+                                    content = delta.content or ''
 
-        # ISSUE-004: Implement backpressure with producer-consumer pattern
-        # Queue with maxsize=10 provides backpressure when client is slow
-        event_queue: Queue = Queue(maxsize=10)
-        full_response = ""
-        producer_error = None
+                        if content:
+                            # Backpressure: this blocks if queue is full (maxsize=10)
+                            await event_queue.put({
+                                "event": "chunk",
+                                "data": json.dumps({"content": content})
+                            })
+                            full_response += content
 
-        async def producer():
-            """
-            Producer task: reads chunks from Saptiva and puts them in queue.
+                    # Signal end of stream
+                    await event_queue.put(None)
 
-            If queue is full (slow consumer), put() will block, providing backpressure.
-            This prevents unbounded memory growth on the server.
-            """
-            nonlocal full_response, producer_error
+                    logger.info(
+                        "Producer completed successfully",
+                        response_length=len(full_response)
+                    )
+
+                except CancelledError:
+                    logger.info("Producer cancelled by consumer")
+                    raise
+                except Exception as e:
+                    logger.error(
+                        "Producer error",
+                        error=str(e),
+                        exc_type=type(e).__name__
+                    )
+                    producer_error = e
+                    # Signal error to consumer
+                    await event_queue.put(None)
+
+            # Start producer task
+            producer_task = create_task(producer())
 
             try:
-                logger.info(
-                    "Starting Saptiva stream (producer)",
+                # Consumer loop: yield events from queue
+                while True:
+                    event = await event_queue.get()
+
+                    if event is None:  # End signal
+                        break
+
+                    yield event
+
+            finally:
+                # Cleanup: cancel producer if consumer exits early
+                if not producer_task.done():
+                    producer_task.cancel()
+                    try:
+                        await producer_task
+                    except CancelledError:
+                        logger.info("Producer task cancelled in cleanup")
+
+                # Check if producer had an error
+                if producer_error:
+                    logger.error(
+                        "Producer error detected in cleanup",
+                        error=str(producer_error)
+                    )
+                    raise producer_error
+
+                # Save assistant message
+                assistant_message = await chat_service.add_assistant_message(
+                    chat_session=chat_session,
+                    content=full_response,
                     model=context.model,
-                    user_id=context.user_id,
-                    has_document_context=bool(document_context)
+                    metadata={
+                        "streaming": True,
+                        "has_documents": bool(context.document_ids),
+                        "document_warnings": doc_warnings if doc_warnings else None
+                    }
                 )
 
-                # Send metadata event first
-                await event_queue.put({
-                    "event": "meta",
+                # Yield completion event
+                yield {
+                    "event": "done",
                     "data": json.dumps({
-                        "chat_id": str(chat_session.id),
-                        "user_message_id": str(user_message.id),
-                        "model": context.model
+                        "message_id": str(assistant_message.id),
+                        "chat_id": str(chat_session.id)
                     })
-                })
+                }
 
-                async for chunk in saptiva_client.chat_completion_stream(
-                    messages=[
-                        {"role": "system", "content": system_message},
-                        {"role": "user", "content": context.message}
-                    ],
+                # Invalidate cache
+                await cache.invalidate_chat_history(chat_session.id)
+
+        # FIX-001: Catch all streaming errors and propagate to frontend
+        except Exception as stream_exc:
+            logger.error(
+                "CRITICAL: Streaming chat failed",
+                error=str(stream_exc),
+                exc_type=type(stream_exc).__name__,
+                model=context.model,
+                user_id=context.user_id,
+                has_documents=bool(context.document_ids),
+                exc_info=True
+            )
+
+            # Save error message to database for visibility
+            error_content = (
+                f"❌ Error al procesar la solicitud: {str(stream_exc)[:200]}\n\n"
+                f"Por favor, intenta nuevamente o contacta al equipo de soporte si el error persiste."
+            )
+            try:
+                await chat_service.add_assistant_message(
+                    chat_session=chat_session,
+                    content=error_content,
                     model=context.model,
-                    temperature=context.temperature,
-                    max_tokens=context.max_tokens
-                ):
-                    # Extract content from chunk
-                    # choices is a List[Dict] according to SaptivaStreamChunk model
-                    content = ""
-                    if hasattr(chunk, 'choices') and chunk.choices:
-                        choice = chunk.choices[0]  # This is a dict
-                        if isinstance(choice, dict):
-                            delta = choice.get('delta', {})
-                            if isinstance(delta, dict):
-                                content = delta.get('content', '')
-                        # Fallback for object-style access (shouldn't happen)
-                        elif hasattr(choice, 'delta'):
-                            delta = choice.delta
-                            if hasattr(delta, 'content'):
-                                content = delta.content or ''
-
-                    if content:
-                        # Backpressure: this blocks if queue is full (maxsize=10)
-                        await event_queue.put({
-                            "event": "chunk",
-                            "data": json.dumps({"content": content})
-                        })
-                        full_response += content
-
-                # Signal end of stream
-                await event_queue.put(None)
-
-                logger.info(
-                    "Producer completed successfully",
-                    response_length=len(full_response)
+                    metadata={
+                        "error": True,
+                        "error_type": type(stream_exc).__name__,
+                        "error_message": str(stream_exc)[:500]
+                    }
                 )
-
-            except CancelledError:
-                logger.info("Producer cancelled by consumer")
-                raise
-            except Exception as e:
+            except Exception as save_exc:
                 logger.error(
-                    "Producer error",
-                    error=str(e),
-                    exc_type=type(e).__name__
+                    "Failed to save error message to database",
+                    error=str(save_exc),
+                    exc_info=True
                 )
-                producer_error = e
-                # Signal error to consumer
-                await event_queue.put(None)
 
-        # Start producer task
-        producer_task = create_task(producer())
-
-        try:
-            # Consumer loop: yield events from queue
-            while True:
-                event = await event_queue.get()
-
-                if event is None:  # End signal
-                    break
-
-                yield event
-
-        finally:
-            # Cleanup: cancel producer if consumer exits early
-            if not producer_task.done():
-                producer_task.cancel()
-                try:
-                    await producer_task
-                except CancelledError:
-                    logger.info("Producer task cancelled in cleanup")
-
-            # Check if producer had an error
-            if producer_error:
-                logger.error(
-                    "Producer error detected in cleanup",
-                    error=str(producer_error)
-                )
-                raise producer_error
-
-        # Save assistant message
-        assistant_message = await chat_service.add_assistant_message(
-            chat_session=chat_session,
-            content=full_response,
-            model=context.model,
-            metadata={
-                "streaming": True,
-                "has_documents": bool(context.document_ids),
-                "document_warnings": doc_warnings if doc_warnings else None
+            # Yield error event to frontend
+            yield {
+                "event": "error",
+                "data": json.dumps({
+                    "error": type(stream_exc).__name__,
+                    "message": str(stream_exc),
+                    "details": "Ocurrió un error al procesar tu solicitud. Por favor, intenta nuevamente."
+                })
             }
-        )
-
-        # Yield completion event
-        yield {
-            "event": "done",
-            "data": json.dumps({
-                "message_id": str(assistant_message.id),
-                "chat_id": str(chat_session.id)
-            })
-        }
-
-        # Invalidate cache
-        await cache.invalidate_chat_history(chat_session.id)
