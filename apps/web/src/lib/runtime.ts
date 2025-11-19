@@ -19,10 +19,11 @@ export function assertProdNoMock() {
 
     const resolvedApiBase = fallbackApiBase
 
-    if (!process.env.NEXT_PUBLIC_API_URL && resolvedApiBase) {
-      // Ensure downstream code sees the computed fallback during CI builds
-      process.env.NEXT_PUBLIC_API_URL = resolvedApiBase
-    }
+    // REMOVED: Cannot assign to process.env in Next.js after build-time replacement
+    // The proxy in next.config.js handles API routing when NEXT_PUBLIC_API_URL is empty
+    // if (!process.env.NEXT_PUBLIC_API_URL && resolvedApiBase) {
+    //   process.env.NEXT_PUBLIC_API_URL = resolvedApiBase
+    // }
 
     if (!resolvedApiBase) {
       throw new Error('API base missing; refusing to fall back to mocks in production.')
@@ -30,9 +31,10 @@ export function assertProdNoMock() {
 
     const effectiveMswFlag = mswFlag ?? (isCI ? 'false' : undefined)
 
-    if (!process.env.NEXT_PUBLIC_ENABLE_MSW && effectiveMswFlag) {
-      process.env.NEXT_PUBLIC_ENABLE_MSW = effectiveMswFlag
-    }
+    // REMOVED: Cannot assign to process.env in Next.js after build-time replacement
+    // if (!process.env.NEXT_PUBLIC_ENABLE_MSW && effectiveMswFlag) {
+    //   process.env.NEXT_PUBLIC_ENABLE_MSW = effectiveMswFlag
+    // }
 
     if (effectiveMswFlag === 'true') {
       throw new Error('MSW enabled in production env. Disable it or guard behind a feature flag.')

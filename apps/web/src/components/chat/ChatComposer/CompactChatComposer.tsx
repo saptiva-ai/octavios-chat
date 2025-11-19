@@ -352,6 +352,12 @@ export function CompactChatComposer({
     [deduplicatedAttachments],
   );
 
+  // Block submit if any files are still PROCESSING
+  const hasProcessingFiles = React.useMemo(
+    () => deduplicatedAttachments.some((a) => a.status === "PROCESSING"),
+    [deduplicatedAttachments],
+  );
+
   // Rollback feature flag: Allow disabling files-only send in production
   const allowFilesOnlySend =
     process.env.NEXT_PUBLIC_ALLOW_FILES_ONLY_SEND !== "false";
@@ -363,12 +369,14 @@ export function CompactChatComposer({
       !loading &&
       !isSubmitting &&
       !isUploading &&
+      !hasProcessingFiles && // Block if any files are still processing
       (value.trim().length > 0 || (allowFilesOnlySend && hasReadyFiles)), // Removed useFilesInQuestion check
     [
       disabled,
       loading,
       isSubmitting,
       isUploading,
+      hasProcessingFiles,
       value,
       hasReadyFiles,
       allowFilesOnlySend,
@@ -377,8 +385,11 @@ export function CompactChatComposer({
 
   // MVP-LOCK: Dynamic placeholder based on file state (simplified)
   const dynamicPlaceholder = React.useMemo(() => {
+    if (hasProcessingFiles) {
+      return "Esperando que termine el procesamiento de archivos...";
+    }
     return "Pregúntame algo…";
-  }, []);
+  }, [hasProcessingFiles]);
 
   // Submit with animation (must be defined before handleKeyDown)
   const handleSendClick = React.useCallback(async () => {
@@ -736,7 +747,7 @@ export function CompactChatComposer({
             aria-label="Compositor de mensajes"
             className={cn(
               "grid items-center gap-2",
-              "rounded-2xl p-2",
+              "rounded-[2rem] p-2",
               "bg-[var(--surface)]",
               "shadow-sm",
               // Dynamic grid: smaller space when tools hidden, full 44px when shown

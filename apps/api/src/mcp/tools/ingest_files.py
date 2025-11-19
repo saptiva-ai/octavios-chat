@@ -5,9 +5,12 @@ Replaces synchronous document processing with async worker-based ingestion.
 """
 
 from typing import Any, Dict, List, Optional
+from datetime import datetime
+import asyncio
 import structlog
 
 from fastapi import BackgroundTasks
+from beanie import PydanticObjectId
 
 from ..protocol import ToolSpec, ToolCategory, ToolCapability
 from ..tool import Tool
@@ -15,6 +18,7 @@ from ...models.chat import ChatSession
 from ...models.document import Document
 from ...models.document_state import DocumentState, ProcessingStatus
 from ...services.document_processing_service import create_document_processing_service
+from ...core.database import get_database
 
 logger = structlog.get_logger(__name__)
 
@@ -207,6 +211,48 @@ class IngestFilesTool(Tool):
 
                     ingested_docs.append(doc_state)
 
+                    # CRITICAL FIX: Store doc_id in attached_file_ids which is already working
+                    # Problem: Beanie embedded documents don't persist reliably
+                    # Solution: Skip documents field entirely, process based on attached_file_ids + Document collection
+
+                    # The session.add_document() already added to attached_file_ids
+                    # We don't need documents field - just ensure attached_file_ids is saved
+                    await session.save()
+
+                    logger.info(
+                        "🔧 [RAG DEBUG] Skipping documents field persistence - using attached_file_ids instead",
+                        conversation_id=conversation_id,
+                        attached_file_ids=session.attached_file_ids,
+                        timestamp=datetime.utcnow().isoformat()
+                    )
+
+                    # Verify save worked
+                    logger.info(
+                        "📝 [RAG DEBUG] DocumentState persisted to DB",
+                        doc_id=file_ref,
+                        status=doc_state.status.value,
+                        conversation_id=conversation_id,
+                        in_session_documents=len(session.documents),
+                        document_ids=[d.doc_id for d in session.documents],
+                        timestamp=datetime.utcnow().isoformat()
+                    )
+
+                    # Read-after-write verification
+                    verification_session = await ChatSession.get(conversation_id)
+                    if verification_session:
+                        logger.info(
+                            "🔍 [RAG DEBUG] Read-after-write verification",
+                            conversation_id=conversation_id,
+                            docs_in_fresh_read=len(verification_session.documents),
+                            fresh_doc_ids=[d.doc_id for d in verification_session.documents],
+                            timestamp=datetime.utcnow().isoformat()
+                        )
+                    else:
+                        logger.error(
+                            "❌ [RAG DEBUG] Session not found in read-after-write",
+                            conversation_id=conversation_id
+                        )
+
                     # 3. Dispatch background processing task
                     background_tasks = context.get("background_tasks") if context else None
                     if background_tasks and isinstance(background_tasks, BackgroundTasks):
@@ -221,10 +267,12 @@ class IngestFilesTool(Tool):
                             doc_id=file_ref
                         )
                         logger.info(
-                            "Document processing dispatched",
+                            "🚀 [RAG DEBUG] Background processing dispatched",
                             doc_id=file_ref,
                             filename=doc_state.name,
-                            strategy="word_based"
+                            strategy="word_based",
+                            conversation_id=conversation_id,
+                            timestamp=datetime.utcnow().isoformat()
                         )
                     else:
                         logger.warning(
@@ -244,8 +292,8 @@ class IngestFilesTool(Tool):
                         "error": str(e)
                     })
 
-            # 4. Save session with new DocumentStates
-            await session.save()
+            # 4. Session already saved in loop (before background tasks)
+            # No need to save again here
 
             # 5. Build immediate response
             response_message = self._build_response_message(ingested_docs, failed_docs)

@@ -206,7 +206,8 @@ export function useFiles(chatId?: string): UseFilesReturn {
       }
 
       const traceId = crypto.randomUUID();
-      const eventSourceUrl = `/api/files/events/${fileId}?t=${encodeURIComponent(traceId)}`;
+      const token = apiClient.getToken();
+      const eventSourceUrl = `/api/files/events/${fileId}?t=${encodeURIComponent(traceId)}&token=${encodeURIComponent(token)}`;
 
       logDebug("[useFiles] Connecting to SSE", {
         file_id: fileId,
@@ -279,7 +280,7 @@ export function useFiles(chatId?: string): UseFilesReturn {
               percentage: 100,
             });
 
-            // Create and persist attachment
+            // Update attachment to READY status (replaces PROCESSING state)
             const attachment: FileAttachment = {
               file_id: fileId,
               filename: filename,
@@ -290,11 +291,15 @@ export function useFiles(chatId?: string): UseFilesReturn {
             };
 
             const targetChatId = conversationId || effectiveChatId;
+
+            // Remove old PROCESSING attachment and add READY one
+            filesStore.removeFromChat(targetChatId, fileId);
             filesStore.addToChat(targetChatId, attachment);
 
-            logDebug("[useFiles] File ready, persisted to store", {
+            logDebug("[useFiles] File ready, updated in store", {
               chatId: targetChatId,
               file_id: fileId,
+              status: "READY",
             });
 
             // Toast notification
@@ -409,6 +414,28 @@ export function useFiles(chatId?: string): UseFilesReturn {
       setIsUploading(true);
       setUploadProgress({ loaded: 0, total: file.size, percentage: 0 });
 
+      // Create temporary attachment IMMEDIATELY to show in UI with spinner
+      const tempFileId = crypto.randomUUID();
+      const targetChatId = conversationId || effectiveChatId;
+
+      const tempAttachment: FileAttachment = {
+        file_id: tempFileId,
+        filename: file.name,
+        status: "PROCESSING",
+        bytes: file.size,
+        mimetype: file.type,
+      };
+
+      // Add to store IMMEDIATELY - user sees thumbnail instantly
+      filesStore.addToChat(targetChatId, tempAttachment);
+
+      logDebug("[useFiles] Added temporary attachment to store BEFORE fetch", {
+        chatId: targetChatId,
+        file_id: tempFileId,
+        filename: file.name,
+        status: "PROCESSING",
+      });
+
       try {
         // Generate idempotency key from file hash
         const buffer = await file.arrayBuffer();
@@ -513,6 +540,15 @@ export function useFiles(chatId?: string): UseFilesReturn {
           status: ingestResponse.status,
         });
 
+        // Remove temporary attachment and add real one with server-assigned file_id
+        filesStore.removeFromChat(targetChatId, tempFileId);
+
+        logDebug("[useFiles] Removed temporary attachment after server response", {
+          chatId: targetChatId,
+          tempFileId,
+          realFileId: ingestResponse.file_id,
+        });
+
         // If already READY (cached or instant processing), return immediately
         if (ingestResponse.status === "READY") {
           setUploadProgress({
@@ -530,7 +566,6 @@ export function useFiles(chatId?: string): UseFilesReturn {
             mimetype: ingestResponse.mimetype,
           };
 
-          const targetChatId = conversationId || effectiveChatId;
           filesStore.addToChat(targetChatId, attachment);
 
           logDebug("[useFiles] File immediately ready (cached)", {
@@ -555,14 +590,7 @@ export function useFiles(chatId?: string): UseFilesReturn {
           status: ingestResponse.status,
         });
 
-        connectToSSE(
-          ingestResponse.file_id,
-          ingestResponse.filename || file.name,
-          file.size,
-          conversationId,
-        );
-
-        // Return a temporary attachment in PROCESSING state
+        // Create real attachment in PROCESSING state with server file_id
         const processingAttachment: FileAttachment = {
           file_id: ingestResponse.file_id,
           filename: ingestResponse.filename || file.name,
@@ -572,14 +600,34 @@ export function useFiles(chatId?: string): UseFilesReturn {
           mimetype: ingestResponse.mimetype,
         };
 
+        // Add real attachment (temp already removed above)
+        filesStore.addToChat(targetChatId, processingAttachment);
+
+        logDebug("[useFiles] Added real processing attachment to store", {
+          chatId: targetChatId,
+          file_id: processingAttachment.file_id,
+          status: processingAttachment.status,
+        });
+
+        connectToSSE(
+          ingestResponse.file_id,
+          ingestResponse.filename || file.name,
+          file.size,
+          conversationId,
+        );
+
         return processingAttachment;
       } catch (err: any) {
         const errorMessage = err.message || "Failed to upload file";
         setError(errorMessage);
 
-        logError("[useFiles] Upload failed", {
+        // Remove temporary attachment on error
+        filesStore.removeFromChat(targetChatId, tempFileId);
+
+        logError("[useFiles] Upload failed, removed temporary attachment", {
           filename: file.name,
           error: errorMessage,
+          tempFileId,
         });
 
         setIsUploading(false);

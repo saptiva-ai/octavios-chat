@@ -282,21 +282,40 @@ async def get_document_thumbnail(
             detail="Not authorized to access this document",
         )
 
-    # Get file path (V1: stored in minio_key as filesystem path)
-    file_path = Path(doc.minio_key)
+    # V2: Get or generate thumbnail with MinIO caching
+    # This handles both new documents (MinIO) and legacy documents (filesystem)
 
-    if not file_path.exists():
-        logger.warning("Document file not found on disk", doc_id=doc_id, path=str(file_path))
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document file not found",
+    # Check if this is a legacy document (filesystem path)
+    is_legacy = doc.minio_bucket == "temp" and doc.minio_key and doc.minio_key.startswith("/tmp/")
+
+    if is_legacy:
+        # For legacy documents, pass None to indicate no MinIO source
+        # This will log a warning and return None
+        thumbnail_bytes = await thumbnail_service.get_or_generate_thumbnail(
+            doc_id=doc_id,
+            minio_bucket=None,
+            minio_key=None,
+            mimetype=doc.content_type
         )
 
-    # Generate thumbnail
-    thumbnail_bytes = await thumbnail_service.generate_thumbnail(
-        file_path=file_path,
-        mimetype=doc.content_type
-    )
+        if not thumbnail_bytes:
+            logger.warning(
+                "Cannot generate thumbnail for legacy document",
+                doc_id=doc_id,
+                minio_key=doc.minio_key
+            )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Thumbnail not available for this document. Please re-upload the file.",
+            )
+    else:
+        # V2: Use MinIO-cached thumbnail generation
+        thumbnail_bytes = await thumbnail_service.get_or_generate_thumbnail(
+            doc_id=doc_id,
+            minio_bucket=doc.minio_bucket,
+            minio_key=doc.minio_key,
+            mimetype=doc.content_type
+        )
 
     if not thumbnail_bytes:
         logger.warning("Failed to generate thumbnail", doc_id=doc_id, mimetype=doc.content_type)

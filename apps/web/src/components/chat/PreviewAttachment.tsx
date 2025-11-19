@@ -49,29 +49,35 @@ export function PreviewAttachment({
 }: PreviewAttachmentProps) {
   const { filename, mimetype, status } = attachment;
 
-  // Debug: Log prop values on render
-  React.useEffect(() => {
-    // logDebug commented out to reduce noise in production
-    // logDebug("[PreviewAttachment] Rendered with props", {
-    //   filename,
-    //   onAudit: typeof onAudit,
-    //   onAuditExists: !!onAudit,
-    //   showAuditButton,
-    //   status,
-    // });
-  }, [filename, onAudit, showAuditButton, status]);
-
-  // Determinar estado visual
+  // Determinar estado visual (DEBE ir ANTES del useEffect)
   const isProcessing = status === "PROCESSING" || isUploading;
   const isFailed = status === "FAILED";
   const isReady = status === "READY";
+
+  // Debug: Log prop values on render
+  React.useEffect(() => {
+    console.log("[PreviewAttachment] Rendered with props", {
+      filename,
+      mimetype,
+      status,
+      file_id: attachment.file_id,
+      isProcessing,
+      isFailed,
+      isReady,
+      shouldShowFallback: isProcessing || isFailed || !((mimetype?.startsWith("image/") || mimetype?.includes("pdf")) && status === "READY"),
+    });
+  }, [filename, mimetype, status, attachment.file_id, isProcessing, isFailed, isReady]);
 
   // Determinar si es imagen basado en MIME type
   const isImage = mimetype?.startsWith("image/");
   const isPdf = mimetype?.includes("pdf");
 
-  // Determinar si se puede generar thumbnail
+  // SIEMPRE mostrar fallback primero, luego ThumbnailImage intenta cargar cuando READY
+  // Esto asegura que el usuario vea algo inmediatamente
   const canShowThumbnail = (isImage || isPdf) && isReady;
+
+  // Durante PROCESSING, forzar fallback para feedback inmediato
+  const shouldShowFallback = isProcessing || isFailed || !canShowThumbnail;
 
   return (
     <div
@@ -83,28 +89,7 @@ export function PreviewAttachment({
       data-testid="preview-attachment"
     >
       {/* Content: Thumbnail or File Icon Preview */}
-      {canShowThumbnail && !isFailed ? (
-        <>
-          {/* Real thumbnail from backend with auth */}
-          <ThumbnailImage
-            fileId={attachment.file_id}
-            alt={filename ?? "Archivo adjunto"}
-            className="size-full object-cover"
-          />
-          {/* Filename overlay - White text with black outline */}
-          <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center bg-gradient-to-t from-black/70 to-transparent px-2 py-3">
-            <span
-              className="truncate text-xs font-semibold text-white"
-              style={{
-                textShadow:
-                  "0 0 4px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.8), 1px 1px 2px rgba(0,0,0,0.9), -1px -1px 2px rgba(0,0,0,0.9)",
-              }}
-            >
-              {filename}
-            </span>
-          </div>
-        </>
-      ) : (
+      {shouldShowFallback ? (
         <div className="relative flex size-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-zinc-800 to-zinc-900 p-3">
           {/* File icon SVG - Fallback cuando no hay thumbnail */}
           {isPdf ? (
@@ -185,6 +170,27 @@ export function PreviewAttachment({
             </div>
           )}
         </div>
+      ) : (
+        <>
+          {/* Real thumbnail from backend with auth */}
+          <ThumbnailImage
+            fileId={attachment.file_id}
+            alt={filename ?? "Archivo adjunto"}
+            className="size-full object-cover"
+          />
+          {/* Filename overlay - White text with black outline */}
+          <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center bg-gradient-to-t from-black/70 to-transparent px-2 py-3">
+            <span
+              className="truncate text-xs font-semibold text-white"
+              style={{
+                textShadow:
+                  "0 0 4px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.8), 1px 1px 2px rgba(0,0,0,0.9), -1px -1px 2px rgba(0,0,0,0.9)",
+              }}
+            >
+              {filename}
+            </span>
+          </div>
+        </>
       )}
 
       {/* Loading Overlay */}

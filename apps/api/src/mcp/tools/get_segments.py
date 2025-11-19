@@ -5,6 +5,7 @@ Loads document segments from cache and ranks by relevance to user question.
 """
 
 from typing import Any, Dict, List, Optional
+from datetime import datetime
 import structlog
 
 from ..protocol import ToolSpec, ToolCategory, ToolCapability
@@ -166,8 +167,18 @@ class GetRelevantSegmentsTool(Tool):
 
         try:
             # 1. Fetch session
+            logger.info(
+                "🔍 [RAG DEBUG] GetRelevantSegmentsTool fetching session",
+                conversation_id=conversation_id,
+                timestamp=datetime.utcnow().isoformat()
+            )
+
             session = await ChatSession.get(conversation_id)
             if not session:
+                logger.error(
+                    "❌ [RAG DEBUG] Session not found in GetRelevantSegmentsTool",
+                    conversation_id=conversation_id
+                )
                 return {
                     "segments": [],
                     "message": f"Conversación {conversation_id} no encontrada.",
@@ -177,26 +188,50 @@ class GetRelevantSegmentsTool(Tool):
                     "returned_segments": 0
                 }
 
-            # 2. Filter ready documents
-            ready_docs = session.get_ready_documents()
+            logger.info(
+                "✅ [RAG DEBUG] Session fetched successfully",
+                conversation_id=conversation_id,
+                session_has_attached_file_ids=len(session.attached_file_ids),
+                attached_file_ids=session.attached_file_ids,
+                timestamp=datetime.utcnow().isoformat()
+            )
+
+            # 2. Fetch Document objects from attached_file_ids
+            from ...models.document import Document, DocumentStatus
+
+            ready_docs = []
+            for doc_id in session.attached_file_ids:
+                doc = await Document.get(doc_id)
+                if doc and doc.status == DocumentStatus.READY:
+                    ready_docs.append(doc)
 
             if target_docs:
                 ready_docs = [
                     d for d in ready_docs
-                    if d.name in target_docs or d.doc_id in target_docs
+                    if d.filename in target_docs or str(d.id) in target_docs
                 ]
 
             if not ready_docs:
+                # Log detailed status of all documents for debugging
+                all_docs = []
+                for doc_id in session.attached_file_ids:
+                    doc = await Document.get(doc_id)
+                    if doc:
+                        all_docs.append(f"{doc.filename}:{doc.status}")
+
                 logger.warning(
-                    "No ready documents found",
+                    "⚠️ [RAG DEBUG] No ready documents - User queried too early!",
                     conversation_id=conversation_id,
-                    total_docs=len(session.documents),
-                    target_docs=target_docs
+                    total_docs=len(session.attached_file_ids),
+                    ready_docs=0,
+                    target_docs=target_docs,
+                    document_statuses=all_docs,
+                    timestamp=datetime.utcnow().isoformat()
                 )
                 return {
                     "segments": [],
                     "message": "No hay documentos procesados disponibles. Los documentos aún se están procesando.",
-                    "total_docs": len(session.documents),
+                    "total_docs": len(session.attached_file_ids),
                     "ready_docs": 0,
                     "total_segments": 0,
                     "returned_segments": 0
@@ -207,14 +242,14 @@ class GetRelevantSegmentsTool(Tool):
             cache = await get_redis_cache()
 
             for doc in ready_docs:
-                cache_key = f"doc_segments:{doc.doc_id}"
+                cache_key = f"doc_segments:{str(doc.id)}"
                 segments = await cache.get(cache_key)
 
                 if not segments:
                     logger.warning(
                         "Segments not in cache (document may need reprocessing)",
-                        doc_id=doc.doc_id,
-                        doc_name=doc.name
+                        doc_id=str(doc.id),
+                        doc_name=doc.filename
                     )
                     continue
 
@@ -222,8 +257,8 @@ class GetRelevantSegmentsTool(Tool):
                 for seg in segments:
                     score = self._score_segment(seg["text"], question)
                     all_segments.append({
-                        "doc_id": doc.doc_id,
-                        "doc_name": doc.name,
+                        "doc_id": str(doc.id),
+                        "doc_name": doc.filename,
                         "index": seg["index"],
                         "text": seg["text"],
                         "score": score
@@ -233,7 +268,7 @@ class GetRelevantSegmentsTool(Tool):
                 return {
                     "segments": [],
                     "message": "Los documentos están listos pero no tienen segmentos en caché. Intenta volver a procesar los archivos.",
-                    "total_docs": len(session.documents),
+                    "total_docs": len(session.attached_file_ids),
                     "ready_docs": len(ready_docs),
                     "total_segments": 0,
                     "returned_segments": 0
@@ -253,7 +288,7 @@ class GetRelevantSegmentsTool(Tool):
             return {
                 "segments": top_segments,
                 "message": f"Encontré {len(top_segments)} segmentos relevantes de {len(ready_docs)} documento(s).",
-                "total_docs": len(session.documents),
+                "total_docs": len(session.attached_file_ids),
                 "ready_docs": len(ready_docs),
                 "total_segments": len(all_segments),
                 "returned_segments": len(top_segments)
