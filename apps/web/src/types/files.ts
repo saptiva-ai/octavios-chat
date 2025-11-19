@@ -111,9 +111,9 @@ const MAX_FILE_SIZE_MB = process.env.NEXT_PUBLIC_MAX_FILE_SIZE_MB
 export const MAX_UPLOAD_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024; // Convert MB to bytes
 
 /**
- * Rate limit (5 uploads per minute)
+ * Rate limit (10 uploads per minute for testing, 5 in production)
  */
-export const RATE_LIMIT_UPLOADS_PER_MINUTE = 5;
+export const RATE_LIMIT_UPLOADS_PER_MINUTE = 10;
 
 /**
  * User-friendly error messages

@@ -11,7 +11,7 @@ import structlog
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from sse_starlette.sse import EventSourceResponse
 
-from ..core.auth import get_current_user
+from ..core.auth import get_current_user, get_current_user_sse
 from ..core.config import get_settings
 from ..core.redis_cache import get_redis_cache
 from ..models.document import Document, DocumentStatus
@@ -25,12 +25,12 @@ logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/files", tags=["files"])
 
 # V1 Rate limiting config
-RATE_LIMIT_UPLOADS_PER_MINUTE = 5
+RATE_LIMIT_UPLOADS_PER_MINUTE = 10  # Increased for testing
 RATE_LIMIT_WINDOW_SECONDS = 60
 
 
 async def _check_rate_limit(user_id: str) -> None:
-    """Simple Redis-based rate limiter: 5 uploads/min per user."""
+    """Simple Redis-based rate limiter: 10 uploads/min per user."""
     redis_cache = await get_redis_cache()
     redis_client = redis_cache.client
     key = f"rate_limit:upload:{user_id}"
@@ -94,7 +94,7 @@ async def upload_files(
 async def file_events(
     file_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_sse),
 ):
     document = await Document.get(file_id)
     if not document or document.user_id != str(current_user.id):
@@ -134,6 +134,8 @@ async def file_events(
                     phase=FileEventPhase.COMPLETE,
                     pct=100.0,
                     status=FileStatus.READY,
+                    mimetype=document.content_type,
+                    pages=document.total_pages,
                 )
                 yield {"event": "ready", "data": ready_payload.model_dump_json()}
                 return

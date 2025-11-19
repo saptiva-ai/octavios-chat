@@ -1,14 +1,14 @@
 """
-Local storage management for uploaded documents.
+Storage management for uploaded documents.
 
-Provides streaming write helpers and a background reaper that evicts
-files based on age and disk pressure. Designed so it can be swapped
-for MinIO/S3 in the future.
+V2: Uses MinIO for persistent storage with lifecycle policies.
+Files are stored in 'temp-files' bucket with 1-day TTL.
 """
 
 from __future__ import annotations
 
 import asyncio
+import io
 import os
 import re
 import shutil
@@ -20,6 +20,8 @@ from typing import Optional, Tuple
 
 import structlog
 from fastapi import UploadFile
+
+from .minio_service import minio_service
 
 logger = structlog.get_logger(__name__)
 
@@ -84,156 +86,87 @@ class Storage:
         doc_id: str,
         upload: UploadFile,
         max_bytes: int,
-    ) -> Tuple[Path, str, int]:
+    ) -> Tuple[str, str, str, int]:
         """
-        Persist an UploadFile to disk streaming in 1MB chunks.
+        Persist an UploadFile to MinIO streaming in 1MB chunks.
 
-        Returns the destination path, sanitized filename, and size.
+        Returns the MinIO bucket, object key, sanitized filename, and size.
         Raises FileTooLargeError if the stream exceeds max_bytes.
         """
         safe_name = self._sanitize_filename(upload.filename or "document")
-        doc_dir = self.config.root / doc_id
-        doc_dir.mkdir(parents=True, exist_ok=True)
+        object_key = f"{doc_id}/{safe_name}"
 
-        dest_path = doc_dir / safe_name
         size = 0
         chunk_size = 1024 * 1024
+        chunks = []
 
         await upload.seek(0)
         try:
-            with dest_path.open("wb") as output:
-                while True:
-                    chunk = await upload.read(chunk_size)
-                    if not chunk:
-                        break
-                    size += len(chunk)
-                    if size > max_bytes:
-                        raise FileTooLargeError(size, max_bytes)
-                    output.write(chunk)
+            # Read all chunks and validate size
+            while True:
+                chunk = await upload.read(chunk_size)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > max_bytes:
+                    raise FileTooLargeError(size, max_bytes)
+                chunks.append(chunk)
+
+            # Upload to MinIO
+            file_data = io.BytesIO(b"".join(chunks))
+            await minio_service.upload_file(
+                bucket=minio_service.temp_files_bucket,
+                object_name=object_key,
+                data=file_data,
+                length=size,
+                content_type=upload.content_type or "application/octet-stream"
+            )
+
+            logger.info("Upload stored in MinIO", doc_id=doc_id, bucket=minio_service.temp_files_bucket, key=object_key, size_bytes=size)
+            return minio_service.temp_files_bucket, object_key, safe_name, size
+
         except FileTooLargeError:
-            self._safe_delete(dest_path)
-            self._safe_remove_dir(doc_dir)
             raise
         except Exception as exc:
-            self._safe_delete(dest_path)
-            self._safe_remove_dir(doc_dir)
-            logger.error("Failed to save upload", error=str(exc), doc_id=doc_id)
+            logger.error("Failed to save upload to MinIO", error=str(exc), doc_id=doc_id)
             raise
         finally:
             await upload.close()
 
-        logger.info("Upload stored", doc_id=doc_id, path=str(dest_path), size_bytes=size)
-        return dest_path, safe_name, size
+    async def delete_document(self, doc_id: str) -> None:
+        """Remove all files for a document from MinIO."""
+        # List all objects with prefix doc_id/ in temp-files bucket
+        try:
+            objects = minio_service.client.list_objects(
+                minio_service.temp_files_bucket,
+                prefix=f"{doc_id}/",
+                recursive=True
+            )
 
-    def delete_document(self, doc_id: str) -> None:
-        """Remove all files for a document."""
-        doc_dir = self.config.root / doc_id
-        if doc_dir.exists():
-            shutil.rmtree(doc_dir, ignore_errors=True)
-            logger.info("Deleted document directory", doc_id=doc_id, path=str(doc_dir))
+            for obj in objects:
+                await minio_service.delete_file(
+                    minio_service.temp_files_bucket,
+                    obj.object_name
+                )
+                logger.info("Deleted document file from MinIO", doc_id=doc_id, key=obj.object_name)
+        except Exception as exc:
+            logger.error("Failed to delete document from MinIO", doc_id=doc_id, error=str(exc))
 
     async def start_reaper(self) -> None:
-        if self._reaper_task is None and self.config.reap_interval_seconds > 0:
-            self._reaper_task = asyncio.create_task(self._reaper_loop(), name="storage-reaper")
-            logger.info("Storage reaper started", interval_seconds=self.config.reap_interval_seconds)
+        """
+        V2: Reaper not needed - MinIO lifecycle policies handle expiration.
+        Kept for backwards compatibility but does nothing.
+        """
+        logger.info("Storage reaper not needed - MinIO lifecycle policies handle TTL")
 
     async def stop_reaper(self) -> None:
-        if self._reaper_task:
-            self._reaper_task.cancel()
-            try:
-                await self._reaper_task
-            except asyncio.CancelledError:
-                logger.info("Storage reaper cancelled")
-            finally:
-                self._reaper_task = None
-
-    async def _reaper_loop(self) -> None:
-        """Periodic cleanup loop."""
-        try:
-            while True:
-                await asyncio.sleep(self.config.reap_interval_seconds)
-                self.cleanup_expired()
-                self._enforce_disk_quota()
-        except asyncio.CancelledError:
-            logger.debug("Storage reaper stopping")
-            raise
-
-    def cleanup_expired(self) -> None:
-        """Remove document directories older than TTL."""
-        if self.config.ttl_seconds <= 0:
-            return
-
-        now = time.time()
-        for doc_dir in self.config.root.iterdir():
-            if not doc_dir.is_dir():
-                continue
-            try:
-                created_at = doc_dir.stat().st_ctime
-            except OSError:
-                continue
-
-            if now - created_at >= self.config.ttl_seconds:
-                shutil.rmtree(doc_dir, ignore_errors=True)
-                logger.info(
-                    "Storage TTL eviction",
-                    path=str(doc_dir),
-                    age_seconds=int(now - created_at),
-                )
-
-    def _enforce_disk_quota(self) -> None:
-        """Ensure disk usage stays below the configured threshold."""
-        try:
-            usage = shutil.disk_usage(self.config.root)
-        except FileNotFoundError:
-            return
-
-        percent_used = (usage.used / usage.total) * 100 if usage.total else 0.0
-        if percent_used < self.config.max_disk_usage_percent:
-            return
-
-        logger.warning(
-            "Disk usage above threshold, evicting oldest documents",
-            percent_used=round(percent_used, 2),
-            threshold=self.config.max_disk_usage_percent,
-        )
-
-        doc_dirs = [
-            (dir_path.stat().st_mtime, dir_path)
-            for dir_path in self.config.root.iterdir()
-            if dir_path.is_dir()
-        ]
-        doc_dirs.sort()  # Oldest first
-
-        for _, dir_path in doc_dirs:
-            shutil.rmtree(dir_path, ignore_errors=True)
-            logger.info("Storage quota eviction", path=str(dir_path))
-            try:
-                usage = shutil.disk_usage(self.config.root)
-            except FileNotFoundError:
-                break
-            percent_used = (usage.used / usage.total) * 100 if usage.total else 0.0
-            if percent_used < self.config.max_disk_usage_percent:
-                break
+        """V2: No-op - kept for backwards compatibility."""
+        pass
 
     @staticmethod
     def _sanitize_filename(name: str) -> str:
         base = re.sub(r"[^A-Za-z0-9._-]", "_", name)
         return base or "document"
-
-    @staticmethod
-    def _safe_delete(path: Path) -> None:
-        try:
-            path.unlink(missing_ok=True)  # type: ignore[arg-type]
-        except Exception:
-            pass
-
-    @staticmethod
-    def _safe_remove_dir(path: Path) -> None:
-        try:
-            if path.exists() and not any(path.iterdir()):
-                path.rmdir()
-        except Exception:
-            pass
 
 
 storage = Storage()
