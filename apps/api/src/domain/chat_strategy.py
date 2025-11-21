@@ -19,6 +19,11 @@ from ..services.document_service import DocumentService
 from ..services.text_sanitizer import sanitize_response_content
 from ..services.saptiva_client import get_saptiva_client
 from ..services.context_manager import ContextManager
+from ..services.empty_response_handler import (
+    EmptyResponseHandler,
+    EmptyResponseScenario,
+    ensure_non_empty_content
+)
 from .chat_context import ChatContext, ChatProcessingResult, MessageMetadata
 
 
@@ -267,11 +272,39 @@ class SimpleChatStrategy(ChatStrategy):
                 f"Creé el artefacto **{fallback_title}** y lo guardé en el panel lateral."
             )
 
-        # Hard fallback: never return empty content to the UI
+        # ANTI-EMPTY-RESPONSE: Use centralized handler with contextual messages
+        # Determine the most likely scenario based on available context
         if not response_content:
-            response_content = (
-                "No recibí contenido del modelo. Intenta nuevamente o verifica que el "
-                "documento esté listo y accesible."
+            if doc_warnings:
+                scenario = EmptyResponseScenario.DOCS_PROCESSING
+            elif context.document_ids and len(context.document_ids) > 0:
+                scenario = EmptyResponseScenario.DOCS_NOT_FOUND
+            else:
+                scenario = EmptyResponseScenario.API_EMPTY_CONTENT
+
+            response_content = EmptyResponseHandler.get_fallback_message(
+                scenario=scenario,
+                context={
+                    "user_id": context.user_id,
+                    "session_id": context.session_id,
+                    "model": context.model,
+                    "has_documents": bool(context.document_ids),
+                    "document_count": len(context.document_ids) if context.document_ids else 0,
+                }
+            )
+
+            # Log the incident for monitoring
+            EmptyResponseHandler.log_empty_response_incident(
+                scenario=scenario,
+                context={
+                    "user_id": context.user_id,
+                    "session_id": context.session_id,
+                    "model": context.model,
+                    "has_documents": bool(context.document_ids),
+                    "document_count": len(context.document_ids) if context.document_ids else 0,
+                    "doc_warnings": doc_warnings if doc_warnings else None,
+                    "strategy": "simple"
+                }
             )
 
         # Sanitize response

@@ -571,6 +571,7 @@ class ApiClient {
     unknown
   > {
     const payload = { model: "Saptiva Turbo", ...request, stream: true };
+    // console.log("[🔍 PAYLOAD DEBUG] Request payload:", JSON.stringify(payload, null, 2));
     const token = authTokenGetter?.();
 
     // Build query params
@@ -585,6 +586,7 @@ class ApiClient {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Accept: "text/event-stream", // CRITICAL: Tell backend we want SSE format
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify(payload),
@@ -605,16 +607,46 @@ class ApiClient {
     const decoder = new TextDecoder();
     let buffer = "";
     let currentEvent = "";
+    let chunkCount = 0;
+
+    // console.log("[🔍 SSE DEBUG] Starting to read SSE stream");
 
     try {
       while (true) {
         const { done, value } = await reader.read();
 
         if (done) {
+          // console.log("[🔍 SSE DEBUG] Stream done - total chunks received:", chunkCount);
           break;
         }
 
-        buffer += decoder.decode(value, { stream: true });
+        const chunk = decoder.decode(value, { stream: true });
+        // console.log("[🔍 SSE DEBUG] Raw chunk received (length:", chunk.length, "):", chunk.substring(0, 200));
+        chunkCount++;
+        buffer += chunk;
+
+        // WORKAROUND: Detect if backend sent JSON response (non-streaming mode)
+        // When documents are attached, backend forces non-streaming and returns plain JSON
+        if (
+          chunkCount === 1 &&
+          chunk.trim().startsWith("{") &&
+          !chunk.includes("event:") &&
+          !chunk.includes("data:")
+        ) {
+          // console.log("[🔍 NON-STREAMING DETECTED] Backend sent JSON response, parsing as ChatResponse");
+          try {
+            const jsonResponse = JSON.parse(buffer);
+            // console.log("[🔍 NON-STREAMING] Parsed response:", jsonResponse);
+            yield { type: "done", data: jsonResponse as ChatResponse };
+            return; // Exit early - no more chunks expected
+          } catch (jsonError) {
+            console.error(
+              "[🔍 NON-STREAMING] Failed to parse JSON response:",
+              jsonError,
+            );
+          }
+        }
+
         const lines = buffer.split("\n");
         buffer = lines.pop() || ""; // Keep incomplete line in buffer
 
@@ -624,11 +656,13 @@ class ApiClient {
           // Parse SSE format: "event: chunk\ndata: {...}"
           if (line.startsWith("event:")) {
             currentEvent = line.slice(6).trim();
+            // console.log("[🔍 SSE DEBUG] Event type:", currentEvent);
             continue;
           }
 
           if (line.startsWith("data:")) {
             const dataStr = line.slice(5).trim();
+            // console.log("[🔍 SSE DEBUG] Data received for event:", currentEvent, "data length:", dataStr.length);
 
             if (dataStr === "[DONE]") {
               return;
@@ -639,19 +673,28 @@ class ApiClient {
 
               // Use the event type from the "event:" line
               if (currentEvent === "meta") {
+                // console.log("[🔍 SSE DEBUG] Yielding meta event");
                 yield { type: "meta", data: parsed };
               } else if (currentEvent === "chunk") {
+                // console.log("[🔍 SSE DEBUG] Yielding chunk event");
                 yield { type: "chunk", data: parsed };
               } else if (currentEvent === "done") {
+                // console.log("[🔍 SSE DEBUG] Yielding done event");
                 yield { type: "done", data: parsed as ChatResponse };
               } else if (currentEvent === "error") {
+                // console.log("[🔍 SSE DEBUG] Yielding error event");
                 yield { type: "error", data: parsed };
               }
 
               // Reset current event after processing
               currentEvent = "";
             } catch (parseError) {
-              console.error("Failed to parse SSE data:", parseError);
+              console.error(
+                "[🔍 SSE DEBUG] Failed to parse SSE data:",
+                parseError,
+                "data:",
+                dataStr.substring(0, 100),
+              );
             }
           }
         }
