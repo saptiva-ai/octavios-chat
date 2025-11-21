@@ -102,6 +102,7 @@ export interface ChatMessage {
   }[];
   metadata?: {
     research_task?: ResearchTask;
+    tool_invocations?: ToolInvocation[];
     [key: string]: any;
   };
   // Document review data (when kind === 'file-review')
@@ -140,6 +141,32 @@ export interface ChatSessionOptimistic extends ChatSession {
   tempId?: string; // Temporary ID before server reconciliation
   realId?: string; // Real ID after reconciliation (if different from id)
   pending?: boolean; // Indicates optimistic entry awaiting backend confirmation
+}
+
+export type ArtifactType = "markdown" | "code" | "graph";
+
+export interface ArtifactVersion {
+  version: number;
+  content: string | Record<string, any>;
+  created_at: string;
+}
+
+export interface ArtifactRecord {
+  id: string;
+  user_id: string;
+  chat_session_id?: string | null;
+  title: string;
+  type: ArtifactType;
+  content: string | Record<string, any>;
+  versions: ArtifactVersion[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ToolInvocation {
+  tool_name: string;
+  arguments?: Record<string, any>;
+  result?: { id: string; title?: string; type?: string };
 }
 
 // Research related types

@@ -18,6 +18,7 @@ from . import documents
 from . import review
 from . import files
 from . import features
+from . import artifacts
 
 __all__ = [
     "auth",
@@ -36,4 +37,5 @@ __all__ = [
     "review",
     "files",
     "features",
+    "artifacts",
 ]

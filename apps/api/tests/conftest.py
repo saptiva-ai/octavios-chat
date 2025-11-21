@@ -44,3 +44,146 @@ def reset_versioned_registry():
     versioned_registry._tools.clear()
     versioned_registry._latest.clear()
     versioned_registry._deprecated.clear()
+
+
+# ============================================================================
+# Resource Lifecycle Management Test Fixtures
+# ============================================================================
+
+from unittest.mock import MagicMock, AsyncMock
+from datetime import datetime, timedelta
+import hashlib
+import os
+
+# Set test environment
+os.environ.setdefault("ENVIRONMENT", "test")
+os.environ.setdefault("DEBUG", "true")
+
+
+@pytest.fixture
+def mock_redis_cache():
+    """Mock Redis cache for testing."""
+    mock_cache = MagicMock()
+    mock_cache.client = MagicMock()
+    mock_cache.client.info = AsyncMock(return_value={"used_memory": 50 * 1024 * 1024})
+    mock_cache.client.dbsize = AsyncMock(return_value=1000)
+    mock_cache.client.scan = AsyncMock(return_value=(0, []))
+    mock_cache.client.ttl = AsyncMock(return_value=3600)
+    mock_cache.client.delete = AsyncMock()
+    mock_cache.get = AsyncMock(return_value=None)
+    mock_cache.set = AsyncMock()
+    return mock_cache
+
+
+@pytest.fixture
+def mock_qdrant_service():
+    """Mock Qdrant service for testing."""
+    mock_service = MagicMock()
+    mock_collection_info = MagicMock()
+    mock_collection_info.points_count = 100
+    mock_service.client.get_collection = MagicMock(return_value=mock_collection_info)
+    mock_service.collection_name = "rag_documents"
+    mock_service.cleanup_old_sessions = MagicMock(return_value=50)
+    mock_service.search = MagicMock(return_value=[])
+    return mock_service
+
+
+@pytest.fixture
+def mock_minio_service():
+    """Mock MinIO service for testing."""
+    mock_service = AsyncMock()
+    mock_service.download_to_path = AsyncMock()
+    mock_service.delete_file = AsyncMock()
+    mock_service.upload_file = AsyncMock()
+    return mock_service
+
+
+@pytest.fixture
+def mock_file_storage():
+    """Mock file storage for testing."""
+    mock_storage = AsyncMock()
+    mock_storage.save_upload = AsyncMock(return_value=(
+        "uploads", "test_key", "test.pdf", 1000
+    ))
+    mock_storage.delete_file = AsyncMock()
+    return mock_storage
+
+
+@pytest.fixture
+def sample_document():
+    """Create sample document for testing."""
+    from src.models.document import Document, DocumentStatus
+
+    return Document(
+        filename="test_document.pdf",
+        content_type="application/pdf",
+        size_bytes=2048,
+        minio_key="uploads/test.pdf",
+        minio_bucket="uploads",
+        status=DocumentStatus.READY,
+        user_id="user123",
+        created_at=datetime.utcnow(),
+        metadata={"file_hash": "abc123def456"}
+    )
+
+
+@pytest.fixture
+def sample_old_document():
+    """Create old document for cleanup testing."""
+    from src.models.document import Document, DocumentStatus
+
+    return Document(
+        filename="old_document.pdf",
+        content_type="application/pdf",
+        size_bytes=1024,
+        minio_key="uploads/old.pdf",
+        minio_bucket="uploads",
+        status=DocumentStatus.READY,
+        user_id="user123",
+        created_at=datetime.utcnow() - timedelta(days=10),
+        metadata={"file_hash": "old123def456"}
+    )
+
+
+@pytest.fixture
+def sample_pdf_content():
+    """Sample PDF content for testing."""
+    return b"%PDF-1.4\n%Test PDF\nHello World\nThis is a test PDF content."
+
+
+@pytest.fixture
+def sample_file_hash(sample_pdf_content):
+    """Compute hash of sample PDF."""
+    return hashlib.sha256(sample_pdf_content).hexdigest()
+
+
+# Test data fixtures
+
+@pytest.fixture
+def test_pdfs_dir():
+    """Path to test PDFs directory."""
+    return Path(__file__).parent.parent.parent.parent / "packages/tests-e2e/tests/data/capital414"
+
+
+@pytest.fixture
+def capital414_uso_ia_pdf(test_pdfs_dir):
+    """Path to Capital414_usoIA.pdf test file."""
+    return test_pdfs_dir / "Capital414_usoIA.pdf"
+
+
+# Pytest configuration
+
+def pytest_configure(config):
+    """Configure pytest with custom markers."""
+    config.addinivalue_line(
+        "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
+    )
+    config.addinivalue_line(
+        "markers", "integration: marks tests as integration tests"
+    )
+    config.addinivalue_line(
+        "markers", "e2e: marks tests as end-to-end tests"
+    )
+    config.addinivalue_line(
+        "markers", "regression: marks tests as regression tests"
+    )

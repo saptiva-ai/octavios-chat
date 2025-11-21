@@ -41,6 +41,60 @@ from ....mcp.tools.get_segments import GetRelevantSegmentsTool
 logger = structlog.get_logger(__name__)
 
 
+def calculate_dynamic_max_tokens(
+    messages: list[dict],
+    model_limit: int = 8192,
+    min_tokens: int = 500,
+    max_tokens: int = 3000,
+    safety_margin: int = 100
+) -> int:
+    """
+    Calculate optimal max_tokens based on actual prompt size.
+
+    This prevents context length errors by dynamically adjusting the response
+    budget based on how much space the prompt (system + RAG context + user message) takes.
+
+    Args:
+        messages: List of message dicts with 'content' key
+        model_limit: Total token limit for the model (default: 8192 for Saptiva Turbo)
+        min_tokens: Minimum tokens to allow for response (default: 500)
+        max_tokens: Maximum tokens to allow for response (default: 3000)
+        safety_margin: Extra buffer to prevent edge cases (default: 100)
+
+    Returns:
+        Optimal max_tokens value that fits within model limits
+
+    Example:
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant..."},
+            {"role": "user", "content": "What is AI?"}
+        ]
+        max_tokens = calculate_dynamic_max_tokens(messages)
+        # Returns ~7500 if prompt is small, or ~1000 if prompt has large RAG context
+    """
+    # Estimate tokens from character count
+    # GPT-style tokenization: ~1 token per 4 characters (conservative estimate)
+    total_chars = sum(len(str(msg.get("content", ""))) for msg in messages)
+    estimated_prompt_tokens = total_chars // 4
+
+    # Calculate available space for response
+    available_tokens = model_limit - estimated_prompt_tokens - safety_margin
+
+    # Clamp to reasonable bounds
+    optimal_tokens = max(min_tokens, min(available_tokens, max_tokens))
+
+    logger.debug(
+        "Calculated dynamic max_tokens",
+        prompt_chars=total_chars,
+        estimated_prompt_tokens=estimated_prompt_tokens,
+        available_tokens=available_tokens,
+        optimal_max_tokens=optimal_tokens,
+        model_limit=model_limit
+    )
+
+    return optimal_tokens
+
+
 class StreamingHandler:
     """
     Handles streaming SSE responses for chat messages.
@@ -57,6 +111,26 @@ class StreamingHandler:
             settings: Application settings
         """
         self.settings = settings
+
+    @staticmethod
+    def _build_tools_markdown(has_documents: bool) -> Optional[str]:
+        """
+        Build a minimal markdown section describing available tools.
+
+        Today we only expose get_relevant_segments when there are documents
+        so the LLM knows it can retrieve context for RAG.
+        """
+        if not has_documents:
+            return None
+
+        return (
+            "* **get_relevant_segments** — Retrieve relevant document segments for RAG\n"
+            "  - Parameters: conversation_id (string), question (string), max_segments (int)\n"
+            "  - Use when: User asks about uploaded documents\n"
+            "  - conversation_id: use the active chat/session id\n"
+            "  - question: user question as-is\n"
+            "  - max_segments: default 2"
+        )
 
     async def handle_stream(
         self,
@@ -110,12 +184,29 @@ class StreamingHandler:
                 (request.file_ids or []) + (request.document_ids or [])
             )
 
+            # DEBUG: Log session attached_file_ids for RAG troubleshooting
+            logger.info(
+                "🔍 [RAG DEBUG] Session file context",
+                session_id=chat_session.id,
+                session_attached_file_ids=getattr(chat_session, 'attached_file_ids', []),
+                request_file_ids=request_file_ids,
+                timestamp=context.timestamp
+            )
+
             current_file_ids = await SessionContextManager.prepare_session_context(
                 chat_session=chat_session,
                 request_file_ids=request_file_ids,
                 user_id=user_id,
                 redis_cache=cache,
                 request_id=context.request_id
+            )
+
+            # DEBUG: Log resolved file IDs
+            logger.info(
+                "✅ [RAG DEBUG] Resolved file IDs",
+                session_id=chat_session.id,
+                current_file_ids=current_file_ids,
+                will_use_rag=bool(current_file_ids)
             )
 
             # Update context with resolved file IDs
@@ -169,6 +260,42 @@ class StreamingHandler:
                             delay_ms=100,
                             timestamp=datetime.utcnow().isoformat()
                         )
+
+                        # ANTI-HALLUCINATION FIX: Wait for documents to be READY
+                        # Poll until all documents are processed (max 30 seconds)
+                        from ....models.document import Document, DocumentStatus
+
+                        max_wait_seconds = 30
+                        poll_interval = 0.5  # 500ms between checks
+                        elapsed = 0
+
+                        while elapsed < max_wait_seconds:
+                            docs_ready = True
+                            for doc_id in current_file_ids:
+                                doc = await Document.get(doc_id)
+                                if doc and doc.status != DocumentStatus.READY:
+                                    docs_ready = False
+                                    break
+
+                            if docs_ready:
+                                logger.info(
+                                    "✅ [RAG ANTI-HALLUCINATION] All documents READY",
+                                    session_id=chat_session.id,
+                                    elapsed_seconds=round(elapsed, 2),
+                                    file_count=len(current_file_ids)
+                                )
+                                break
+
+                            await asyncio.sleep(poll_interval)
+                            elapsed += poll_interval
+
+                        if elapsed >= max_wait_seconds:
+                            logger.warning(
+                                "⚠️ [RAG ANTI-HALLUCINATION] Timeout waiting for documents",
+                                session_id=chat_session.id,
+                                timeout_seconds=max_wait_seconds,
+                                file_count=len(current_file_ids)
+                            )
 
                         # Optionally: Yield SSE event to inform user
                         # yield {
@@ -550,7 +677,21 @@ class StreamingHandler:
             document_context = None
             doc_warnings = []
 
+            # DEBUG: Log before RAG retrieval
+            logger.info(
+                "🔍 [RAG DEBUG] Checking if should retrieve segments",
+                has_document_ids=bool(context.document_ids),
+                document_ids_count=len(context.document_ids) if context.document_ids else 0,
+                document_ids=context.document_ids
+            )
+
             if context.document_ids:
+                logger.info(
+                    "🚀 [RAG DEBUG] Starting GetRelevantSegmentsTool",
+                    conversation_id=context.session_id,
+                    question_preview=context.message[:100]
+                )
+
                 try:
                     # Use new GetRelevantSegmentsTool for semantic retrieval
                     get_segments_tool = GetRelevantSegmentsTool()
@@ -558,7 +699,7 @@ class StreamingHandler:
                         payload={
                             "conversation_id": context.session_id,
                             "question": context.message,
-                            "max_segments": 5
+                            "max_segments": 2  # Reduced for token budget optimization
                         }
                     )
 
@@ -616,10 +757,17 @@ class StreamingHandler:
             from ....core.prompt_registry import get_prompt_registry
             prompt_registry = get_prompt_registry()
 
+            # Build tools markdown when documents are available so the LLM knows about RAG tool
+            has_docs_available = bool(
+                document_context
+                or context.document_ids
+                or (locals().get("current_file_ids") and len(locals().get("current_file_ids")) > 0)
+            )
+
             # Resolve system prompt for this model
             system_prompt, model_params = prompt_registry.resolve(
                 model=context.model,
-                tools_markdown=None,  # Tools are handled separately
+                tools_markdown=self._build_tools_markdown(has_documents=has_docs_available),
                 channel="chat"
             )
 
@@ -669,37 +817,140 @@ class StreamingHandler:
 
                     # FIX-001: Use resolved system_prompt (not hardcoded system_message)
                     # Use model_params for temperature/max_tokens (registry overrides context)
-                    async for chunk in saptiva_client.chat_completion_stream(
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": context.message}
-                        ],
-                        model=context.model,
-                        temperature=model_params.get("temperature", context.temperature),
-                        max_tokens=model_params.get("max_tokens", context.max_tokens)
-                    ):
-                        # Extract content from chunk
-                        # choices is a List[Dict] according to SaptivaStreamChunk model
-                        content = ""
-                        if hasattr(chunk, 'choices') and chunk.choices:
-                            choice = chunk.choices[0]  # This is a dict
-                            if isinstance(choice, dict):
-                                delta = choice.get('delta', {})
-                                if isinstance(delta, dict):
-                                    content = delta.get('content', '')
-                            # Fallback for object-style access (shouldn't happen)
-                            elif hasattr(choice, 'delta'):
-                                delta = choice.delta
-                                if hasattr(delta, 'content'):
-                                    content = delta.content or ''
 
-                        if content:
-                            # Backpressure: this blocks if queue is full (maxsize=10)
-                            await event_queue.put({
-                                "event": "chunk",
-                                "data": json.dumps({"content": content})
-                            })
-                            full_response += content
+                    # Prepare messages for token calculation
+                    messages_for_api = [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": context.message}
+                    ]
+
+                    # Calculate dynamic max_tokens based on actual prompt size
+                    dynamic_max_tokens = calculate_dynamic_max_tokens(
+                        messages=messages_for_api,
+                        model_limit=8192,  # Saptiva Turbo limit
+                        min_tokens=500,
+                        max_tokens=model_params.get("max_tokens", 3000)
+                    )
+
+                    # Estimate prompt size to detect potential overflows
+                    total_prompt_chars = sum(len(str(msg.get("content", ""))) for msg in messages_for_api)
+                    estimated_prompt_tokens = total_prompt_chars // 4
+
+                    logger.info(
+                        "Token budget calculation",
+                        prompt_chars=total_prompt_chars,
+                        estimated_prompt_tokens=estimated_prompt_tokens,
+                        dynamic_max_tokens=dynamic_max_tokens,
+                        total_estimated=estimated_prompt_tokens + dynamic_max_tokens,
+                        model_limit=8192,
+                        will_exceed=estimated_prompt_tokens + dynamic_max_tokens > 8192
+                    )
+
+                    # If prompt is too large, reject or truncate
+                    if estimated_prompt_tokens > 7500:
+                        logger.error(
+                            "⚠️ Prompt exceeds safe token limit - request will likely fail",
+                            estimated_prompt_tokens=estimated_prompt_tokens,
+                            model_limit=8192
+                        )
+
+                    # Use non-streaming for RAG to avoid RemoteProtocolError
+                    has_rag_context = context.document_ids and len(context.document_ids) > 0
+
+                    if has_rag_context:
+                        # Non-streaming mode for RAG (more stable)
+                        logger.info(
+                            "Using non-streaming mode for RAG",
+                            has_documents=True,
+                            document_count=len(context.document_ids)
+                        )
+
+                        try:
+                            response = await saptiva_client.chat_completion(
+                                messages=messages_for_api,
+                                model=context.model,
+                                temperature=model_params.get("temperature", context.temperature),
+                                max_tokens=dynamic_max_tokens
+                            )
+                        except Exception as e:
+                            logger.error(
+                                "Non-streaming API call failed",
+                                error=str(e),
+                                error_type=type(e).__name__
+                            )
+                            raise
+
+                        # Extract full response
+                        if response and response.choices and len(response.choices) > 0:
+                            choice = response.choices[0]  # This is a Dict, not an object
+
+                            # Access dict keys instead of attributes
+                            if isinstance(choice, dict):
+                                message = choice.get('message', {})
+                                response_content = message.get('content', '') if isinstance(message, dict) else ''
+                            else:
+                                # Fallback for object-style access (shouldn't happen)
+                                message = getattr(choice, 'message', None)
+                                response_content = getattr(message, 'content', '') if message else ''
+
+                            response_content = response_content or ""
+
+                            # Update the nonlocal full_response variable
+                            full_response = response_content
+
+                            logger.info(
+                                "Non-streaming response extracted",
+                                response_length=len(full_response),
+                                response_preview=full_response[:100] if full_response else "(empty)",
+                                choice_keys=list(choice.keys()) if isinstance(choice, dict) else "not_dict"
+                            )
+
+                            # Simulate streaming by sending in chunks
+                            chunk_size = 50  # Characters per chunk
+                            for i in range(0, len(full_response), chunk_size):
+                                chunk_text = full_response[i:i + chunk_size]
+                                await event_queue.put({
+                                    "event": "chunk",
+                                    "data": json.dumps({"content": chunk_text})
+                                })
+                        else:
+                            logger.error(
+                                "Non-streaming response malformed",
+                                response_has_choices=bool(response and response.choices),
+                                choices_length=len(response.choices) if response and response.choices else 0
+                            )
+                            raise ValueError("SAPTIVA API returned response without choices")
+
+                    else:
+                        # Streaming mode for normal chat (without RAG)
+                        async for chunk in saptiva_client.chat_completion_stream(
+                            messages=messages_for_api,
+                            model=context.model,
+                            temperature=model_params.get("temperature", context.temperature),
+                            max_tokens=dynamic_max_tokens
+                        ):
+                            # Extract content from chunk
+                            # choices is a List[Dict] according to SaptivaStreamChunk model
+                            content = ""
+                            if hasattr(chunk, 'choices') and chunk.choices:
+                                choice = chunk.choices[0]  # This is a dict
+                                if isinstance(choice, dict):
+                                    delta = choice.get('delta', {})
+                                    if isinstance(delta, dict):
+                                        content = delta.get('content', '')
+                                # Fallback for object-style access (shouldn't happen)
+                                elif hasattr(choice, 'delta'):
+                                    delta = choice.delta
+                                    if hasattr(delta, 'content'):
+                                        content = delta.content or ''
+
+                            if content:
+                                # Backpressure: this blocks if queue is full (maxsize=10)
+                                await event_queue.put({
+                                    "event": "chunk",
+                                    "data": json.dumps({"content": content})
+                                })
+                                full_response += content
 
                     # Signal end of stream
                     await event_queue.put(None)

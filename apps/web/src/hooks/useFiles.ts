@@ -207,7 +207,8 @@ export function useFiles(chatId?: string): UseFilesReturn {
 
       const traceId = crypto.randomUUID();
       const token = apiClient.getToken();
-      const eventSourceUrl = `/api/files/events/${fileId}?t=${encodeURIComponent(traceId)}&token=${encodeURIComponent(token)}`;
+      const tokenParam = token ? encodeURIComponent(token) : "";
+      const eventSourceUrl = `/api/files/events/${fileId}?t=${encodeURIComponent(traceId)}&token=${tokenParam}`;
 
       logDebug("[useFiles] Connecting to SSE", {
         file_id: fileId,
@@ -543,11 +544,14 @@ export function useFiles(chatId?: string): UseFilesReturn {
         // Remove temporary attachment and add real one with server-assigned file_id
         filesStore.removeFromChat(targetChatId, tempFileId);
 
-        logDebug("[useFiles] Removed temporary attachment after server response", {
-          chatId: targetChatId,
-          tempFileId,
-          realFileId: ingestResponse.file_id,
-        });
+        logDebug(
+          "[useFiles] Removed temporary attachment after server response",
+          {
+            chatId: targetChatId,
+            tempFileId,
+            realFileId: ingestResponse.file_id,
+          },
+        );
 
         // If already READY (cached or instant processing), return immediately
         if (ingestResponse.status === "READY") {
