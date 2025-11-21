@@ -9,9 +9,11 @@ Provides:
 """
 
 import pytest
-import psutil
 import os
 from typing import Dict
+
+# psutil is optional; skip performance tests if not installed
+psutil = pytest.importorskip("psutil")
 
 # Register custom markers
 def pytest_configure(config):

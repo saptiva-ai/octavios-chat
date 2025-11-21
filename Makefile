@@ -309,27 +309,10 @@ db-restore:
 
 create-demo-user:
 	@echo "📝 Creating demo user..."
-	@$(COMPOSE) exec -T api python -c " \
-import asyncio; \
-from motor.motor_asyncio import AsyncIOMotorClient; \
-from passlib.hash import argon2; \
-import os; \
-async def create(): \
-    client = AsyncIOMotorClient(os.getenv('MONGODB_URI', 'mongodb://mongodb:27017')); \
-    db = client[os.getenv('MONGODB_DB_NAME', 'octavios_chat')]; \
-    email = 'demo@example.com'; \
-    password = 'Demo1234'; \
-    existing = await db.users.find_one({'email': email}); \
-    if existing: \
-        print(f'✅ Demo user already exists: {email}'); \
-        print(f'   Password: {password}'); \
-        return; \
-    user_doc = {'email': email, 'hashed_password': argon2.hash(password), 'is_active': True, 'is_superuser': False}; \
-    await db.users.insert_one(user_doc); \
-    print(f'✅ Demo user created!'); \
-    print(f'   Email: {email}'); \
-    print(f'   Password: {password}'); \
-asyncio.run(create())"
+	@$(COMPOSE) exec -T \
+		-e MONGODB_URI="$(MONGODB_URL)" \
+		-e MONGODB_DB_NAME="$(MONGODB_DATABASE)" \
+		api python scripts/create_demo_user.py
 
 verify:
 	@$(MAKE) health

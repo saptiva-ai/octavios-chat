@@ -7,6 +7,7 @@ pytest-cov==7.0.0
 pytest-asyncio==1.2.0
 pytest-mock==3.14.0
 pytest-xdist==3.6.1  # Parallel test execution
+pytest-benchmark==4.0.0
 
 # HTTP Testing
 httpx==0.28.1  # Async HTTP client for testing
@@ -34,3 +35,4 @@ freezegun==1.5.1
 
 # Additional utilities
 python-dotenv==1.0.1  # For loading .env in tests
+psutil==6.1.0  # Performance profiling for benchmarks

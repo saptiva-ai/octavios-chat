@@ -291,9 +291,13 @@ class ChatService:
                     "content": system_prompt
                 }
 
-                # Insert after the main system prompt (usually first message)
+                # Prefer to enrich the existing system prompt so downstream
+                # callers (and tests) see the document context in the first
+                # system message.
                 if payload_data["messages"] and payload_data["messages"][0]["role"] == "system":
-                    payload_data["messages"].insert(1, system_message)
+                    payload_data["messages"][0]["content"] = (
+                        f"{payload_data['messages'][0]['content']}\n\n{system_prompt}"
+                    )
                 else:
                     payload_data["messages"].insert(0, system_message)
 
