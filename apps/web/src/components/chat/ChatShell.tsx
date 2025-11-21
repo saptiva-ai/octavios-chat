@@ -428,47 +428,39 @@ function LegacyChatShell({
 
       {/* Chat area - Following saptiva-chat-fixes-v3.yaml structure */}
       <main className="flex-1 min-w-0 flex flex-col">
-        {/* Mobile sidebar trigger - solo visible en mobile, nunca en desktop */}
-        <div className="absolute left-4 top-4 z-30 block lg:hidden">
-          <button
-            type="button"
-            onClick={handleRequestSidebar}
-            className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-surface text-text shadow-card transition hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-            aria-label="Mostrar conversaciones"
-          >
-            <svg
-              className="h-5 w-5"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-            >
-              <path d="M4 6h16" strokeWidth="1.8" strokeLinecap="round" />
-              <path d="M4 12h12" strokeWidth="1.8" strokeLinecap="round" />
-              <path d="M4 18h8" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
-
         {/* Header con selector de modelo - UX-001 */}
-        <header
-          className={cn(
-            "sticky top-0 z-20 shrink-0 border-b border-border/30 bg-surface/95 backdrop-blur px-4 py-3 transition-all duration-200",
-            isDesktopSidebarCollapsed && "lg:pl-20",
-          )}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+        <header className="sticky top-0 z-20 shrink-0 border-b border-border/30 bg-surface/95 backdrop-blur px-4 py-3 transition-all duration-200">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleRequestSidebar}
+                className="m-0 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-border bg-surface text-text shadow-card transition hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 lg:hidden"
+                aria-label="Mostrar conversaciones"
+              >
+                <svg
+                  className="h-[18px] w-[18px]"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                >
+                  <path d="M4 6h16" strokeWidth="1.8" strokeLinecap="round" />
+                  <path d="M4 12h12" strokeWidth="1.8" strokeLinecap="round" />
+                  <path d="M4 18h8" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </button>
+
               {/* Model Selector - header-left según UX-001 */}
               {selectedModel && onModelChange && (
                 <ModelSelector
                   models={models}
                   selectedModel={selectedModel}
                   onModelChange={onModelChange}
-                  className=""
+                  className="max-w-full whitespace-nowrap"
                 />
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="ml-auto flex items-center gap-2">
               <Image
                 src="/Saptiva_AI_logo_new.webp"
                 alt="Saptiva AI"
