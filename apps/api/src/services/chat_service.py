@@ -115,10 +115,20 @@ class ChatService:
             # Get existing session
             chat_session = await ChatSessionModel.get(chat_id)
             if not chat_session:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Chat session not found"
+                # Fallback: create a new session if the provided chat_id is stale
+                logger.warning(
+                    "Chat session not found, creating a new one instead",
+                    chat_id=chat_id,
+                    user_id=user_id
                 )
+                title = first_message[:50] + "..." if len(first_message) > 50 else first_message
+                chat_session = ChatSessionModel(
+                    title=title,
+                    user_id=user_id,
+                    tools_enabled=tools_map
+                )
+                await chat_session.insert()
+                return chat_session
 
             if chat_session.user_id != user_id:
                 raise HTTPException(
