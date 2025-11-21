@@ -1050,7 +1050,9 @@ class StreamingHandler:
                     "event": "done",
                     "data": json.dumps({
                         "message_id": str(assistant_message.id),
-                        "chat_id": str(chat_session.id)
+                        "chat_id": str(chat_session.id),
+                        # Include final content as a safety net for UIs that rely on the done payload
+                        "content": full_response
                     })
                 }
 
