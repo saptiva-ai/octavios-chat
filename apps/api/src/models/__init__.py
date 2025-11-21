@@ -16,6 +16,7 @@ from .document import Document as DocumentModel
 from .review_job import ReviewJob
 from .validation_report import ValidationReport
 from .password_reset import PasswordResetToken
+from .artifact import Artifact
 
 # List of all document models for Beanie initialization
 def get_document_models() -> List[Type[BeanieDocument]]:
@@ -34,6 +35,7 @@ def get_document_models() -> List[Type[BeanieDocument]]:
         ReviewJob,
         ValidationReport,
         PasswordResetToken,
+        Artifact,
     ]
 
 __all__ = [
@@ -49,6 +51,7 @@ __all__ = [
     "HistoryEventFactory",
     "HistoryQuery",
     "DocumentModel",
+    "Artifact",
     "ReviewJob",
     "ValidationReport",
     "PasswordResetToken",

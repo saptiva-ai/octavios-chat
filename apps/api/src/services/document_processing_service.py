@@ -18,13 +18,17 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from pathlib import Path
+import tempfile
 import structlog
 
 from ..models.chat import ChatSession
 from ..models.document import Document, PageContent
 from ..models.document_state import ProcessingStatus
 from ..services.document_extraction import extract_text_from_file
+from ..services.minio_service import minio_service
 from ..core.redis_cache import get_redis_cache
+from ..services.embedding_service import get_embedding_service
+from ..services.qdrant_service import get_qdrant_service
 
 logger = structlog.get_logger(__name__)
 
@@ -129,7 +133,7 @@ class SentenceBasedSegmenter(ITextSegmenter):
         """Segment text using sentence boundaries."""
         # TODO: Implement with nltk.sent_tokenize or spacy
         # For now, fallback to word-based
-        fallback = WordBasedSegmenter(chunk_size=1000)
+        fallback = WordBasedSegmenter(chunk_size=400)
         return fallback.segment(text)
 
 
@@ -159,7 +163,7 @@ class DocumentProcessingService:
         Args:
             segmenter: Text segmentation strategy (defaults to WordBasedSegmenter)
         """
-        self.segmenter = segmenter or WordBasedSegmenter(chunk_size=1000, overlap_ratio=0.25)
+        self.segmenter = segmenter or WordBasedSegmenter(chunk_size=400, overlap_ratio=0.25)
 
     async def process_document(
         self,
@@ -206,11 +210,18 @@ class DocumentProcessingService:
             # Step 3: Extract text
             extracted_text = await self._extract_text(document)
 
-            # Step 4: Segment text
-            segments = self._segment_text(extracted_text)
+            # Step 4: Chunk text and generate embeddings (NEW: RAG pipeline)
+            chunks_with_embeddings = await self._chunk_and_embed(
+                extracted_text,
+                document.filename or "unknown.pdf"
+            )
 
-            # Step 5: Cache segments
-            await self._cache_segments(doc_id, segments)
+            # Step 5: Store in Qdrant (NEW: replaces Redis cache)
+            await self._store_in_qdrant(
+                conversation_id=conversation_id,
+                doc_id=doc_id,
+                chunks=chunks_with_embeddings
+            )
 
             # Step 6: Mark as ready (update Document model directly)
             document.status = "ready"
@@ -220,14 +231,14 @@ class DocumentProcessingService:
                 "🎯 [RAG DEBUG] Document marked as READY",
                 doc_id=str(document.id),
                 status=document.status,
-                segments=len(segments),
+                chunks=len(chunks_with_embeddings),
                 timestamp=datetime.utcnow().isoformat()
             )
 
             logger.info(
                 "✅ [RAG DEBUG] Document processing complete",
                 doc_id=doc_id,
-                segments=len(segments),
+                chunks=len(chunks_with_embeddings),
                 timestamp=datetime.utcnow().isoformat()
             )
 
@@ -242,6 +253,81 @@ class DocumentProcessingService:
             )
 
             await self._mark_failed(conversation_id, doc_id, str(e))
+            raise
+
+    async def process_document_standalone(
+        self,
+        doc_id: str
+    ) -> None:
+        """
+        Process document without requiring a session (for upload-time processing).
+
+        Chunks and embeds the document, storing in Qdrant with doc_id only.
+        Session association happens later when document is used in chat.
+
+        Args:
+            doc_id: Document ID to process
+
+        Raises:
+            ValueError: If document not found
+            Exception: On processing errors
+        """
+        logger.info(
+            "🚀 [RAG DEBUG] Starting standalone document processing",
+            doc_id=doc_id,
+            timestamp=datetime.utcnow().isoformat()
+        )
+
+        try:
+            # Step 1: Get document
+            from ..models.document import Document
+            document = await Document.get(doc_id)
+            if not document:
+                raise ValueError(f"Document {doc_id} not found")
+
+            # Step 2: Extract text from document pages or re-extract
+            if document.pages and len(document.pages) > 0:
+                # Combine text from all pages
+                extracted_text = "\n\n".join([page.text_md for page in document.pages])
+                logger.info(
+                    "Using extracted text from document pages",
+                    doc_id=doc_id,
+                    text_length=len(extracted_text),
+                    pages=len(document.pages)
+                )
+            else:
+                # No pages yet, extract text
+                logger.info("No pages found, extracting text...", doc_id=doc_id)
+                extracted_text = await self._extract_text(document)
+
+            # Step 3: Chunk text and generate embeddings
+            chunks_with_embeddings = await self._chunk_and_embed(
+                extracted_text,
+                document.filename or "unknown.pdf"
+            )
+
+            # Step 4: Store in Qdrant (use doc_id as session_id for standalone processing)
+            await self._store_in_qdrant(
+                conversation_id=f"upload_{doc_id}",  # Temporary session ID
+                doc_id=doc_id,
+                chunks=chunks_with_embeddings
+            )
+
+            logger.info(
+                "✅ [RAG DEBUG] Standalone document processing complete",
+                doc_id=doc_id,
+                chunks=len(chunks_with_embeddings),
+                timestamp=datetime.utcnow().isoformat()
+            )
+
+        except Exception as e:
+            logger.error(
+                "Standalone document processing failed",
+                doc_id=doc_id,
+                error=str(e),
+                exc_type=type(e).__name__,
+                exc_info=True
+            )
             raise
 
     async def reprocess_document(
@@ -319,59 +405,143 @@ class DocumentProcessingService:
         return document
 
     async def _extract_text(self, document: Document) -> str:
-        """Extract text from document using multi-tier strategy."""
-        pages: List[PageContent] = await extract_text_from_file(
-            file_path=Path(document.file_path),
-            content_type=document.content_type
+        """
+        Extract text from document using multi-tier strategy.
+
+        Post-MinIO Migration:
+        - Downloads file from MinIO to temp location
+        - Extracts text from temp file
+        - Cleans up temp file after extraction
+        """
+        # Download from MinIO to temporary file
+        suffix = Path(document.filename).suffix if document.filename else ".pdf"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp_path = Path(tmp.name)
+
+        try:
+            # Download from MinIO
+            logger.info(
+                "📥 Downloading file from MinIO for text extraction",
+                doc_id=str(document.id),
+                minio_bucket=document.minio_bucket,
+                minio_key=document.minio_key,
+                filename=document.filename,
+                temp_path=str(tmp_path)
+            )
+
+            await minio_service.download_to_path(
+                document.minio_bucket,
+                document.minio_key,
+                str(tmp_path)
+            )
+
+            # Extract text from temp file
+            pages: List[PageContent] = await extract_text_from_file(
+                file_path=tmp_path,
+                content_type=document.content_type
+            )
+
+            # Combine all pages
+            extracted_text = "\n\n".join(page.text_md for page in pages if page.text_md)
+
+            if not extracted_text or not extracted_text.strip():
+                raise ValueError("Text extraction returned empty result")
+
+            logger.info(
+                "📄 [RAG DEBUG] Text extraction complete",
+                doc_id=str(document.id),
+                text_length=len(extracted_text),
+                pages=len(pages),
+                filename=document.filename,
+                timestamp=datetime.utcnow().isoformat()
+            )
+
+            return extracted_text
+
+        finally:
+            # Clean up temp file
+            tmp_path.unlink(missing_ok=True)
+            logger.debug(
+                "🗑️ Cleaned up temp file after extraction",
+                temp_path=str(tmp_path),
+                doc_id=str(document.id)
+            )
+
+    async def _chunk_and_embed(
+        self,
+        text: str,
+        filename: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Chunk text and generate embeddings using EmbeddingService.
+
+        NEW: RAG pipeline using sentence-transformers for semantic search.
+        Replaces word-based segmentation with sliding window chunking + embeddings.
+
+        Args:
+            text: Extracted document text
+            filename: Document filename (for metadata)
+
+        Returns:
+            List of chunks with embeddings, ready for Qdrant storage
+        """
+        embedding_service = get_embedding_service()
+
+        # Chunk and embed in one operation
+        chunks_with_embeddings = embedding_service.chunk_and_embed(
+            text=text,
+            page=0,  # Combined all pages
+            metadata={"filename": filename},
+            batch_size=32
         )
 
-        # Combine all pages
-        extracted_text = "\n\n".join(page.text_md for page in pages if page.text_md)
-
-        if not extracted_text or not extracted_text.strip():
-            raise ValueError("Text extraction returned empty result")
-
         logger.info(
-            "📄 [RAG DEBUG] Text extraction complete",
-            doc_id=str(document.id),
-            text_length=len(extracted_text),
-            pages=len(pages),
-            filename=document.filename,
+            "🧩 [RAG DEBUG] Text chunked and embedded",
+            chunks_count=len(chunks_with_embeddings),
+            embedding_dim=len(chunks_with_embeddings[0]["embedding"]) if chunks_with_embeddings else 0,
+            filename=filename,
+            text_length=len(text),
             timestamp=datetime.utcnow().isoformat()
         )
 
-        return extracted_text
+        return chunks_with_embeddings
 
-    def _segment_text(self, text: str) -> List[Dict[str, Any]]:
-        """Segment text using configured strategy."""
-        segments = self.segmenter.segment(text)
-
-        logger.info("Text segmented", segments_count=len(segments))
-
-        return segments
-
-    async def _cache_segments(self, doc_id: str, segments: List[Dict[str, Any]]) -> None:
+    async def _store_in_qdrant(
+        self,
+        conversation_id: str,
+        doc_id: str,
+        chunks: List[Dict[str, Any]]
+    ) -> None:
         """
-        Cache segments in Redis.
+        Store chunks with embeddings in Qdrant vector database.
+
+        NEW: Replaces Redis cache with Qdrant for semantic search.
 
         TTL Strategy:
-        - 7 days (604800s) for production (Capital 414 use case)
-        - Corporate documents are queried repeatedly over days/weeks
-        - Reduces PDF reprocessing overhead (pypdf/OCR)
-        - Acceptable memory usage: ~5MB per doc × 100 docs = 500MB max
-        """
-        cache = await get_redis_cache()
-        cache_key = f"doc_segments:{doc_id}"
+        - 24-hour session lifetime (configured in Qdrant cleanup job)
+        - Automatic cleanup via qdrant_service.cleanup_expired_sessions()
+        - Session isolation via mandatory session_id filter
 
-        # Capital 414: 7-day TTL for corporate document cache
-        await cache.set(cache_key, segments, ttl=604800)  # 7 days (optimized for reuse)
+        Args:
+            conversation_id: Session ID (for isolation)
+            doc_id: Document ID
+            chunks: Chunks with embeddings from EmbeddingService
+        """
+        qdrant_service = get_qdrant_service()
+
+        # Upsert chunks to Qdrant
+        points_count = qdrant_service.upsert_chunks(
+            session_id=conversation_id,
+            document_id=doc_id,
+            chunks=chunks
+        )
 
         logger.info(
-            "💾 [RAG DEBUG] Segments cached in Redis",
+            "💾 [RAG DEBUG] Chunks stored in Qdrant",
             doc_id=doc_id,
-            cache_key=cache_key,
-            segments=len(segments),
-            ttl_days=7,
+            session_id=conversation_id,
+            points_upserted=points_count,
+            chunks=len(chunks),
             timestamp=datetime.utcnow().isoformat()
         )
 
@@ -440,7 +610,7 @@ def create_document_processing_service(
         Configured DocumentProcessingService instance
     """
     if segmentation_strategy == "word_based":
-        segmenter = WordBasedSegmenter(chunk_size=1000, overlap_ratio=0.25)
+        segmenter = WordBasedSegmenter(chunk_size=400, overlap_ratio=0.25)
     elif segmentation_strategy == "sentence_based":
         segmenter = SentenceBasedSegmenter(sentences_per_chunk=10)
     else:

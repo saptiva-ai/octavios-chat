@@ -54,19 +54,36 @@ export function PreviewAttachment({
   const isFailed = status === "FAILED";
   const isReady = status === "READY";
 
-  // Debug: Log prop values on render
+  // Debug: Log prop values on render (disabled in production)
   React.useEffect(() => {
-    console.log("[PreviewAttachment] Rendered with props", {
-      filename,
-      mimetype,
-      status,
-      file_id: attachment.file_id,
-      isProcessing,
-      isFailed,
-      isReady,
-      shouldShowFallback: isProcessing || isFailed || !((mimetype?.startsWith("image/") || mimetype?.includes("pdf")) && status === "READY"),
-    });
-  }, [filename, mimetype, status, attachment.file_id, isProcessing, isFailed, isReady]);
+    if (process.env.NODE_ENV === "development") {
+      // eslint-disable-next-line no-console
+      console.log("[PreviewAttachment] Rendered with props", {
+        filename,
+        mimetype,
+        status,
+        file_id: attachment.file_id,
+        isProcessing,
+        isFailed,
+        isReady,
+        shouldShowFallback:
+          isProcessing ||
+          isFailed ||
+          !(
+            (mimetype?.startsWith("image/") || mimetype?.includes("pdf")) &&
+            status === "READY"
+          ),
+      });
+    }
+  }, [
+    filename,
+    mimetype,
+    status,
+    attachment.file_id,
+    isProcessing,
+    isFailed,
+    isReady,
+  ]);
 
   // Determinar si es imagen basado en MIME type
   const isImage = mimetype?.startsWith("image/");

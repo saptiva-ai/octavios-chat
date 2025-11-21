@@ -5,19 +5,25 @@ Extracts business logic from chat router for better separation of concerns.
 Handles chat session management, message processing, and AI response generation.
 """
 
+import json
 import time
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
 import structlog
 from fastapi import HTTPException, status
 
 from ..core.config import Settings
 from ..core.redis_cache import get_redis_cache
-from ..models.chat import ChatSession as ChatSessionModel, ChatMessage as ChatMessageModel, MessageRole
+from ..core.telemetry import trace_span
+from ..models.artifact import Artifact, ArtifactType
+from ..models.chat import (
+    ChatMessage as ChatMessageModel,
+    ChatSession as ChatSessionModel,
+    MessageRole,
+)
 from ..services.saptiva_client import SaptivaClient, build_payload
 from ..services.tools import normalize_tools_state
-from ..core.telemetry import trace_span
 
 logger = structlog.get_logger(__name__)
 
@@ -28,6 +34,58 @@ class ChatService:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.saptiva_client = SaptivaClient()
+
+    async def _handle_tool_invocation(
+        self,
+        name: str,
+        args: Dict[str, Any],
+        user_id: str,
+        chat_id: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Execute supported tool calls emitted by the LLM.
+
+        Currently supports:
+            - create_artifact: persists an artifact and returns minimal metadata.
+        """
+        if name != "create_artifact":
+            return None
+
+        try:
+            title = args.get("title") or "Documento sin título"
+            raw_type = args.get("type") or ArtifactType.MARKDOWN.value
+            try:
+                artifact_type = ArtifactType(raw_type)
+            except ValueError:
+                artifact_type = ArtifactType.MARKDOWN
+
+            content = args.get("content", "")
+
+            artifact = Artifact(
+                user_id=user_id,
+                chat_session_id=chat_id,
+                title=title,
+                type=artifact_type,
+                content=content,
+                versions=[],
+            )
+            artifact.add_version(content)
+            await artifact.insert()
+
+            return {
+                "id": str(artifact.id),
+                "title": artifact.title,
+                "type": artifact.type.value,
+            }
+        except Exception as exc:  # pragma: no cover - best-effort tool execution
+            logger.warning(
+                "Tool invocation failed",
+                tool=name,
+                error=str(exc),
+                user_id=user_id,
+                chat_id=chat_id,
+            )
+            return None
 
     async def get_or_create_session(
         self,
@@ -178,6 +236,8 @@ class ChatService:
             context['chat_id'] = chat_id
             context['user_id'] = user_id
 
+            tool_invocations: List[Dict[str, Any]] = []
+
             # Build payload using prompt registry
             payload_data, metadata = build_payload(
                 model=model,
@@ -257,6 +317,63 @@ class ChatService:
                 tools=payload_data.get("tools")
             )
 
+            # Handle tool calls returned by the model (function-calling style)
+            try:
+                choices = getattr(saptiva_response, "choices", []) or []
+                if choices:
+                    first_choice = choices[0]
+                    message_obj = first_choice.get("message", {}) if isinstance(first_choice, dict) else {}
+                    raw_tool_calls = []
+
+                    if isinstance(message_obj, dict):
+                        if message_obj.get("tool_calls"):
+                            raw_tool_calls = message_obj.get("tool_calls") or []
+                        elif message_obj.get("function_call"):
+                            raw_tool_calls = [
+                                {"type": "function", "function": message_obj.get("function_call")}
+                            ]
+
+                    for call in raw_tool_calls:
+                        func = call.get("function") if isinstance(call, dict) else None
+                        if not isinstance(func, dict):
+                            continue
+
+                        name = func.get("name")
+                        raw_args = func.get("arguments")
+
+                        parsed_args: Dict[str, Any] = {}
+                        if isinstance(raw_args, str):
+                            try:
+                                parsed_args = json.loads(raw_args)
+                            except json.JSONDecodeError:
+                                parsed_args = {}
+                        elif isinstance(raw_args, dict):
+                            parsed_args = raw_args
+
+                        if name:
+                            result = await self._handle_tool_invocation(
+                                name=name,
+                                args=parsed_args,
+                                user_id=user_id,
+                                chat_id=chat_id or None,
+                            )
+                            if result:
+                                tool_invocations.append(
+                                    {
+                                        "tool_name": name,
+                                        "arguments": parsed_args,
+                                        "result": result,
+                                    }
+                                )
+
+            except Exception as parse_exc:  # pragma: no cover - defensive parsing
+                logger.warning(
+                    "Failed to parse or execute tool calls",
+                    error=str(parse_exc),
+                    user_id=user_id,
+                    chat_id=chat_id,
+                )
+
             # Format as coordinated response
             return {
                 "type": "chat",
@@ -265,6 +382,7 @@ class ChatService:
                     "complexity": {"score": 0.0, "requires_research": False},
                     "reason": "Kill switch active - simple inference only"
                 },
+                "tool_invocations": tool_invocations,
                 "escalation_available": False,
                 "processing_time_ms": (time.time() - start_time) * 1000,
                 "_metadata": metadata

@@ -26,6 +26,56 @@ from ..core.config import get_settings
 logger = structlog.get_logger(__name__)
 
 
+def _is_text_quality_sufficient(text: str, min_quality_ratio: float = 0.4) -> bool:
+    """
+    Validate if extracted text has sufficient quality to be usable.
+
+    Prevents using corrupted text from scanned PDFs that have hidden text layers
+    with metadata or garbage characters.
+
+    Args:
+        text: Extracted text to validate
+        min_quality_ratio: Minimum ratio of valid characters (default: 0.4 = 40%)
+
+    Returns:
+        True if text quality is sufficient, False otherwise
+
+    Criteria:
+        - At least 40% of characters must be alphanumeric or spaces
+        - Must have at least 5 actual words (sequences of 2+ letters)
+        - Cannot be >80% special characters
+        - This filters out text layers with only metadata/control characters
+    """
+    if not text or len(text.strip()) == 0:
+        return False
+
+    text_clean = text.strip()
+
+    # Check 1: Character quality ratio
+    valid_chars = sum(1 for c in text_clean if c.isalnum() or c.isspace())
+    total_chars = len(text_clean)
+    quality_ratio = valid_chars / total_chars if total_chars > 0 else 0
+
+    if quality_ratio < min_quality_ratio:
+        return False
+
+    # Check 2: Must have actual words (not just random chars)
+    # A "word" is 2+ consecutive letters
+    import re
+    words = re.findall(r'[a-zA-ZáéíóúÁÉÍÓÚñÑ]{2,}', text_clean)
+    if len(words) < 5:
+        # Less than 5 words → probably garbage
+        return False
+
+    # Check 3: Cannot be mostly special characters
+    special_chars = total_chars - valid_chars
+    special_ratio = special_chars / total_chars if total_chars > 0 else 0
+    if special_ratio > 0.8:  # More than 80% special chars
+        return False
+
+    return True
+
+
 async def extract_text_from_file(file_path: Path, content_type: str) -> List[PageContent]:
     """
     Extract text from PDF or image files using pluggable extractor.
@@ -98,7 +148,9 @@ async def extract_text_from_file(file_path: Path, content_type: str) -> List[Pag
                 from pypdf import PdfReader
 
                 settings = get_settings()
-                MIN_CHARS_THRESHOLD = 50  # Páginas con < 50 caracteres se procesan con OCR
+                # ANTI-HALLUCINATION FIX: Increased from 50 to 150 chars
+                # Many scanned PDFs have hidden text layers with 50-100 chars of garbage
+                MIN_CHARS_THRESHOLD = 150
 
                 reader = PdfReader(io.BytesIO(file_bytes))
                 total_pages = len(reader.pages)
@@ -151,18 +203,31 @@ async def extract_text_from_file(file_path: Path, content_type: str) -> List[Pag
                         text_stripped = text.strip()
 
                         # Step 2: Determine if OCR is needed
+                        # ANTI-HALLUCINATION FIX: Check both length AND quality
+                        # This prevents using corrupted text from scanned PDFs
+                        has_insufficient_length = len(text_stripped) < MIN_CHARS_THRESHOLD
+                        has_poor_quality = not _is_text_quality_sufficient(text_stripped)
+
                         needs_ocr = (
-                            len(text_stripped) < MIN_CHARS_THRESHOLD
+                            (has_insufficient_length or has_poor_quality)
                             and fitz_doc is not None
                         )
 
                         if needs_ocr:
                             # Step 3: Apply OCR to this page
+                            ocr_reason = []
+                            if has_insufficient_length:
+                                ocr_reason.append(f"insufficient text ({len(text_stripped)} < {MIN_CHARS_THRESHOLD})")
+                            if has_poor_quality:
+                                valid_ratio = sum(1 for c in text_stripped if c.isalnum() or c.isspace()) / len(text_stripped) if text_stripped else 0
+                                ocr_reason.append(f"poor quality ({valid_ratio:.1%} valid chars)")
+
                             logger.debug(
-                                "Applying OCR to page with insufficient text",
+                                "Applying OCR to page with insufficient/poor text",
                                 page=page_num,
                                 pypdf_chars=len(text_stripped),
                                 threshold=MIN_CHARS_THRESHOLD,
+                                reason=", ".join(ocr_reason)
                             )
 
                             ocr_text = await raster_single_page_and_ocr(

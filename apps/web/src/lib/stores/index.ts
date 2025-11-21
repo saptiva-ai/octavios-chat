@@ -12,6 +12,7 @@ export {
   type ConnectionStatus,
   type Theme,
 } from "./ui-store";
+export { useCanvasStore } from "./canvas-store";
 export { useSettingsStore, useSettings } from "./settings-store";
 export { useResearchStore, useResearch } from "./research-store";
 export { useDraftStore } from "./draft-store";

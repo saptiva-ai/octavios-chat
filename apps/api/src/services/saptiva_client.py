@@ -371,6 +371,16 @@ class SaptivaClient:
                         url,
                         json=request_data
                     ) as response:
+                        # Log error details before raising
+                        if response.status_code >= 400:
+                            error_body = await response.aread()
+                            logger.error(
+                                "Saptiva API error response",
+                                status_code=response.status_code,
+                                error_body=error_body.decode('utf-8'),
+                                request_url=url,
+                                model=model
+                            )
                         response.raise_for_status()
 
                         async for line in response.aiter_lines():

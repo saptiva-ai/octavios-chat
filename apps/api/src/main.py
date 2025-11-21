@@ -34,7 +34,7 @@ from .middleware.auth import AuthMiddleware
 from .middleware.rate_limit import RateLimitMiddleware
 from .middleware.telemetry import TelemetryMiddleware
 from .middleware.cache_control import CacheControlMiddleware
-from .routers import auth, chat, deep_research, health, history, reports, stream, metrics, conversations, intent, models, documents, review, features, files, mcp_admin
+from .routers import auth, chat, deep_research, health, history, reports, stream, metrics, conversations, intent, models, documents, review, features, files, mcp_admin, resources, artifacts
 from .routers import settings as settings_router
 from .services.storage import storage
 from .core.auth import get_current_user
@@ -44,6 +44,9 @@ from .mcp.server import mcp as mcp_server
 from .mcp.fastapi_adapter import MCPFastAPIAdapter
 from .mcp.tasks import task_manager
 from .mcp.lazy_routes import create_lazy_mcp_router
+
+# Resource lifecycle management
+from .workers.resource_cleanup_worker import get_cleanup_worker
 
 
 @asynccontextmanager
@@ -63,12 +66,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Start MCP task manager
     await task_manager.start()
 
+    # Start resource cleanup worker
+    cleanup_worker = get_cleanup_worker()
+    await cleanup_worker.start()
+
     logger.info("Starting Copilot OS API", version=app.version)
 
     yield
 
     # Shutdown telemetry
     shutdown_telemetry()
+
+    # Stop resource cleanup worker
+    await cleanup_worker.stop()
 
     # Stop MCP task manager
     await task_manager.stop()
@@ -137,6 +147,8 @@ def create_app() -> FastAPI:
     app.include_router(files.router, prefix="/api", tags=["files"])
     app.include_router(documents.router, prefix="/api", tags=["documents"])
     app.include_router(review.router, prefix="/api", tags=["review"])
+    app.include_router(resources.router, prefix="/api", tags=["resources"])
+    app.include_router(artifacts.router, prefix="/api", tags=["artifacts"])
     # app.include_router(files.router, prefix="/api", tags=["files"])  # Temporarily disabled - Phase 3
 
     # MCP integration - Using FastMCP (official SDK) with FastAPI adapter

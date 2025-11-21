@@ -14,7 +14,9 @@ import type {
   ChatMessageKind,
   FileReviewData,
 } from "../../lib/types";
+import type { ToolInvocation } from "@/lib/types";
 import type { FileAttachment } from "../../types/files";
+import { ArtifactCard } from "./artifact-card";
 
 export interface ChatMessageProps {
   id?: string;
@@ -38,6 +40,7 @@ export interface ChatMessageProps {
       estimated_completion?: string;
       [key: string]: any;
     };
+    tool_invocations?: ToolInvocation[];
     [key: string]: any;
   };
   review?: FileReviewData;
@@ -94,6 +97,17 @@ export function ChatMessage({
   const isUser = role === "user";
   const isSystem = role === "system";
   const isAssistant = role === "assistant";
+
+  const toolInvocations = Array.isArray((metadata as any)?.tool_invocations)
+    ? ((metadata as any).tool_invocations as ToolInvocation[])
+    : [];
+  const artifactInvocations = toolInvocations.filter(
+    (inv) =>
+      inv &&
+      typeof inv === "object" &&
+      inv.tool_name === "create_artifact" &&
+      inv.result?.id,
+  );
 
   React.useEffect(() => {
     if (isUser) {
@@ -277,6 +291,24 @@ export function ChatMessage({
                 />
               );
             })}
+          </div>
+        )}
+
+        {artifactInvocations.length > 0 && (
+          <div
+            className={cn(
+              "mb-3 flex flex-col gap-2",
+              isUser ? "items-end" : "items-start",
+            )}
+          >
+            {artifactInvocations.map((inv) => (
+              <ArtifactCard
+                key={(inv.result?.id as string) || inv.tool_name}
+                id={(inv.result?.id as string) || ""}
+                title={inv.result?.title || "Artefacto"}
+                type={(inv.result?.type as any) || "markdown"}
+              />
+            ))}
           </div>
         )}
 

@@ -208,16 +208,74 @@ class SimpleChatStrategy(ChatStrategy):
                 document_context=unified_context if unified_context else None
             )
 
+        tool_invocations = coordinated_response.get("tool_invocations") or []
+
         # Extract response content from SaptivaResponse object
         response_obj = coordinated_response.get("response")
+
+        # DEBUG: Log response_obj structure
+        logger.info(
+            "🐛 [DEBUG] Extracting content from Saptiva response",
+            has_response_obj=response_obj is not None,
+            response_obj_type=type(response_obj).__name__ if response_obj else None,
+            has_choices_attr=hasattr(response_obj, 'choices') if response_obj else False,
+            choices_length=len(response_obj.choices) if (response_obj and hasattr(response_obj, 'choices')) else 0
+        )
+
         if hasattr(response_obj, 'choices') and len(response_obj.choices) > 0:
             # Extract text from Pydantic SaptivaResponse object
-            response_content = response_obj.choices[0].get("message", {}).get("content", "")
+            choice_0 = response_obj.choices[0]
+            message_obj = choice_0.get("message", {}) if isinstance(choice_0, dict) else {}
+
+            logger.info(
+                "🐛 [DEBUG] First choice structure",
+                choice_type=type(choice_0).__name__,
+                choice_keys=list(choice_0.keys()) if isinstance(choice_0, dict) else "not_a_dict",
+                has_message=choice_0.get("message") is not None if isinstance(choice_0, dict) else False,
+                message_type=type(message_obj).__name__,
+                message_keys=list(message_obj.keys()) if isinstance(message_obj, dict) else "not_a_dict",
+                message_repr=str(message_obj)[:200]
+            )
+
+            # CRITICAL FIX: Saptiva Cortex uses reasoning_content for chain-of-thought
+            # Extract both content and reasoning_content
+            message = response_obj.choices[0].get("message", {})
+            content = message.get("content", "")
+            reasoning_content = message.get("reasoning_content", "")
+
+            # Use content if available, fallback to reasoning_content
+            response_content = content if content else reasoning_content
+
+            logger.info(
+                "🐛 [DEBUG] Extracted content",
+                content_length=len(content),
+                reasoning_length=len(reasoning_content),
+                final_content_length=len(response_content),
+                content_preview=response_content[:100] if response_content else "(EMPTY)"
+            )
         else:
             response_content = ""
+            logger.warning(
+                "🐛 [DEBUG] No choices found - response_content set to empty string"
+            )
+
+        # If the model only returned a tool invocation, provide a minimal message
+        if not response_content and tool_invocations:
+            primary = tool_invocations[0].get("result", {})
+            fallback_title = primary.get("title") or "Nuevo artefacto"
+            response_content = (
+                f"Creé el artefacto **{fallback_title}** y lo guardé en el panel lateral."
+            )
 
         # Sanitize response
         sanitized_content = sanitize_response_content(response_content)
+
+        logger.info(
+            "🐛 [DEBUG] After sanitization",
+            original_length=len(response_content),
+            sanitized_length=len(sanitized_content) if sanitized_content else 0,
+            sanitized_preview=sanitized_content[:100] if sanitized_content else "(NONE)"
+        )
 
         # Build metadata
         # BE-2: Include document warnings in decision_metadata
@@ -231,6 +289,8 @@ class SimpleChatStrategy(ChatStrategy):
         # Add unified context metadata from ContextManager
         if unified_metadata:
             decision_metadata["unified_context"] = unified_metadata
+        if tool_invocations:
+            decision_metadata["tool_invocations"] = tool_invocations
 
         metadata = MessageMetadata(
             message_id=coordinated_response.get("message_id", ""),
@@ -245,7 +305,14 @@ class SimpleChatStrategy(ChatStrategy):
 
         processing_time = (time.time() - start_time) * 1000
 
-        return ChatProcessingResult(
+        logger.info(
+            "🐛 [DEBUG] Creating ChatProcessingResult",
+            content_length=len(response_content),
+            sanitized_content_length=len(sanitized_content) if sanitized_content else 0,
+            strategy=self.get_strategy_name()
+        )
+
+        result = ChatProcessingResult(
             content=response_content,
             sanitized_content=sanitized_content,
             metadata=metadata,
@@ -254,6 +321,14 @@ class SimpleChatStrategy(ChatStrategy):
             research_triggered=False,
             session_updated=False
         )
+
+        logger.info(
+            "🐛 [DEBUG] ChatProcessingResult created",
+            result_content_length=len(result.content),
+            result_sanitized_length=len(result.sanitized_content) if result.sanitized_content else 0
+        )
+
+        return result
 
 
 # ADR-001: ChatStrategyFactory removed (YAGNI principle)
