@@ -398,7 +398,7 @@ async def warmup_tool_cache(
 
                 # Store in cache
                 ttl = TOOL_CACHE_TTL.get(tool_name, 3600)
-                await cache.set(cache_key, tool_result, ttl=ttl)
+                await cache.set(cache_key, tool_result, expire=ttl)
 
                 results["cached"] += 1
                 logger.info(

@@ -1,7 +1,11 @@
 """
-Retrieve relevant document segments for RAG.
+Retrieve relevant document segments for RAG using semantic search.
 
-Loads document segments from cache and ranks by relevance to user question.
+Uses Qdrant vector database for semantic similarity search:
+- Generates embedding for user's question
+- Performs cosine similarity search in Qdrant
+- Filters by session_id and document_id for security
+- Returns top-k segments with relevance scores
 """
 
 from typing import Any, Dict, List, Optional
@@ -12,23 +16,33 @@ from ..protocol import ToolSpec, ToolCategory, ToolCapability
 from ..tool import Tool
 from ...models.chat import ChatSession
 from ...models.document_state import ProcessingStatus
-from ...core.redis_cache import get_redis_cache
+from ...services.embedding_service import get_embedding_service
+from ...services.qdrant_service import get_qdrant_service
+
+# NEW: Adaptive retrieval orchestrator
+from ...services.retrieval import AdaptiveRetrievalOrchestrator
+from ...services.query_understanding import QueryContext
 
 logger = structlog.get_logger(__name__)
 
 
 class GetRelevantSegmentsTool(Tool):
     """
-    Retrieve relevant document segments for answering questions.
+    Retrieve relevant document segments for answering questions using semantic search.
 
     Flow:
     1. Find documents with status=READY in conversation
-    2. Load segments from Redis cache
-    3. Score/rank segments by relevance (keyword matching)
-    4. Return top N segments with metadata
+    2. Generate embedding for user's question
+    3. Perform semantic search in Qdrant (cosine similarity)
+    4. Return top N segments with metadata and relevance scores
+
+    Semantic Search Architecture:
+    - Embedding: paraphrase-multilingual-MiniLM-L12-v2 (384-dim)
+    - Vector DB: Qdrant with cosine distance
+    - Filtering: session_id + document_id (context isolation)
+    - Score threshold: 0.7 (configurable)
 
     Future enhancements:
-    - Vector embeddings for semantic search
     - Re-ranking with cross-encoder
     - Hybrid retrieval (BM25 + semantic)
 
@@ -36,7 +50,7 @@ class GetRelevantSegmentsTool(Tool):
         result = await tool.execute(
             conversation_id="chat-123",
             question="What is the pricing model?",
-            max_segments=5
+            max_segments=2
         )
         # Returns: {"segments": [...], "total_docs": 3}
     """
@@ -155,7 +169,7 @@ class GetRelevantSegmentsTool(Tool):
         conversation_id = payload["conversation_id"]
         question = payload["question"]
         target_docs = payload.get("target_docs")
-        max_segments = payload.get("max_segments", 5)
+        max_segments = payload.get("max_segments", 2)
 
         logger.info(
             "Retrieving segments",
@@ -237,61 +251,109 @@ class GetRelevantSegmentsTool(Tool):
                     "returned_segments": 0
                 }
 
-            # 3. Load and score segments
-            all_segments = []
-            cache = await get_redis_cache()
+            # 3. NEW: Use Adaptive Retrieval Orchestrator
+            logger.info(
+                "🧠 [RAG ADAPTIVE] Using adaptive retrieval orchestrator",
+                question_preview=question[:100]
+            )
 
-            for doc in ready_docs:
-                cache_key = f"doc_segments:{str(doc.id)}"
-                segments = await cache.get(cache_key)
+            # Build query context
+            query_context = QueryContext(
+                conversation_id=conversation_id,
+                has_recent_entities=False,
+                recent_entities=[],
+                documents_count=len(ready_docs),
+                previous_query=None
+            )
 
-                if not segments:
-                    logger.warning(
-                        "Segments not in cache (document may need reprocessing)",
-                        doc_id=str(doc.id),
-                        doc_name=doc.filename
-                    )
-                    continue
+            # Initialize orchestrator
+            orchestrator = AdaptiveRetrievalOrchestrator()
 
-                # Score each segment
-                for seg in segments:
-                    score = self._score_segment(seg["text"], question)
-                    all_segments.append({
-                        "doc_id": str(doc.id),
-                        "doc_name": doc.filename,
-                        "index": seg["index"],
-                        "text": seg["text"],
-                        "score": score
-                    })
+            # Execute adaptive retrieval
+            retrieval_result = await orchestrator.retrieve(
+                query=question,
+                session_id=conversation_id,
+                documents=ready_docs,
+                max_segments=max_segments,
+                context=query_context
+            )
+
+            logger.info(
+                "✅ [RAG ADAPTIVE] Retrieval completed",
+                strategy_used=retrieval_result.strategy_used,
+                segments_count=len(retrieval_result.segments),
+                max_score=retrieval_result.max_score,
+                avg_score=retrieval_result.avg_score,
+                query_intent=retrieval_result.metadata.get("intent"),
+                query_complexity=retrieval_result.metadata.get("complexity")
+            )
+
+            # Filter by target_docs if specified
+            segments_list = retrieval_result.segments
+            if target_docs:
+                doc_ids = {str(d.id) for d in ready_docs}
+                segments_list = [
+                    s for s in segments_list
+                    if s.doc_id in doc_ids
+                ]
+                logger.info(
+                    "Filtered by target_docs",
+                    before=len(retrieval_result.segments),
+                    after=len(segments_list),
+                    target_docs=target_docs
+                )
+
+            # Convert Segment objects to dict format
+            all_segments = [segment.to_dict() for segment in segments_list]
 
             if not all_segments:
                 return {
                     "segments": [],
-                    "message": "Los documentos están listos pero no tienen segmentos en caché. Intenta volver a procesar los archivos.",
+                    "message": "No encontré segmentos relevantes en los documentos. Intenta reformular tu pregunta.",
                     "total_docs": len(session.attached_file_ids),
                     "ready_docs": len(ready_docs),
                     "total_segments": 0,
-                    "returned_segments": 0
+                    "returned_segments": 0,
+                    "strategy_used": retrieval_result.strategy_used,
+                    "query_analysis": {
+                        "intent": retrieval_result.metadata.get("intent"),
+                        "complexity": retrieval_result.metadata.get("complexity")
+                    }
                 }
 
-            # 4. Rank and return top N
-            all_segments.sort(key=lambda x: x["score"], reverse=True)
-            top_segments = all_segments[:max_segments]
+            # Build user message with intelligence
+            max_score = retrieval_result.max_score
+            message = self._build_user_message(
+                segments_count=len(all_segments),
+                ready_docs_count=len(ready_docs),
+                max_score=max_score,
+                intent=retrieval_result.metadata.get("intent"),
+                strategy=retrieval_result.strategy_used
+            )
 
             logger.info(
-                "Segments retrieved successfully",
+                "✅ [RAG ADAPTIVE] Segments retrieved successfully",
                 total_segments=len(all_segments),
-                returned=len(top_segments),
-                ready_docs=len(ready_docs)
+                returned=len(all_segments),
+                ready_docs=len(ready_docs),
+                max_score=max_score,
+                strategy=retrieval_result.strategy_used
             )
 
             return {
-                "segments": top_segments,
-                "message": f"Encontré {len(top_segments)} segmentos relevantes de {len(ready_docs)} documento(s).",
+                "segments": all_segments,
+                "message": message,
                 "total_docs": len(session.attached_file_ids),
                 "ready_docs": len(ready_docs),
                 "total_segments": len(all_segments),
-                "returned_segments": len(top_segments)
+                "returned_segments": len(all_segments),
+                "max_relevance_score": max_score,
+                "strategy_used": retrieval_result.strategy_used,
+                "query_analysis": {
+                    "intent": retrieval_result.metadata.get("intent"),
+                    "complexity": retrieval_result.metadata.get("complexity"),
+                    "confidence": retrieval_result.confidence
+                }
             }
 
         except Exception as e:
@@ -310,45 +372,51 @@ class GetRelevantSegmentsTool(Tool):
                 "returned_segments": 0
             }
 
-    def _score_segment(self, text: str, question: str) -> float:
+    def _build_user_message(
+        self,
+        segments_count: int,
+        ready_docs_count: int,
+        max_score: float,
+        intent: str,
+        strategy: str
+    ) -> str:
         """
-        Simple keyword-based scoring (BM25-lite).
-
-        Future improvements:
-        - Use sentence transformers for semantic similarity
-        - Implement proper BM25 with term frequency
-        - Add cross-encoder re-ranking
+        Build intelligent user message based on retrieval results.
 
         Args:
-            text: Segment text
-            question: User's question
+            segments_count: Number of segments retrieved
+            ready_docs_count: Number of ready documents
+            max_score: Maximum relevance score
+            intent: Query intent (overview, specific_fact, etc.)
+            strategy: Retrieval strategy used
 
         Returns:
-            Relevance score (0.0 to 1.0+)
+            User-friendly message explaining results
         """
 
-        text_lower = text.lower()
-        question_lower = question.lower()
+        # For overview queries, message is simple
+        if intent == "overview":
+            return (
+                f"Te proporciono un resumen general basado en los primeros "
+                f"{segments_count} segmentos del documento. "
+                f"Esto te dará una idea del contenido principal."
+            )
 
-        # Extract keywords (simple tokenization)
-        # TODO: Use proper tokenizer (e.g., spaCy, NLTK)
-        question_words = [
-            w.strip(".,!?;:()[]{}")
-            for w in question_lower.split()
-            if len(w) > 3  # Skip short words
-        ]
+        # For specific queries, include relevance information
+        if max_score > 0.5:
+            return (
+                f"Encontré {segments_count} segmentos relevantes de {ready_docs_count} documento(s). "
+                f"La información tiene alta relevancia semántica (score: {max_score:.2f})."
+            )
+        elif max_score > 0.2:
+            return (
+                f"Encontré {segments_count} segmentos de {ready_docs_count} documento(s) "
+                f"con relevancia moderada (score: {max_score:.2f}). "
+                f"La respuesta podría no ser completamente precisa."
+            )
+        else:
+            return (
+                f"⚠️ Encontré {segments_count} segmentos, pero la relevancia semántica es baja (score: {max_score:.2f}). "
+                f"Te recomiendo reformular tu pregunta con más detalles específicos."
+            )
 
-        if not question_words:
-            return 0.0
-
-        # Count keyword matches
-        matches = sum(1 for word in question_words if word in text_lower)
-
-        # Normalize by question length
-        score = matches / len(question_words)
-
-        # Boost if question is substring (exact phrase match)
-        if question_lower in text_lower:
-            score += 0.5
-
-        return score

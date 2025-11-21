@@ -84,7 +84,7 @@ async def upload_files(
         except HTTPException:
             raise
         except Exception as exc:
-            logger.error("File upload failed", error=str(exc), filename=upload.filename)
+            logger.error("File upload failed", error=str(exc), filename=upload.filename, exc_info=True)
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="File processing failed") from exc
 
     return FileIngestBulkResponse(files=responses)

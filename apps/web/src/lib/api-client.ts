@@ -15,6 +15,9 @@ import type {
   SaptivaKeyStatus,
   UpdateSaptivaKeyPayload,
   FeatureFlagsResponse,
+  ArtifactRecord,
+  ArtifactType,
+  ToolInvocation,
 } from "./types";
 
 export interface LoginRequest {
@@ -83,7 +86,10 @@ export interface ChatResponse {
     docs_used?: number;
     docs_expired?: string[];
   };
-  metadata?: Record<string, any>; // Include audit metadata (report_pdf_url, etc.)
+  metadata?: {
+    tool_invocations?: ToolInvocation[];
+    [key: string]: any;
+  }; // Include audit metadata (report_pdf_url, etc.)
 }
 
 export interface ChatMessageRecord {
@@ -262,12 +268,15 @@ class ApiClient {
 
     // Client-side: Direct inline check ensures Next.js static replacement works
     // This pattern MUST NOT use intermediate constants or the bundler will collapse it
-    if (process.env.NEXT_PUBLIC_API_URL) {
-      return process.env.NEXT_PUBLIC_API_URL;
+    // IMPORTANT: Empty string means use Next.js proxy (relative paths)
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (apiUrl && apiUrl.trim() !== "") {
+      return apiUrl;
     }
 
-    // Development fallback only - should never reach here in production builds
-    return window.location.origin;
+    // Empty or undefined: use relative paths for Next.js proxy
+    // In dev: /api/* -> next.config.js proxy -> http://api:8001/api/*
+    return "";
   }
 
   private initializeClient() {
@@ -416,6 +425,31 @@ class ApiClient {
 
   async logout(): Promise<void> {
     await this.client.post("/api/auth/logout");
+  }
+
+  async get<T = any>(
+    url: string,
+    config?: import("axios").AxiosRequestConfig,
+  ): Promise<{ data: T }> {
+    const response = await this.client.get<T>(url, config);
+    return { data: response.data };
+  }
+
+  async post<T = any>(
+    url: string,
+    body?: any,
+    config?: import("axios").AxiosRequestConfig,
+  ): Promise<{ data: T }> {
+    const response = await this.client.post<T>(url, body, config);
+    return { data: response.data };
+  }
+
+  async delete<T = any>(
+    url: string,
+    config?: import("axios").AxiosRequestConfig,
+  ): Promise<{ data: T }> {
+    const response = await this.client.delete<T>(url, config);
+    return { data: response.data };
   }
 
   private transformUserProfile(payload: any): UserProfile {
@@ -625,6 +659,25 @@ class ApiClient {
     } finally {
       reader.releaseLock();
     }
+  }
+
+  // Artifact endpoints
+  async getArtifact(artifactId: string): Promise<ArtifactRecord> {
+    const response = await this.client.get<ArtifactRecord>(
+      `/api/artifacts/${artifactId}`,
+    );
+    return response.data;
+  }
+
+  async updateArtifact(
+    artifactId: string,
+    payload: { title?: string; content: string | Record<string, any> },
+  ): Promise<ArtifactRecord> {
+    const response = await this.client.put<ArtifactRecord>(
+      `/api/artifacts/${artifactId}`,
+      payload,
+    );
+    return response.data;
   }
 
   // Document endpoints

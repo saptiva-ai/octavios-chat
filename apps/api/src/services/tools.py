@@ -294,6 +294,29 @@ DEFAULT_AVAILABLE_TOOLS = {
             "required": ["doc_id"]
         }
     },
+    "create_artifact": {
+        "name": "create_artifact",
+        "description": "Guardar un artefacto (markdown, código o grafo) asociado al chat y devolver su ID",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Título corto para el artefacto"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": ["markdown", "code", "graph"],
+                    "description": "Tipo de artefacto a crear"
+                },
+                "content": {
+                    "type": "string",
+                    "description": "Contenido del artefacto en formato markdown, código o grafo serializado"
+                }
+            },
+            "required": ["title", "type", "content"]
+        }
+    },
     "extract_document_text": {
         "name": "extract_document_text",
         "description": "Extraer texto de documentos PDF e imágenes usando estrategia multi-tier (pypdf → Saptiva PDF SDK → OCR)",

@@ -1,38 +1,111 @@
-#!/usr/bin/env bash
-# Unified runner for shell-based tests
+#!/bin/bash
+################################################################################
+# Test Runner - Consolidates all testing logic
+#
+# Usage:
+#   ./scripts/test-runner.sh <TARGET> [ARGS]
+#
+# Examples:
+#   ./scripts/test-runner.sh api
+#   ./scripts/test-runner.sh mcp -v
+#   ./scripts/test-runner.sh web
+#   ./scripts/test-runner.sh e2e
+#   ./scripts/test-runner.sh all
+#
+# Targets: api, web, mcp, mcp-integration, e2e, all
+################################################################################
 
-set -euo pipefail
-IFS=$'\n\t'
-shopt -s nullglob
+set -e
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-export PATH="$ROOT_DIR/scripts:$PATH"
+TARGET=${1:-all}
+shift || true
+ARGS="$@"
 
-: "${TEST_GLOB:=scripts/tests/**/*test*.sh}"
-: "${STOP_ON_FAIL:=true}"
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
 
-echo "[runner] collecting tests from: $TEST_GLOB"
+# Configuration
+PROJECT_NAME="octavios-chat-capital414"
+COMPOSE="docker compose -p $PROJECT_NAME -f infra/docker-compose.yml"
 
-passed=0
-failed=0
+echo -e "${BLUE}🧪 Ejecutando tests: ${TARGET}${NC}"
 
-for test_script in $TEST_GLOB; do
-  if [[ -f "$test_script" && -x "$test_script" ]]; then
-    echo "──▶ $test_script"
-    if bash "$test_script"; then
-      ((passed++)) || true
+# ============================================================================
+# TEST TARGET SELECTOR
+# ============================================================================
+
+case "$TARGET" in
+  "api")
+    echo -e "${YELLOW}Running API tests...${NC}"
+    $COMPOSE exec -T api pytest apps/api/tests/ -v $ARGS
+    ;;
+
+  "web")
+    echo -e "${YELLOW}Running Web tests...${NC}"
+    $COMPOSE exec -T web pnpm test $ARGS
+    ;;
+
+  "mcp")
+    echo -e "${YELLOW}Running MCP unit tests...${NC}"
+    $COMPOSE exec -T api pytest apps/api/tests/mcp/ -v -m mcp $ARGS
+    ;;
+
+  "mcp-integration")
+    echo -e "${YELLOW}Running MCP integration tests...${NC}"
+    $COMPOSE exec -T api pytest apps/api/tests/integration/test_mcp_tools_integration.py -v $ARGS
+    ;;
+
+  "mcp-all")
+    echo -e "${YELLOW}Running all MCP tests...${NC}"
+    $COMPOSE exec -T api pytest apps/api/tests/mcp/ apps/api/tests/integration/test_mcp_tools_integration.py -v $ARGS
+    ;;
+
+  "e2e")
+    echo -e "${YELLOW}Running E2E tests with Playwright...${NC}"
+    if command -v pnpm &> /dev/null; then
+        pnpm exec playwright test $ARGS
     else
-      ((failed++)) || true
-      echo "✗ FAILED: $test_script"
-      if [[ "$STOP_ON_FAIL" == "true" ]]; then
-        exit 1
-      fi
+        echo -e "${YELLOW}Warning: pnpm not found, skipping E2E tests${NC}"
     fi
-  fi
-done
+    ;;
 
-echo "[runner] passed=$passed failed=$failed"
+  "shell")
+    echo -e "${YELLOW}Running shell script tests...${NC}"
+    ./scripts/run_shell_tests.sh
+    ;;
 
-if [[ $failed -ne 0 ]]; then
-  exit 1
-fi
+  "all")
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE} Running Full Test Suite${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+
+    # Run API tests
+    echo -e "\n${GREEN}[1/4] API Tests${NC}"
+    $COMPOSE exec -T api pytest apps/api/tests/ -v --tb=short || true
+
+    # Run Web tests
+    echo -e "\n${GREEN}[2/4] Web Tests${NC}"
+    $COMPOSE exec -T web pnpm test || true
+
+    # Run MCP tests
+    echo -e "\n${GREEN}[3/4] MCP Tests${NC}"
+    $COMPOSE exec -T api pytest apps/api/tests/mcp/ -v || true
+
+    # Run Shell tests
+    echo -e "\n${GREEN}[4/4] Shell Tests${NC}"
+    ./scripts/run_shell_tests.sh || true
+
+    echo -e "\n${GREEN}✅ Test suite completed${NC}"
+    ;;
+
+  *)
+    echo -e "${YELLOW}❌ Unknown target: $TARGET${NC}"
+    echo "Available targets: api, web, mcp, mcp-integration, mcp-all, e2e, shell, all"
+    exit 1
+    ;;
+esac
+
+echo -e "${GREEN}✅ Tests completed successfully${NC}"

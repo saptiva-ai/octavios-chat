@@ -182,7 +182,7 @@ async def invoke_relevant_tools(
                         if cache:
                             try:
                                 ttl = TOOL_CACHE_TTL.get("audit_file", 3600)
-                                await cache.set(cache_key, audit_result, ttl=ttl)
+                                await cache.set(cache_key, audit_result, expire=ttl)
                                 logger.debug(
                                     "Cached audit_file result",
                                     cache_key=cache_key,
@@ -284,7 +284,7 @@ async def invoke_relevant_tools(
                         if cache:
                             try:
                                 ttl = TOOL_CACHE_TTL.get("excel_analyzer", 1800)
-                                await cache.set(cache_key, excel_result, ttl=ttl)
+                                await cache.set(cache_key, excel_result, expire=ttl)
                                 logger.debug(
                                     "Cached excel_analyzer result",
                                     cache_key=cache_key,

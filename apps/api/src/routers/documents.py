@@ -331,12 +331,16 @@ async def get_document_thumbnail(
         bytes=len(thumbnail_bytes)
     )
 
+    # Encode filename for HTTP header (RFC 5987) to handle Unicode characters
+    from urllib.parse import quote
+    safe_filename = quote(f"thumbnail_{doc.filename}.jpg")
+
     return Response(
         content=thumbnail_bytes,
         media_type="image/jpeg",
         headers={
             "Cache-Control": "public, max-age=3600",  # Cache for 1 hour
-            "Content-Disposition": f'inline; filename="thumbnail_{doc.filename}.jpg"'
+            "Content-Disposition": f"inline; filename*=UTF-8''{safe_filename}"
         }
     )
 

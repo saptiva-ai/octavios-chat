@@ -30,6 +30,7 @@ from .idempotency import upload_idempotency_repository
 from .minio_service import minio_service
 from .storage import FileTooLargeError, storage
 from .document_extraction import extract_text_from_file
+from .document_processing_service import create_document_processing_service
 
 logger = structlog.get_logger(__name__)
 
@@ -185,6 +186,52 @@ class FileIngestService:
         if not effective_key:
             effective_key = f"hash:{digest}:{conversation_id or 'no-chat'}"
 
+        # DEDUPLICATION: Check if file with same hash already exists for this user
+        from ..services.resource_lifecycle_manager import get_resource_manager
+        resource_manager = get_resource_manager()
+
+        existing_doc_id = await resource_manager.check_duplicate_file(
+            file_hash=digest,
+            user_id=user_id
+        )
+
+        if existing_doc_id:
+            # File already exists - reuse it
+            existing_doc = await Document.get(existing_doc_id)
+
+            logger.info(
+                "Duplicate file detected - reusing existing document",
+                existing_doc_id=str(existing_doc_id),
+                file_hash=digest[:16],
+                filename=upload.filename,
+                existing_filename=existing_doc.filename,
+                user_id=user_id
+            )
+
+            # Delete newly uploaded MinIO file (not needed)
+            if minio_bucket and minio_key:
+                try:
+                    await minio_service.delete_file(minio_bucket, minio_key)
+                    logger.info("Deleted duplicate file from MinIO", minio_key=minio_key)
+                except Exception as e:
+                    logger.warning("Failed to delete duplicate MinIO file", error=str(e))
+
+            # Return existing document info
+            response = FileIngestResponse(
+                file_id=str(existing_doc_id),
+                filename=existing_doc.filename,
+                status=FileStatus.READY if existing_doc.status == DocumentStatus.READY else FileStatus.PROCESSING,
+                size_bytes=existing_doc.size_bytes,
+                trace_id=trace_id,
+            )
+
+            # Cache response for idempotency
+            if effective_key:
+                await upload_idempotency_repository.set(user_id, effective_key, response, ttl_seconds=3600)
+
+            return response
+
+        # Not a duplicate - create new document
         document = Document(
             filename=upload.filename,
             content_type=upload.content_type,
@@ -194,9 +241,20 @@ class FileIngestService:
             status=DocumentStatus.PROCESSING,
             user_id=user_id,
             conversation_id=conversation_id,
+            metadata={
+                "file_hash": digest  # Store hash for future deduplication
+            }
         )
 
         await document.insert()
+
+        logger.info(
+            "New document created with hash",
+            file_id=str(document.id),
+            file_hash=digest[:16],
+            filename=upload.filename,
+            user_id=user_id
+        )
 
         # Use document.id (MongoDB ObjectId) for all subsequent operations
         file_id = str(document.id)
@@ -284,6 +342,29 @@ class FileIngestService:
                     status=FileStatus.READY,
                 ),
             )
+
+            # RAG Integration: Process document for vector storage (sync)
+            try:
+                logger.info(
+                    "Starting RAG processing (chunking + embeddings)",
+                    file_id=file_id,
+                    filename=document.filename
+                )
+                processor = create_document_processing_service()
+                await processor.process_document_standalone(str(document.id))
+                logger.info(
+                    "RAG processing completed",
+                    file_id=file_id,
+                    filename=document.filename
+                )
+            except Exception as rag_exc:
+                # Don't fail the entire upload if RAG processing fails
+                logger.error(
+                    "RAG processing failed (non-fatal)",
+                    file_id=file_id,
+                    error=str(rag_exc),
+                    exc_info=True
+                )
 
             response = FileIngestResponse(
                 file_id=str(document.id),
@@ -440,6 +521,29 @@ class FileIngestService:
                 file_id=file_id,
                 filename=document.filename
             )
+
+            # RAG Integration: Process document for vector storage
+            try:
+                logger.info(
+                    "Starting RAG processing (chunking + embeddings)",
+                    file_id=file_id,
+                    filename=document.filename
+                )
+                processor = create_document_processing_service()
+                await processor.process_document_standalone(str(document.id))
+                logger.info(
+                    "RAG processing completed",
+                    file_id=file_id,
+                    filename=document.filename
+                )
+            except Exception as rag_exc:
+                # Don't fail the entire upload if RAG processing fails
+                logger.error(
+                    "RAG processing failed (non-fatal)",
+                    file_id=file_id,
+                    error=str(rag_exc),
+                    exc_info=True
+                )
 
         except Exception as exc:
             logger.error(

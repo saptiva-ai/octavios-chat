@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 
+import { cn } from "@/lib/utils";
 import { ChatMessage, ChatSession } from "../../../lib/types";
 import {
   ChatInterface,
@@ -37,6 +38,8 @@ import {
   legacyKeyToToolId,
   toolIdToLegacyKey,
 } from "@/lib/tool-mapping";
+import { CanvasPanel } from "@/components/canvas/canvas-panel";
+import { useCanvasStore } from "@/lib/stores/canvas-store";
 // Files V1 imports
 import { useFiles } from "../../../hooks/useFiles";
 import type { FileAttachment } from "../../../types/files";
@@ -120,6 +123,8 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
     enableResponseCache: true,
     streamingChunkSize: 3,
   });
+  const isCanvasOpen = useCanvasStore((state) => state.isSidebarOpen);
+  const toggleCanvas = useCanvasStore((state) => state.toggleSidebar);
 
   // Files V1 state - MVP-LOCK: Pass chatId to persist attachments
   // FIX: Use resolvedChatId (from URL) instead of currentChatId (from async store)
@@ -535,6 +540,9 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
       // MINIMALISMO FUNCIONAL: Archivos siempre se usan cuando están listos
       const fileIdsForBackend = fileIds;
 
+      // Always expose create_artifact to the LLM even if not toggled explicitly
+      const toolsForPayload = { ...toolsEnabled, create_artifact: true };
+
       await sendOptimizedMessage(
         message,
         async (
@@ -627,7 +635,7 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                     temperature: 0.3,
                     max_tokens: 800,
                     stream: true,
-                    tools_enabled: toolsEnabled,
+                    tools_enabled: toolsForPayload,
                     document_ids:
                       documentIds.length > 0 ? documentIds : undefined,
                     file_ids:
@@ -663,9 +671,10 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                     const errorMsg =
                       typeof event.data === "string"
                         ? event.data
-                        : event.data.error ||
-                          event.data.message ||
-                          JSON.stringify(event.data);
+                        : event.data?.error ||
+                          (event.data && "message" in event.data
+                            ? (event.data as any).message
+                            : JSON.stringify(event.data));
                     throw new Error(errorMsg);
                   }
                 }
@@ -688,10 +697,32 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                   response.content = accumulatedContent;
                 }
               } catch (streamError) {
-                console.error(
-                  "Streaming failed, falling back to non-streaming",
-                  streamError,
-                );
+                // Backend may use non-streaming for RAG automatically
+                // Only log as warning if it's a real error, not a strategy change
+                const isAttributeError =
+                  streamError instanceof Error &&
+                  streamError.message?.includes("AttributeError");
+
+                const isPdfMaterializationError =
+                  streamError instanceof Error &&
+                  streamError.message?.includes("pdf_materialization_failed");
+
+                const isStorageUnavailable =
+                  streamError instanceof Error &&
+                  streamError.message?.includes("storage_unavailable");
+
+                // Don't log expected strategy changes or known issues
+                if (
+                  !isAttributeError &&
+                  !isPdfMaterializationError &&
+                  !isStorageUnavailable
+                ) {
+                  console.warn(
+                    "Stream processing encountered issue, using fallback:",
+                    streamError,
+                  );
+                }
+
                 // Fallback to non-streaming if streaming fails
                 response = await apiClient.sendChatMessage({
                   message: msg,
@@ -700,7 +731,7 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                   temperature: 0.3,
                   max_tokens: 800,
                   stream: false,
-                  tools_enabled: toolsEnabled,
+                  tools_enabled: toolsForPayload,
                   document_ids:
                     documentIds.length > 0 ? documentIds : undefined,
                   file_ids:
@@ -719,7 +750,7 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                 temperature: 0.3,
                 max_tokens: 800,
                 stream: false,
-                tools_enabled: toolsEnabled,
+                tools_enabled: toolsForPayload,
                 document_ids: documentIds.length > 0 ? documentIds : undefined,
                 file_ids:
                   fileIdsForBackend && fileIdsForBackend.length > 0
@@ -1467,38 +1498,64 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
             </div>
           }
         >
-          <ChatInterface
-            key={`chat-${currentChatId}-${selectionEpoch}`}
-            className="flex-1"
-            currentChatId={currentChatId}
-            messages={messages}
-            onSendMessage={handleSendMessage}
-            onRetryMessage={handleRetryMessage}
-            onRegenerateMessage={handleRegenerateMessage}
-            onStopStreaming={handleStopStreaming}
-            onCopyMessage={handleCopyMessage}
-            loading={isLoading}
-            welcomeMessage={welcomeComponent}
-            featureFlags={featureFlags}
-            toolsEnabled={toolsEnabled}
-            onToggleTool={toggleTool}
-            selectedTools={selectedTools}
-            onRemoveTool={handleRemoveTool}
-            onAddTool={handleAddTool}
-            onOpenTools={handleOpenTools}
-            isCreating={isCreatingConversation}
-            isHydrating={
-              currentChatId ? isHydratingByChatId[currentChatId] : false
-            }
-            // Files V1 props - MINIMALISMO FUNCIONAL: Sin toggle
-            filesV1Attachments={filesV1Attachments}
-            onAddFilesV1Attachment={addFilesV1Attachment}
-            onRemoveFilesV1Attachment={removeFilesV1Attachment}
-            lastReadyFile={lastReadyAuditFile}
-            // Copiloto 414: Audit progress callback
-            onStartAudit={handleStartAudit}
-            onAuditError={handleAuditError}
-          />
+          <div className="flex h-full min-h-0">
+            <div className="flex-1 min-w-0">
+              <ChatInterface
+                key={`chat-${currentChatId}-${selectionEpoch}`}
+                className="flex-1"
+                currentChatId={currentChatId}
+                messages={messages}
+                onSendMessage={handleSendMessage}
+                onRetryMessage={handleRetryMessage}
+                onRegenerateMessage={handleRegenerateMessage}
+                onStopStreaming={handleStopStreaming}
+                onCopyMessage={handleCopyMessage}
+                loading={isLoading}
+                welcomeMessage={welcomeComponent}
+                featureFlags={featureFlags}
+                toolsEnabled={toolsEnabled}
+                onToggleTool={toggleTool}
+                selectedTools={selectedTools}
+                onRemoveTool={handleRemoveTool}
+                onAddTool={handleAddTool}
+                onOpenTools={handleOpenTools}
+                isCreating={isCreatingConversation}
+                isHydrating={
+                  currentChatId ? isHydratingByChatId[currentChatId] : false
+                }
+                // Files V1 props - MINIMALISMO FUNCIONAL: Sin toggle
+                filesV1Attachments={filesV1Attachments}
+                onAddFilesV1Attachment={addFilesV1Attachment}
+                onRemoveFilesV1Attachment={removeFilesV1Attachment}
+                lastReadyFile={lastReadyAuditFile}
+                // Copiloto 414: Audit progress callback
+                onStartAudit={handleStartAudit}
+                onAuditError={handleAuditError}
+              />
+            </div>
+            <div
+              className={cn(
+                "relative hidden h-full lg:block transition-[width] duration-200",
+                isCanvasOpen ? "w-[380px]" : "w-0",
+              )}
+            >
+              <CanvasPanel className="h-full" />
+            </div>
+          </div>
+
+          {isCanvasOpen && (
+            <div
+              className="lg:hidden fixed inset-0 z-40 bg-black/60"
+              onClick={toggleCanvas}
+            >
+              <div
+                className="absolute right-0 top-0 h-full w-[90%] max-w-md shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <CanvasPanel className="h-full" />
+              </div>
+            </div>
+          )}
         </ErrorBoundary>
       </div>
     </ChatShell>

@@ -253,32 +253,72 @@ class IngestFilesTool(Tool):
                             conversation_id=conversation_id
                         )
 
-                    # 3. Dispatch background processing task
-                    background_tasks = context.get("background_tasks") if context else None
-                    if background_tasks and isinstance(background_tasks, BackgroundTasks):
-                        # Create service and dispatch processing
-                        processing_service = create_document_processing_service(
-                            segmentation_strategy="word_based"
-                        )
+                    # 3. Process document: Sync for small files, async for large files
+                    # HYBRID STRATEGY: Sync processing ensures segments available for immediate RAG
+                    # while async processing prevents timeouts on large PDFs
+                    SYNC_PROCESSING_THRESHOLD_MB = 5
+                    processing_service = create_document_processing_service(
+                        segmentation_strategy="word_based"
+                    )
 
-                        background_tasks.add_task(
-                            processing_service.process_document,
-                            conversation_id=conversation_id,
-                            doc_id=file_ref
-                        )
-                        logger.info(
-                            "🚀 [RAG DEBUG] Background processing dispatched",
-                            doc_id=file_ref,
-                            filename=doc_state.name,
-                            strategy="word_based",
-                            conversation_id=conversation_id,
-                            timestamp=datetime.utcnow().isoformat()
-                        )
+                    # Determine processing strategy based on file size
+                    doc_size_bytes = doc.size_bytes if doc else 0
+                    doc_size_mb = doc_size_bytes / (1024 * 1024)
+                    should_process_sync = doc_size_bytes < (SYNC_PROCESSING_THRESHOLD_MB * 1024 * 1024)
+
+                    if should_process_sync:
+                        # SYNC: Process immediately for small files (< 5MB)
+                        try:
+                            await processing_service.process_document(
+                                conversation_id=conversation_id,
+                                doc_id=file_ref
+                            )
+                            logger.info(
+                                "✅ [RAG FIX] Document processed synchronously - segments ready for RAG",
+                                doc_id=file_ref,
+                                filename=doc_state.name,
+                                size_mb=round(doc_size_mb, 2),
+                                strategy="sync",
+                                conversation_id=conversation_id,
+                                timestamp=datetime.utcnow().isoformat()
+                            )
+                        except Exception as proc_error:
+                            logger.error(
+                                "❌ Sync processing failed, segments unavailable for RAG",
+                                doc_id=file_ref,
+                                error=str(proc_error),
+                                exc_type=type(proc_error).__name__,
+                                exc_info=True
+                            )
+                            # Don't fail the entire request - mark as failed
+                            failed_docs.append({
+                                "doc_id": file_ref,
+                                "error": f"Processing failed: {str(proc_error)[:100]}"
+                            })
                     else:
-                        logger.warning(
-                            "BackgroundTasks not available, document won't be processed",
-                            doc_id=file_ref
-                        )
+                        # ASYNC: Dispatch to background for large files (>= 5MB)
+                        background_tasks = context.get("background_tasks") if context else None
+                        if background_tasks and isinstance(background_tasks, BackgroundTasks):
+                            background_tasks.add_task(
+                                processing_service.process_document,
+                                conversation_id=conversation_id,
+                                doc_id=file_ref
+                            )
+                            logger.info(
+                                "🚀 [RAG DEBUG] Large file dispatched to background processing",
+                                doc_id=file_ref,
+                                filename=doc_state.name,
+                                size_mb=round(doc_size_mb, 2),
+                                strategy="async",
+                                conversation_id=conversation_id,
+                                timestamp=datetime.utcnow().isoformat()
+                            )
+                        else:
+                            logger.warning(
+                                "⚠️ BackgroundTasks not available for large file - segments unavailable",
+                                doc_id=file_ref,
+                                size_mb=round(doc_size_mb, 2)
+                            )
 
                 except Exception as e:
                     logger.error(
