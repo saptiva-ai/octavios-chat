@@ -40,10 +40,23 @@ from .services.storage import storage
 from .core.auth import get_current_user
 
 # MCP (Model Context Protocol) integration - Using FastMCP (official SDK)
-from .mcp.server import mcp as mcp_server
-from .mcp.fastapi_adapter import MCPFastAPIAdapter
-from .mcp.tasks import task_manager
-from .mcp.lazy_routes import create_lazy_mcp_router
+try:
+    from .mcp.server import mcp as mcp_server
+    from .mcp.fastapi_adapter import MCPFastAPIAdapter
+    from .mcp.tasks import task_manager
+    from .mcp.lazy_routes import create_lazy_mcp_router
+    _mcp_enabled = True
+except ModuleNotFoundError as mcp_import_err:  # pragma: no cover - defensive guard for missing SDK deps
+    # If fastmcp dependency chain is broken (e.g., mcp.types missing), downgrade gracefully
+    structlog.get_logger(__name__).warning(
+        "MCP disabled - dependency missing",
+        error=str(mcp_import_err),
+    )
+    mcp_server = None
+    MCPFastAPIAdapter = None  # type: ignore
+    task_manager = None  # type: ignore
+    create_lazy_mcp_router = None  # type: ignore
+    _mcp_enabled = False
 
 # Resource lifecycle management
 from .workers.resource_cleanup_worker import get_cleanup_worker
@@ -63,8 +76,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await Database.connect_to_mongo()
     await storage.start_reaper()
 
-    # Start MCP task manager
-    await task_manager.start()
+    # Start MCP task manager (only if MCP is enabled)
+    if _mcp_enabled and task_manager:
+        await task_manager.start()
 
     # Start resource cleanup worker
     cleanup_worker = get_cleanup_worker()
@@ -81,7 +95,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await cleanup_worker.stop()
 
     # Stop MCP task manager
-    await task_manager.stop()
+    if _mcp_enabled and task_manager:
+        await task_manager.stop()
 
     # Close database connection
     await Database.close_mongo_connection()
@@ -153,7 +168,7 @@ def create_app() -> FastAPI:
 
     # MCP integration - Using FastMCP (official SDK) with FastAPI adapter
     # Tools defined in src/mcp/server.py: audit_file, excel_analyzer, viz_tool
-    app.state.mcp_server = mcp_server
+    app.state.mcp_server = mcp_server if _mcp_enabled else None
 
     def _on_mcp_invoke(response):
         """Telemetry callback for tool invocations"""
@@ -163,32 +178,37 @@ def create_app() -> FastAPI:
             pass
 
     # Create adapter to expose FastMCP tools via FastAPI REST endpoints
-    mcp_adapter = MCPFastAPIAdapter(
-        mcp_server=mcp_server,
-        auth_dependency=get_current_user,
-        on_invoke=_on_mcp_invoke,
-    )
+    mcp_adapter = None
+    if _mcp_enabled and MCPFastAPIAdapter:
+        mcp_adapter = MCPFastAPIAdapter(
+            mcp_server=mcp_server,
+            auth_dependency=get_current_user,
+            on_invoke=_on_mcp_invoke,
+        )
 
     # Store adapter in app.state for internal tool invocation (Phase 2 MCP integration)
     app.state.mcp_adapter = mcp_adapter
 
     # Mount MCP routes: GET /api/mcp/tools, POST /api/mcp/invoke, GET /api/mcp/health
-    app.include_router(
-        mcp_adapter.create_router(prefix="/mcp", tags=["mcp"]),
-        prefix="/api",
-    )
+    if _mcp_enabled and mcp_adapter:
+        app.include_router(
+            mcp_adapter.create_router(prefix="/mcp", tags=["mcp"]),
+            prefix="/api",
+        )
 
     # Mount MCP lazy loading routes (optimized - 98% context reduction)
     # GET /api/mcp/lazy/discover, GET /api/mcp/lazy/tools/{name}, POST /api/mcp/lazy/invoke
-    lazy_mcp_router = create_lazy_mcp_router(
-        auth_dependency=get_current_user,
-        on_invoke=_on_mcp_invoke,
-    )
-    app.include_router(lazy_mcp_router, prefix="/api")
+    if _mcp_enabled and create_lazy_mcp_router:
+        lazy_mcp_router = create_lazy_mcp_router(
+            auth_dependency=get_current_user,
+            on_invoke=_on_mcp_invoke,
+        )
+        app.include_router(lazy_mcp_router, prefix="/api")
 
     # Mount MCP admin routes for cache management
     # DELETE /api/mcp/cache/*, GET /api/mcp/cache/stats, POST /api/mcp/cache/warmup
-    app.include_router(mcp_admin.router, prefix="/api/mcp", tags=["mcp-admin"])
+    if _mcp_enabled:
+        app.include_router(mcp_admin.router, prefix="/api/mcp", tags=["mcp-admin"])
 
     # Instrument FastAPI for telemetry
     instrument_fastapi(app)
