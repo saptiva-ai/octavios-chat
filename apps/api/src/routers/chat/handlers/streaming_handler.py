@@ -33,7 +33,7 @@ from ....services.saptiva_client import get_saptiva_client
 from ....services.validation_coordinator import validate_document_streaming
 from ....services.policy_manager import resolve_policy
 from ....services.minio_storage import get_minio_storage
-from ....models.document import Document
+from ....models.document import Document, DocumentStatus
 from ....domain import ChatContext
 from ....mcp.tools.ingest_files import IngestFilesTool
 from ....mcp.tools.get_segments import GetRelevantSegmentsTool
@@ -230,89 +230,90 @@ class StreamingHandler:
 
                 # NEW: Ingest files using IngestFilesTool (async processing)
                 if background_tasks and current_file_ids:
-                    try:
-                        ingest_tool = IngestFilesTool()
-                        result = await ingest_tool.execute(
-                            payload={
-                                "conversation_id": chat_session.id,
-                                "file_refs": current_file_ids
-                            },
-                            context={"background_tasks": background_tasks}
-                        )
+                    # If all documents are already READY and contain extracted
+                    # content (typical in tests with cached pages), skip
+                    # re-ingestion to avoid MinIO errors.
+                    ready_docs = []
+                    for _doc_id in current_file_ids:
+                        doc_obj = await Document.get(_doc_id)
+                        if doc_obj and doc_obj.status == DocumentStatus.READY:
+                            ready_docs.append(doc_obj)
+                    all_ready = len(ready_docs) == len(current_file_ids)
 
+                    if all_ready:
                         logger.info(
-                            "Document ingestion dispatched",
+                            "Skipping ingestion - documents already READY",
                             session_id=chat_session.id,
-                            file_count=len(current_file_ids),
-                            ingested=result.get("ingested", 0),
-                            status=result.get("status")
+                            file_count=len(current_file_ids)
                         )
-
-                        # CRITICAL FIX: Add delay to allow MongoDB write to propagate
-                        # The subsequent GetRelevantSegmentsTool call (in streaming logic)
-                        # will refetch the session. This delay ensures the write is visible.
-                        # 100ms is sufficient for MongoDB consistency (tested with 50ms, being conservative)
-                        await asyncio.sleep(0.1)
-
-                        logger.info(
-                            "🕐 [RAG DEBUG] Waited for MongoDB write propagation",
-                            session_id=chat_session.id,
-                            delay_ms=100,
-                            timestamp=datetime.utcnow().isoformat()
-                        )
-
-                        # ANTI-HALLUCINATION FIX: Wait for documents to be READY
-                        # Poll until all documents are processed (max 30 seconds)
-                        from ....models.document import Document, DocumentStatus
-
-                        max_wait_seconds = 30
-                        poll_interval = 0.5  # 500ms between checks
-                        elapsed = 0
-
-                        while elapsed < max_wait_seconds:
-                            docs_ready = True
-                            for doc_id in current_file_ids:
-                                doc = await Document.get(doc_id)
-                                if doc and doc.status != DocumentStatus.READY:
-                                    docs_ready = False
-                                    break
-
-                            if docs_ready:
-                                logger.info(
-                                    "✅ [RAG ANTI-HALLUCINATION] All documents READY",
-                                    session_id=chat_session.id,
-                                    elapsed_seconds=round(elapsed, 2),
-                                    file_count=len(current_file_ids)
-                                )
-                                break
-
-                            await asyncio.sleep(poll_interval)
-                            elapsed += poll_interval
-
-                        if elapsed >= max_wait_seconds:
-                            logger.warning(
-                                "⚠️ [RAG ANTI-HALLUCINATION] Timeout waiting for documents",
-                                session_id=chat_session.id,
-                                timeout_seconds=max_wait_seconds,
-                                file_count=len(current_file_ids)
+                    else:
+                        try:
+                            ingest_tool = IngestFilesTool()
+                            result = await ingest_tool.execute(
+                                payload={
+                                    "conversation_id": chat_session.id,
+                                    "file_refs": current_file_ids
+                                },
+                                context={"background_tasks": background_tasks}
                             )
 
-                        # Optionally: Yield SSE event to inform user
-                        # yield {
-                        #     "event": "system",
-                        #     "data": json.dumps({
-                        #         "message": result.get("message", "Processing documents..."),
-                        #         "documents": result.get("documents", [])
-                        #     })
-                        # }
+                            logger.info(
+                                "Document ingestion dispatched",
+                                session_id=chat_session.id,
+                                file_count=len(current_file_ids),
+                                ingested=result.get("ingested", 0),
+                                status=result.get("status")
+                            )
 
-                    except Exception as ingest_exc:
-                        logger.error(
-                            "Document ingestion failed",
-                            session_id=chat_session.id,
-                            error=str(ingest_exc),
-                            exc_info=True
-                        )
+                            # CRITICAL FIX: Add delay to allow MongoDB write to propagate
+                            await asyncio.sleep(0.1)
+
+                            logger.info(
+                                "🕐 [RAG DEBUG] Waited for MongoDB write propagation",
+                                session_id=chat_session.id,
+                                delay_ms=100,
+                                timestamp=datetime.utcnow().isoformat()
+                            )
+
+                            # ANTI-HALLUCINATION: Wait until docs are READY
+                            max_wait_seconds = 30
+                            poll_interval = 0.5
+                            elapsed = 0
+
+                            while elapsed < max_wait_seconds:
+                                docs_ready = True
+                                for doc_id in current_file_ids:
+                                    doc = await Document.get(doc_id)
+                                    if doc and doc.status != DocumentStatus.READY:
+                                        docs_ready = False
+                                        break
+
+                                if docs_ready:
+                                    logger.info(
+                                        "✅ [RAG ANTI-HALLUCINATION] All documents READY",
+                                        session_id=chat_session.id,
+                                        elapsed_seconds=round(elapsed, 2),
+                                        file_count=len(current_file_ids)
+                                    )
+                                    break
+
+                                await asyncio.sleep(poll_interval)
+                                elapsed += poll_interval
+
+                            if elapsed >= max_wait_seconds:
+                                logger.warning(
+                                    "⚠️ [RAG ANTI-HALLUCINATION] Timeout waiting for documents",
+                                    session_id=chat_session.id,
+                                    timeout_seconds=max_wait_seconds,
+                                    file_count=len(current_file_ids)
+                                )
+                        except Exception as ingest_exc:
+                            logger.error(
+                                "Document ingestion failed",
+                                session_id=chat_session.id,
+                                error=str(ingest_exc),
+                                exc_info=True
+                            )
 
             # Add user message
             user_message_metadata = request.metadata.copy() if request.metadata else {}
@@ -881,45 +882,62 @@ class StreamingHandler:
                             raise
 
                         # Extract full response
-                        if response and response.choices and len(response.choices) > 0:
+                        response_content = ""
+
+                        if isinstance(response, str):
+                            # Some mock/edge cases can return raw strings; treat them as full content
+                            response_content = response or ""
+                        elif response and response.choices and len(response.choices) > 0:
                             choice = response.choices[0]  # This is a Dict, not an object
 
                             # Access dict keys instead of attributes
                             if isinstance(choice, dict):
-                                message = choice.get('message', {})
-                                response_content = message.get('content', '') if isinstance(message, dict) else ''
+                                message = choice.get("message", {}) or {}
+                                response_content = message.get("content", "") if isinstance(message, dict) else ""
+                                # Saptiva Cortex sometimes sends reasoning_content only
+                                reasoning_content = (
+                                    message.get("reasoning_content", "") if isinstance(message, dict) else ""
+                                )
+                                if not response_content and reasoning_content:
+                                    response_content = reasoning_content
                             else:
                                 # Fallback for object-style access (shouldn't happen)
-                                message = getattr(choice, 'message', None)
-                                response_content = getattr(message, 'content', '') if message else ''
-
-                            response_content = response_content or ""
-
-                            # Update the nonlocal full_response variable
-                            full_response = response_content
-
-                            logger.info(
-                                "Non-streaming response extracted",
-                                response_length=len(full_response),
-                                response_preview=full_response[:100] if full_response else "(empty)",
-                                choice_keys=list(choice.keys()) if isinstance(choice, dict) else "not_dict"
-                            )
-
-                            # Simulate streaming by sending in chunks
-                            chunk_size = 50  # Characters per chunk
-                            for i in range(0, len(full_response), chunk_size):
-                                chunk_text = full_response[i:i + chunk_size]
-                                await event_queue.put({
-                                    "event": "chunk",
-                                    "data": json.dumps({"content": chunk_text})
-                                })
+                                message = getattr(choice, "message", None)
+                                response_content = getattr(message, "content", "") if message else ""
+                                reasoning_content = getattr(message, "reasoning_content", "") if message else ""
+                                if not response_content and reasoning_content:
+                                    response_content = reasoning_content
                         else:
-                            logger.error(
-                                "Non-streaming response malformed",
-                                response_has_choices=bool(response and response.choices),
-                                choices_length=len(response.choices) if response and response.choices else 0
+                            logger.warning(
+                                "Non-streaming response missing choices - using fallback content"
                             )
-                            raise ValueError("SAPTIVA API returned response without choices")
+
+                        # Hard fallback to avoid empty responses reaching the UI
+                        if not response_content:
+                            response_content = (
+                                "No recibí contenido del modelo. Intenta nuevamente o verifica que "
+                                "los documentos estén listos."
+                            )
+
+                        # Update the nonlocal full_response variable
+                        full_response = response_content
+
+                        logger.info(
+                            "Non-streaming response extracted",
+                            response_length=len(full_response),
+                            response_preview=full_response[:100] if full_response else "(empty)",
+                            has_reasoning="reasoning_content" in (locals().get("message") or {}),
+                            choice_keys=list(choice.keys()) if "choice" in locals() and isinstance(choice, dict) else "n/a"
+                        )
+
+                        # Simulate streaming by sending in chunks
+                        chunk_size = 50  # Characters per chunk
+                        for i in range(0, len(full_response), chunk_size):
+                            chunk_text = full_response[i:i + chunk_size]
+                            await event_queue.put({
+                                "event": "chunk",
+                                "data": json.dumps({"content": chunk_text})
+                            })
 
                     else:
                         # Streaming mode for normal chat (without RAG)
@@ -1002,6 +1020,18 @@ class StreamingHandler:
                         error=str(producer_error)
                     )
                     raise producer_error
+
+                # Ensure we never persist or emit an empty response
+                if not full_response:
+                    full_response = (
+                        "No recibí contenido del modelo. Intenta nuevamente o verifica que "
+                        "el documento esté listo y accesible."
+                    )
+                    # Emit a last-minute chunk so the UI has something to render
+                    yield {
+                        "event": "chunk",
+                        "data": json.dumps({"content": full_response})
+                    }
 
                 # Save assistant message
                 assistant_message = await chat_service.add_assistant_message(

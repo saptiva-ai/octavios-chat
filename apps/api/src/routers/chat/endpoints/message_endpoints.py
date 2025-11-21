@@ -357,11 +357,15 @@ async def send_chat_message(
     # STREAMING PATH
     # ========================================================================
     if getattr(request, 'stream', False):
-        streaming_handler = StreamingHandler(settings)
-        return EventSourceResponse(
-            streaming_handler.handle_stream(request, user_id, background_tasks),
-            media_type="text/event-stream"
-        )
+        accept_header = http_request.headers.get("accept", "")
+        if "text/event-stream" in accept_header:
+            streaming_handler = StreamingHandler(settings)
+            return EventSourceResponse(
+                streaming_handler.handle_stream(request, user_id, background_tasks),
+                media_type="text/event-stream"
+            )
+        # If the client did not request SSE, fall back to non-streaming JSON
+        request.stream = False
 
     # ========================================================================
     # NON-STREAMING PATH

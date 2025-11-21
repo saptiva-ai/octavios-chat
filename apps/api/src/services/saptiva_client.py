@@ -85,7 +85,12 @@ class SaptivaClient:
             self.force_mock_reason = _global_mock_reason or "fallback_on_error"
         else:
             self.force_mock = False
-        self.allow_mock_fallback = _env_flag("SAPTIVA_ALLOW_MOCK_FALLBACK", True)
+        # Default: do NOT fall back to mock when an API key is configured.
+        # You can re-enable fallback by setting SAPTIVA_ALLOW_MOCK_FALLBACK=1.
+        self.allow_mock_fallback = _env_flag(
+            "SAPTIVA_ALLOW_MOCK_FALLBACK",
+            False if self.api_key else True,
+        )
         self.mock_mode = False
         self.mock_reason: Optional[str] = None
         self._last_mock_reason: Optional[str] = None
