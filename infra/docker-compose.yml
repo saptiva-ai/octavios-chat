@@ -239,7 +239,7 @@ services:
       - CHAT_ALLOWED_MODELS=${CHAT_ALLOWED_MODELS:-Saptiva Turbo,Saptiva Cortex,Saptiva Ops,Saptiva Coder,Saptiva Legacy}
 
       - SAPTIVA_BASE_URL=${SAPTIVA_BASE_URL:-https://api.saptiva.com}
-      # SAPTIVA_API_KEY is loaded from env_file automatically
+      - SAPTIVA_API_KEY=${SAPTIVA_API_KEY:-}
       - SAPTIVA_TIMEOUT=${SAPTIVA_TIMEOUT:-30}
       - SAPTIVA_MAX_RETRIES=${SAPTIVA_MAX_RETRIES:-3}
 
