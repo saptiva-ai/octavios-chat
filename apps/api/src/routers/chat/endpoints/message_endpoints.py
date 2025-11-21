@@ -356,16 +356,41 @@ async def send_chat_message(
     # ========================================================================
     # STREAMING PATH
     # ========================================================================
+    # WORKAROUND: Force non-streaming when documents are attached
+    # This ensures document context is properly loaded via SimpleChatStrategy
+    # until Qdrant indexing is fully operational for streaming RAG
+    file_ids = getattr(request, 'file_ids', None) or []
+    has_documents = len(file_ids) > 0
+
+    # logger.info(
+    #     "🔍 [DOCUMENT DEBUG] Checking for documents",
+    #     stream_requested=getattr(request, 'stream', False),
+    #     has_file_ids_attr=hasattr(request, 'file_ids'),
+    #     file_ids_value=file_ids,
+    #     file_ids_count=len(file_ids),
+    #     has_documents=has_documents,
+    #     user_id=user_id
+    # )
+
     if getattr(request, 'stream', False):
-        accept_header = http_request.headers.get("accept", "")
-        if "text/event-stream" in accept_header:
-            streaming_handler = StreamingHandler(settings)
-            return EventSourceResponse(
-                streaming_handler.handle_stream(request, user_id, background_tasks),
-                media_type="text/event-stream"
+        if has_documents:
+            # Force non-streaming for document-based queries
+            logger.info(
+                "Forcing non-streaming mode due to attached documents",
+                file_ids=request.file_ids,
+                user_id=user_id
             )
-        # If the client did not request SSE, fall back to non-streaming JSON
-        request.stream = False
+            request.stream = False
+        else:
+            accept_header = http_request.headers.get("accept", "")
+            if "text/event-stream" in accept_header:
+                streaming_handler = StreamingHandler(settings)
+                return EventSourceResponse(
+                    streaming_handler.handle_stream(request, user_id, background_tasks),
+                    media_type="text/event-stream"
+                )
+            # If the client did not request SSE, fall back to non-streaming JSON
+            request.stream = False
 
     # ========================================================================
     # NON-STREAMING PATH

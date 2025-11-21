@@ -648,23 +648,25 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                 );
 
                 let metaData: any = null;
-                // console.log("[DEBUG] Starting to consume events");
+                // console.log("[🔍 STREAMING DEBUG] Starting to consume events");
 
                 for await (const event of streamGenerator) {
-                  // console.log("[DEBUG] Event received:", event.type);
+                  // console.log("[🔍 STREAMING DEBUG] Event received:", event.type, event.data ? "with data" : "no data");
 
                   if (event.type === "meta") {
                     metaData = event.data;
+                    // console.log("[🔍 STREAMING DEBUG] Meta event:", metaData);
                     // Update chat_id if we got a new one
                     if (!currentChatId && event.data.chat_id) {
                       setCurrentChatId(event.data.chat_id);
                     }
                   } else if (event.type === "chunk") {
                     accumulatedContent += event.data.content;
-                    // console.log("[DEBUG] Chunk - accumulated length:", accumulatedContent.length);
+                    // console.log("[🔍 STREAMING DEBUG] Chunk received - content length:", event.data.content?.length, "accumulated:", accumulatedContent.length);
                     // Update streaming content (flushSync is handled in useOptimizedChat hook)
                     updateStreamingContent(placeholderId, accumulatedContent);
                   } else if (event.type === "done") {
+                    // console.log("[🔍 STREAMING DEBUG] Done event - has content:", !!event.data.content, "accumulated:", accumulatedContent.length);
                     response = event.data;
                   } else if (event.type === "error") {
                     // Handle both string and object error formats
@@ -678,10 +680,11 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                     throw new Error(errorMsg);
                   }
                 }
-                // console.log("[DEBUG] Stream finished");
+                // console.log("[🔍 STREAMING DEBUG] Stream finished - response exists:", !!response, "accumulated:", accumulatedContent.length);
 
                 // If we didn't get a done event, construct response from accumulated data
                 if (!response) {
+                  // console.log("[🔍 STREAMING DEBUG] No done event - constructing from accumulated");
                   response = {
                     chat_id: metaData?.chat_id || chatIdForBackend || "",
                     message_id: metaData?.user_message_id || placeholderId,
@@ -694,7 +697,10 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
 
                 // Override content with accumulated content (in case done event has incomplete data)
                 if (accumulatedContent && response) {
+                  // console.log("[🔍 STREAMING DEBUG] Overriding response.content with accumulated (length:", accumulatedContent.length, ")");
                   response.content = accumulatedContent;
+                } else {
+                  // console.log("[🔍 STREAMING DEBUG] Not overriding - accumulated empty or no response");
                 }
               } catch (streamError) {
                 // Backend may use non-streaming for RAG automatically

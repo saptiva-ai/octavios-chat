@@ -37,6 +37,11 @@ from ....models.document import Document, DocumentStatus
 from ....domain import ChatContext
 from ....mcp.tools.ingest_files import IngestFilesTool
 from ....mcp.tools.get_segments import GetRelevantSegmentsTool
+from ....services.empty_response_handler import (
+    EmptyResponseHandler,
+    EmptyResponseScenario,
+    ensure_non_empty_content
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -723,19 +728,66 @@ class StreamingHandler:
                             total_docs=segments_result.get("total_docs", 0)
                         )
                     else:
-                        # No segments available - documents might be processing
-                        message = segments_result.get("message", "")
-                        if "procesando" in message.lower() or "processing" in message.lower():
-                            warning_msg = "⏳ Los documentos se están procesando. Estarán disponibles en breve."
-                            doc_warnings.append(warning_msg)
-                            logger.warning(
-                                "⚠️ [RAG DEBUG] Documents still processing - warning added",
-                                session_id=context.session_id,
-                                warning_message=warning_msg,
-                                total_docs=segments_result.get("total_docs", 0),
-                                ready_docs=segments_result.get("ready_docs", 0),
-                                timestamp=datetime.utcnow().isoformat()
+                        # No segments from Qdrant - fallback to loading full text from Redis/MongoDB
+                        logger.info(
+                            "🔄 [RAG FALLBACK] No segments from Qdrant, loading full text from cache",
+                            session_id=context.session_id,
+                            document_ids=context.document_ids
+                        )
+
+                        try:
+                            # Fallback: Load document text directly from Redis cache
+                            doc_texts = await DocumentService.get_document_text_from_cache(
+                                document_ids=context.document_ids,
+                                user_id=context.user_id
                             )
+
+                            if doc_texts:
+                                segment_texts = []
+                                for doc_id, doc_data in doc_texts.items():
+                                    text = doc_data.get("text", "")
+                                    filename = doc_data.get("filename", doc_id)
+                                    if text:
+                                        # Truncate to avoid token overflow (4000 chars ~ 1000 tokens)
+                                        truncated_text = text[:4000]
+                                        segment_texts.append(f"**{filename}**\n{truncated_text}")
+
+                                if segment_texts:
+                                    document_context = "\n\n---\n\n".join(segment_texts)
+                                    logger.info(
+                                        "✅ [RAG FALLBACK] Successfully loaded document text from cache",
+                                        session_id=context.session_id,
+                                        docs_loaded=len(segment_texts),
+                                        total_chars=len(document_context)
+                                    )
+                                else:
+                                    logger.warning(
+                                        "⚠️ [RAG FALLBACK] Documents in cache but no extractable text",
+                                        session_id=context.session_id
+                                    )
+                            else:
+                                # No documents in cache - check if they're still processing
+                                message = segments_result.get("message", "")
+                                if "procesando" in message.lower() or "processing" in message.lower():
+                                    warning_msg = "⏳ Los documentos se están procesando. Estarán disponibles en breve."
+                                    doc_warnings.append(warning_msg)
+                                    logger.warning(
+                                        "⚠️ [RAG DEBUG] Documents still processing - warning added",
+                                        session_id=context.session_id,
+                                        warning_message=warning_msg,
+                                        total_docs=segments_result.get("total_docs", 0),
+                                        ready_docs=segments_result.get("ready_docs", 0),
+                                        timestamp=datetime.utcnow().isoformat()
+                                    )
+
+                        except Exception as fallback_exc:
+                            logger.error(
+                                "❌ [RAG FALLBACK] Failed to load documents from cache",
+                                error=str(fallback_exc),
+                                exc_type=type(fallback_exc).__name__,
+                                session_id=context.session_id
+                            )
+                            # Don't fail - continue without document context
 
                 except Exception as doc_exc:
                     logger.error(
@@ -912,12 +964,15 @@ class StreamingHandler:
                                 "Non-streaming response missing choices - using fallback content"
                             )
 
-                        # Hard fallback to avoid empty responses reaching the UI
-                        if not response_content:
-                            response_content = (
-                                "No recibí contenido del modelo. Intenta nuevamente o verifica que "
-                                "los documentos estén listos."
-                            )
+                        # ANTI-EMPTY-RESPONSE: Use centralized handler with contextual messages
+                        response_content = ensure_non_empty_content(
+                            response_content,
+                            scenario=EmptyResponseScenario.API_EMPTY_CONTENT,
+                            model=context.model,
+                            has_documents=bool(context.document_ids),
+                            document_count=len(context.document_ids) if context.document_ids else 0,
+                            user_id=context.user_id
+                        )
 
                         # Update the nonlocal full_response variable
                         full_response = response_content
@@ -932,12 +987,26 @@ class StreamingHandler:
 
                         # Simulate streaming by sending in chunks
                         chunk_size = 50  # Characters per chunk
+                        total_chunks = (len(full_response) + chunk_size - 1) // chunk_size
+                        logger.info(
+                            "📤 [DEBUG] Starting to send chunks",
+                            total_response_length=len(full_response),
+                            chunk_size=chunk_size,
+                            total_chunks=total_chunks
+                        )
                         for i in range(0, len(full_response), chunk_size):
                             chunk_text = full_response[i:i + chunk_size]
-                            await event_queue.put({
+                            chunk_event = {
                                 "event": "chunk",
                                 "data": json.dumps({"content": chunk_text})
-                            })
+                            }
+                            await event_queue.put(chunk_event)
+                            logger.debug(
+                                "📤 [DEBUG] Chunk queued",
+                                chunk_index=i // chunk_size,
+                                chunk_length=len(chunk_text),
+                                chunk_preview=chunk_text[:20]
+                            )
 
                     else:
                         # Streaming mode for normal chat (without RAG)
@@ -996,12 +1065,21 @@ class StreamingHandler:
 
             try:
                 # Consumer loop: yield events from queue
+                event_count = 0
                 while True:
                     event = await event_queue.get()
 
                     if event is None:  # End signal
+                        logger.info("🏁 [DEBUG] Consumer received end signal (None)")
                         break
 
+                    event_count += 1
+                    logger.debug(
+                        "📥 [DEBUG] Consumer yielding event",
+                        event_number=event_count,
+                        event_type=event.get("event"),
+                        data_preview=str(event.get("data", ""))[:50]
+                    )
                     yield event
 
             finally:
@@ -1021,12 +1099,44 @@ class StreamingHandler:
                     )
                     raise producer_error
 
-                # Ensure we never persist or emit an empty response
+                # ANTI-EMPTY-RESPONSE: Ensure we never persist or emit an empty response
                 if not full_response:
-                    full_response = (
-                        "No recibí contenido del modelo. Intenta nuevamente o verifica que "
-                        "el documento esté listo y accesible."
+                    # Determine the most likely scenario
+                    if doc_warnings:
+                        scenario = EmptyResponseScenario.DOCS_PROCESSING
+                    elif context.document_ids and len(context.document_ids) > 0:
+                        scenario = EmptyResponseScenario.DOCS_NOT_FOUND
+                    else:
+                        scenario = EmptyResponseScenario.STREAM_NO_CHUNKS
+
+                    full_response = EmptyResponseHandler.get_fallback_message(
+                        scenario=scenario,
+                        context={
+                            "user_id": context.user_id,
+                            "chat_id": str(chat_session.id),
+                            "session_id": context.session_id,
+                            "model": context.model,
+                            "has_documents": bool(context.document_ids),
+                            "document_count": len(context.document_ids) if context.document_ids else 0,
+                            "stream_mode": True
+                        }
                     )
+
+                    # Log the incident for monitoring
+                    EmptyResponseHandler.log_empty_response_incident(
+                        scenario=scenario,
+                        context={
+                            "user_id": context.user_id,
+                            "chat_id": str(chat_session.id),
+                            "session_id": context.session_id,
+                            "model": context.model,
+                            "has_documents": bool(context.document_ids),
+                            "document_count": len(context.document_ids) if context.document_ids else 0,
+                            "stream_mode": True,
+                            "doc_warnings": doc_warnings if doc_warnings else None
+                        }
+                    )
+
                     # Emit a last-minute chunk so the UI has something to render
                     yield {
                         "event": "chunk",
@@ -1046,7 +1156,7 @@ class StreamingHandler:
                 )
 
                 # Yield completion event
-                yield {
+                done_event = {
                     "event": "done",
                     "data": json.dumps({
                         "message_id": str(assistant_message.id),
@@ -1055,6 +1165,14 @@ class StreamingHandler:
                         "content": full_response
                     })
                 }
+                logger.info(
+                    "✅ [DEBUG] Yielding done event",
+                    message_id=str(assistant_message.id),
+                    chat_id=str(chat_session.id),
+                    content_length=len(full_response),
+                    content_preview=full_response[:100] if full_response else "(empty)"
+                )
+                yield done_event
 
                 # Invalidate cache
                 await cache.invalidate_chat_history(chat_session.id)
