@@ -267,6 +267,13 @@ class SimpleChatStrategy(ChatStrategy):
                 f"Creé el artefacto **{fallback_title}** y lo guardé en el panel lateral."
             )
 
+        # Hard fallback: never return empty content to the UI
+        if not response_content:
+            response_content = (
+                "No recibí contenido del modelo. Intenta nuevamente o verifica que el "
+                "documento esté listo y accesible."
+            )
+
         # Sanitize response
         sanitized_content = sanitize_response_content(response_content)
 

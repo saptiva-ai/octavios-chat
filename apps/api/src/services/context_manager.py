@@ -68,10 +68,14 @@ class ContextManager:
         filename: Optional[str] = None
     ) -> None:
         """Add document text to context pool."""
+        content = text
+        if filename:
+            content = f"{filename}\n{text}"
+
         source = ContextSource(
             source_type="document",
             source_id=doc_id,
-            content=text,
+            content=content,
             metadata={"filename": filename}
         )
         self.sources.append(source)
