@@ -35,8 +35,8 @@ interface UseAuditFlowOptions {
   setValue: (value: string) => void;
   /** Callback to trigger message submission */
   onSubmit: () => void | Promise<void>;
-  /** Callback to clear file attachments after successful audit */
-  clearFiles: (chatId?: string) => void;
+  /** Optional callback to clear file attachments after successful audit */
+  clearFiles?: (chatId?: string) => void;
   /** Optional conversation ID for telemetry */
   conversationId?: string;
 }
@@ -121,20 +121,24 @@ export function useAuditFlow(options: UseAuditFlowOptions) {
                   conversationId,
                 },
               );
-              clearFiles(conversationId);
-              logDebug(
-                "[useAuditFlow] ✅ Files cleared successfully after audit",
-              );
+              if (clearFiles) {
+                clearFiles(conversationId);
+                logDebug(
+                  "[useAuditFlow] ✅ Files cleared successfully after audit",
+                );
+              }
 
               resolve();
             } catch (err) {
               logError("[useAuditFlow] Submit failed", { error: err });
 
               // Even on error, try to clear files to avoid stuck state
-              logDebug("[useAuditFlow] Clearing files after error (cleanup)", {
-                conversationId,
-              });
-              clearFiles(conversationId);
+              if (clearFiles) {
+                logDebug("[useAuditFlow] Clearing files after error (cleanup)", {
+                  conversationId,
+                });
+                clearFiles(conversationId);
+              }
 
               resolve();
             }
