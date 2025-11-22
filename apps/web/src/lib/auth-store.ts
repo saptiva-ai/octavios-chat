@@ -17,6 +17,11 @@ import type {
 } from "./types";
 import { logDebug, logError, logWarn } from "./logger";
 
+// ISSUE-019: Import stores for cleanup on logout
+import { useChatStore } from "./stores/chat-store";
+import { useHistoryStore } from "./stores/history-store";
+import { useFilesStore } from "./stores/files-store";
+
 interface AuthState {
   user: UserProfile | null;
   accessToken: string | null;
@@ -265,6 +270,16 @@ export const useAuthStore = createWithEqualityFn<AuthStore>()(
 
           // Clear localStorage
           get().clearCache();
+
+          // ISSUE-019: Clear all stores to prevent orphaned optimistic conversations
+          try {
+            useChatStore.getState().clearAllData();
+            useHistoryStore.getState().clearAllData();
+            useFilesStore.getState().clearAll();
+            logDebug("All stores cleared on logout");
+          } catch (error) {
+            logWarn("Failed to clear some stores on logout", error);
+          }
 
           // Show toast notification if this is due to expiration
           if (typeof window !== "undefined") {

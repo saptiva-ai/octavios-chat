@@ -7,12 +7,16 @@ import { Button, Badge } from "../ui";
 import { StreamingMessage } from "./StreamingMessage";
 import { FileReviewMessage } from "./FileReviewMessage";
 import { MessageAuditCard } from "./MessageAuditCard";
+import { PreviewAttachment } from "./PreviewAttachment";
 import { featureFlags } from "../../lib/feature-flags";
 import type {
   ChatMessage as ChatMessageType,
   ChatMessageKind,
   FileReviewData,
 } from "../../lib/types";
+import type { ToolInvocation } from "@/lib/types";
+import type { FileAttachment } from "../../types/files";
+import { ArtifactCard } from "./artifact-card";
 
 export interface ChatMessageProps {
   id?: string;
@@ -36,6 +40,7 @@ export interface ChatMessageProps {
       estimated_completion?: string;
       [key: string]: any;
     };
+    tool_invocations?: ToolInvocation[];
     [key: string]: any;
   };
   review?: FileReviewData;
@@ -93,6 +98,17 @@ export function ChatMessage({
   const isSystem = role === "system";
   const isAssistant = role === "assistant";
 
+  const toolInvocations = Array.isArray((metadata as any)?.tool_invocations)
+    ? ((metadata as any).tool_invocations as ToolInvocation[])
+    : [];
+  const artifactInvocations = toolInvocations.filter(
+    (inv) =>
+      inv &&
+      typeof inv === "object" &&
+      inv.tool_name === "create_artifact" &&
+      inv.result?.id,
+  );
+
   React.useEffect(() => {
     if (isUser) {
       logDebug("[ChatMessage] Rendering user message", {
@@ -121,59 +137,13 @@ export function ChatMessage({
     return <FileReviewMessage message={message} />;
   }
 
-  // Render audit card if message contains validation_report_id (P2.FE.3)
-  // Only render inline if AUDIT_INLINE feature flag is enabled
+  // Identify audit messages to append inline audit card after content
   const isAuditMessage =
     featureFlags.auditInline &&
     metadata &&
     typeof metadata === "object" &&
     "validation_report_id" in metadata &&
     metadata.validation_report_id;
-
-  if (isAuditMessage) {
-    return (
-      <div
-        className={cn(
-          "group flex gap-3 px-4 py-6 transition-colors duration-150",
-          "hover:bg-white/5",
-          className,
-        )}
-        role="article"
-        aria-label={`Resultado de auditoría - ${formatRelativeTime(timestamp || new Date())}`}
-      >
-        {/* Avatar */}
-        <div
-          className={cn(
-            "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-medium uppercase",
-            "bg-white/10 text-white opacity-60",
-          )}
-        >
-          AI
-        </div>
-
-        {/* Audit Card */}
-        <div className="flex-1 min-w-0">
-          <MessageAuditCard
-            metadata={metadata as any}
-            onViewFull={() =>
-              onViewAuditReport?.(
-                metadata.validation_report_id as string,
-                metadata.document_id as string,
-                metadata.filename as string | undefined,
-              )
-            }
-            onReAudit={() =>
-              onReAuditDocument?.(
-                metadata.document_id as string,
-                metadata.job_id as string | undefined,
-                metadata.filename as string | undefined,
-              )
-            }
-          />
-        </div>
-      </div>
-    );
-  }
 
   const handleCopy = async () => {
     const success = await copyToClipboard(content);
@@ -244,6 +214,40 @@ export function ChatMessage({
       >
         {/* Removed: Header with "Usuario Just now" and "Saptiva Turbo Just now" for minimal UI */}
 
+        {/* File attachments thumbnails ABOVE user message */}
+        {isUser && metadata?.files && metadata.files.length > 0 && (
+          <div
+            className={cn(
+              "mb-3 flex gap-2",
+              isUser ? "justify-end" : "justify-start",
+            )}
+          >
+            {metadata.files.map((file: any, index: number) => {
+              // Convert file metadata to FileAttachment format
+              const attachment: FileAttachment = {
+                file_id: file.file_id || `file-${index}`,
+                filename: file.filename || `Archivo ${index + 1}`,
+                mimetype:
+                  file.content_type ||
+                  file.mimetype ||
+                  "application/octet-stream",
+                bytes: file.bytes || file.size || 0,
+                pages: file.pages,
+                status: "READY",
+              };
+
+              return (
+                <PreviewAttachment
+                  key={attachment.file_id}
+                  attachment={attachment}
+                  className="w-32 h-48"
+                  showAuditButton={false}
+                />
+              );
+            })}
+          </div>
+        )}
+
         <div
           className={cn(
             "inline-flex max-w-full rounded-3xl px-5 py-4 text-left text-sm leading-relaxed",
@@ -278,62 +282,49 @@ export function ChatMessage({
               content
             )}
           </div>
-
-          {/* MVP-LOCK: File attachments indicator for user messages */}
-          {isUser && metadata?.file_ids && metadata.file_ids.length > 0 && (
-            <div className="mt-3 flex flex-col gap-1.5 text-xs text-white/60 border-t border-white/10 pt-3">
-              {metadata.files && metadata.files.length > 0 ? (
-                // Show individual file names if available
-                metadata.files.map((file: any, index: number) => (
-                  <div
-                    key={file.file_id || index}
-                    className="flex items-center gap-1.5"
-                  >
-                    <svg
-                      className="h-3.5 w-3.5 flex-shrink-0"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-                      />
-                    </svg>
-                    <span className="truncate">
-                      {file.filename || `Archivo ${index + 1}`}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                // Fallback: just show count if file details not available
-                <div className="flex items-center gap-1.5">
-                  <svg
-                    className="h-3.5 w-3.5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-                    />
-                  </svg>
-                  <span>
-                    {metadata.file_ids.length}{" "}
-                    {metadata.file_ids.length === 1 ? "adjunto" : "adjuntos"}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
         </div>
+
+        {/* Inline audit card after the assistant's summary */}
+        {isAssistant && isAuditMessage && (
+          <div className="mt-3">
+            <MessageAuditCard
+              metadata={metadata as any}
+              onViewFull={() =>
+                onViewAuditReport?.(
+                  metadata?.validation_report_id as string,
+                  metadata?.document_id as string,
+                  (metadata as any)?.filename as string | undefined,
+                )
+              }
+              onReAudit={() =>
+                onReAuditDocument?.(
+                  metadata?.document_id as string,
+                  metadata?.job_id as string | undefined,
+                  (metadata as any)?.filename as string | undefined,
+                )
+              }
+            />
+          </div>
+        )}
+
+        {/* Artifact cards should appear after the assistant's summary (and audit card) */}
+        {artifactInvocations.length > 0 && (
+          <div
+            className={cn(
+              "mt-3 flex flex-col gap-2",
+              isUser ? "items-end" : "items-start",
+            )}
+          >
+            {artifactInvocations.map((inv) => (
+              <ArtifactCard
+                key={(inv.result?.id as string) || inv.tool_name}
+                id={(inv.result?.id as string) || ""}
+                title={(inv.result?.title as string) || "Artefacto"}
+                type={(inv.result?.type as any) || "markdown"}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Removed: Footer with "XXX tokens Saptiva Turbo" for minimal UI */}
         {/* Only show error retry button */}

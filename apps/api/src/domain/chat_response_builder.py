@@ -112,6 +112,16 @@ class ChatResponseBuilder:
 
         Convenience method to build response from domain model.
         """
+        import structlog
+        logger = structlog.get_logger(__name__)
+
+        logger.info(
+            "🐛 [DEBUG] ChatResponseBuilder.from_processing_result",
+            sanitized_content_length=len(result.sanitized_content) if result.sanitized_content else 0,
+            content_length=len(result.content) if result.content else 0,
+            sanitized_preview=result.sanitized_content[:100] if result.sanitized_content else "(NONE)"
+        )
+
         self.with_chat_id(result.metadata.chat_id)
         self.with_message(result.sanitized_content, sanitized=True)
         self.with_message_id(result.metadata.assistant_message_id or "")
@@ -127,6 +137,9 @@ class ChatResponseBuilder:
 
         if result.metadata.decision_metadata:
             self.with_decision(result.metadata.decision_metadata)
+            tool_invocations = result.metadata.decision_metadata.get("tool_invocations")
+        else:
+            tool_invocations = None
 
         if result.task_id:
             self.with_research_task(result.task_id)
@@ -137,6 +150,8 @@ class ChatResponseBuilder:
         # Add processing metadata
         self.with_metadata("strategy_used", result.strategy_used)
         self.with_metadata("session_updated", result.session_updated)
+        if tool_invocations:
+            self.with_metadata("tool_invocations", tool_invocations)
 
         return self
 
@@ -147,9 +162,19 @@ class ChatResponseBuilder:
         Returns:
             JSONResponse with constructed data and headers.
         """
+        import structlog
+        logger = structlog.get_logger(__name__)
+
         # Merge metadata into response data
         if self._metadata:
             self._data["metadata"] = self._metadata
+
+        logger.info(
+            "🐛 [DEBUG] ChatResponseBuilder.build()",
+            content_length=len(self._data.get("content", "")),
+            content_preview=self._data.get("content", "")[:100],
+            data_keys=list(self._data.keys())
+        )
 
         return JSONResponse(
             content=self._data,

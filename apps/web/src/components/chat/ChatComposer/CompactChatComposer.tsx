@@ -18,11 +18,16 @@ import type { FileAttachment } from "../../../types/files";
 import type { FeatureFlagsResponse } from "@/lib/types";
 import { useFiles, type LastReadyFile } from "../../../hooks/useFiles";
 import { useAuditFlow } from "../../../hooks/useAuditFlow";
+import { PreviewAttachment } from "../PreviewAttachment";
 
 interface CompactChatComposerProps {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void | Promise<void>;
+  onSendMessageDirect?: (
+    message: string,
+    attachments?: ChatComposerAttachment[],
+  ) => void;
   onCancel?: () => void;
   disabled?: boolean;
   loading?: boolean;
@@ -128,6 +133,7 @@ export function CompactChatComposer({
   value,
   onChange,
   onSubmit,
+  onSendMessageDirect,
   onCancel,
   disabled = false,
   loading = false,
@@ -176,12 +182,68 @@ export function CompactChatComposer({
     conversationId || currentChatId || undefined,
   );
 
-  // Audit flow integration
+  // Audit flow integration - Use direct send bypassing React state
+  const directSubmitForAudit = React.useCallback(async () => {
+    // Direct submit for audit - bypasses React state by reading from textarea DOM
+    // This is safe because the audit command always includes text
+    logDebug("[CompactChatComposer] Direct audit submit triggered", {
+      currentValue: value,
+      textareaValue: taRef.current?.value,
+    });
+
+    // Force submission by reading current textarea value
+    // This works around React state update timing issues
+    if (taRef.current && onSendMessageDirect) {
+      const currentTextareaValue = taRef.current.value;
+      logDebug("[CompactChatComposer] Textarea value:", {
+        value: currentTextareaValue,
+      });
+
+      // If textarea has the audit command, send directly
+      if (currentTextareaValue.trim().startsWith("Auditar archivo:")) {
+        logDebug(
+          "[CompactChatComposer] Audit command detected, calling onSendMessageDirect",
+        );
+        onSendMessageDirect(
+          currentTextareaValue.trim(),
+          attachments.length ? attachments : undefined,
+        );
+
+        // Clear input and attachments after successful send
+        onChange("");
+        if (onAttachmentsChange) {
+          onAttachmentsChange([]);
+        }
+      } else {
+        logError(
+          "[CompactChatComposer] Textarea doesn't have audit command yet",
+          {
+            value: currentTextareaValue,
+          },
+        );
+      }
+    } else {
+      logError(
+        "[CompactChatComposer] Missing textarea ref or onSendMessageDirect callback",
+        {},
+      );
+    }
+  }, [onSendMessageDirect, value, attachments, onChange, onAttachmentsChange]);
+
   const { sendAuditForFile } = useAuditFlow({
     setValue: onChange,
-    onSubmit,
+    onSubmit: directSubmitForAudit,
+    // clearFiles is optional - not available in CompactChatComposer context
     conversationId: conversationId || currentChatId || undefined,
   });
+
+  // Debug: Log sendAuditForFile function availability
+  React.useEffect(() => {
+    logDebug("[CompactChatComposer] sendAuditForFile availability", {
+      sendAuditForFile: typeof sendAuditForFile,
+      isFunction: typeof sendAuditForFile === "function",
+    });
+  }, [sendAuditForFile]);
 
   // Finalize creation when user starts typing (guarantee transition creating → draft)
   const handleFirstInput = React.useCallback(() => {
@@ -259,10 +321,42 @@ export function CompactChatComposer({
   // FE-UX-1: Uploading guard (single definition)
   const isUploading = uploadingFiles.size > 0;
 
+  // Deduplicate attachments to prevent React key warnings
+  const deduplicatedAttachments = React.useMemo(() => {
+    if (!filesV1Attachments || filesV1Attachments.length === 0) return [];
+
+    // Use Map to deduplicate by file_id
+    const uniqueMap = new Map<string, FileAttachment>();
+    filesV1Attachments.forEach((attachment) => {
+      if (!uniqueMap.has(attachment.file_id)) {
+        uniqueMap.set(attachment.file_id, attachment);
+      }
+    });
+
+    const deduplicated = Array.from(uniqueMap.values());
+
+    // Log if duplicates were found
+    if (deduplicated.length !== filesV1Attachments.length) {
+      logDebug("[CompactChatComposer] Removed duplicate attachments", {
+        original: filesV1Attachments.length,
+        deduplicated: deduplicated.length,
+        removedCount: filesV1Attachments.length - deduplicated.length,
+      });
+    }
+
+    return deduplicated;
+  }, [filesV1Attachments]);
+
   // Fix Pack: READY attachments (single definition)
   const hasReadyFiles = React.useMemo(
-    () => filesV1Attachments?.some((a) => a.status === "READY") ?? false,
-    [filesV1Attachments],
+    () => deduplicatedAttachments.some((a) => a.status === "READY"),
+    [deduplicatedAttachments],
+  );
+
+  // Block submit if any files are still PROCESSING
+  const hasProcessingFiles = React.useMemo(
+    () => deduplicatedAttachments.some((a) => a.status === "PROCESSING"),
+    [deduplicatedAttachments],
   );
 
   // Rollback feature flag: Allow disabling files-only send in production
@@ -276,12 +370,14 @@ export function CompactChatComposer({
       !loading &&
       !isSubmitting &&
       !isUploading &&
+      !hasProcessingFiles && // Block if any files are still processing
       (value.trim().length > 0 || (allowFilesOnlySend && hasReadyFiles)), // Removed useFilesInQuestion check
     [
       disabled,
       loading,
       isSubmitting,
       isUploading,
+      hasProcessingFiles,
       value,
       hasReadyFiles,
       allowFilesOnlySend,
@@ -290,8 +386,11 @@ export function CompactChatComposer({
 
   // MVP-LOCK: Dynamic placeholder based on file state (simplified)
   const dynamicPlaceholder = React.useMemo(() => {
+    if (hasProcessingFiles) {
+      return "Esperando que termine el procesamiento de archivos...";
+    }
     return "Pregúntame algo…";
-  }, []);
+  }, [hasProcessingFiles]);
 
   // Submit with animation (must be defined before handleKeyDown)
   const handleSendClick = React.useCallback(async () => {
@@ -308,8 +407,9 @@ export function CompactChatComposer({
     // Fix Pack: Show feedback if trying to submit without text and without READY files
     if (!canSubmit) {
       const hasText = value.trim().length > 0;
-      const hasReady =
-        filesV1Attachments?.some((a) => a.status === "READY") ?? false;
+      const hasReady = deduplicatedAttachments.some(
+        (a) => a.status === "READY",
+      );
 
       if (!hasText && !hasReady) {
         toast.error(
@@ -331,6 +431,13 @@ export function CompactChatComposer({
       await new Promise((resolve) => setTimeout(resolve, 120));
 
       await onSubmit();
+
+      // Clear attachments immediately after sending (don't wait for LLM response)
+      if (deduplicatedAttachments.length > 0 && onRemoveFilesV1Attachment) {
+        deduplicatedAttachments.forEach((attachment) => {
+          onRemoveFilesV1Attachment(attachment.file_id);
+        });
+      }
 
       // Reset state after submit
       setTextareaHeight(MIN_HEIGHT);
@@ -360,7 +467,14 @@ export function CompactChatComposer({
     }
     // Note: Don't reset isSubmitting here on success - let useEffects handle it
     // This prevents race conditions with parent state updates
-  }, [value, onSubmit, canSubmit, filesV1Attachments, allowFilesOnlySend]);
+  }, [
+    value,
+    onSubmit,
+    canSubmit,
+    deduplicatedAttachments,
+    onRemoveFilesV1Attachment,
+    allowFilesOnlySend,
+  ]);
 
   // Handle Enter key (submit) and Shift+Enter (newline)
   const handleKeyDown = React.useCallback(
@@ -415,7 +529,7 @@ export function CompactChatComposer({
       }
       setShowToolsMenu(false);
     },
-    [onAddTool, filesV1Attachments],
+    [onAddTool],
   );
 
   // Handle file selection
@@ -580,13 +694,64 @@ export function CompactChatComposer({
             )}
           </AnimatePresence>
 
+          {/* Preview Attachments Row - Estilo Vercel (antes del input) */}
+          <AnimatePresence>
+            {deduplicatedAttachments.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.16, ease: "easeOut" }}
+                className="overflow-hidden"
+              >
+                <div
+                  className="flex flex-row items-end gap-2 overflow-x-auto pb-2"
+                  data-testid="preview-attachments"
+                >
+                  {deduplicatedAttachments.map((attachment) => (
+                    <PreviewAttachment
+                      key={attachment.file_id}
+                      attachment={attachment}
+                      isUploading={attachment.status === "PROCESSING"}
+                      onRemove={
+                        onRemoveFilesV1Attachment
+                          ? () => onRemoveFilesV1Attachment(attachment.file_id)
+                          : undefined
+                      }
+                      onAudit={
+                        sendAuditForFile
+                          ? async () => {
+                              logDebug(
+                                "[CompactChatComposer] onAudit callback executing",
+                                {
+                                  sendAuditForFileType: typeof sendAuditForFile,
+                                  attachmentFileId: attachment.file_id,
+                                  attachmentFilename: attachment.filename,
+                                  attachmentStatus: attachment.status,
+                                },
+                              );
+                              await sendAuditForFile(attachment);
+                              logDebug(
+                                "[CompactChatComposer] sendAuditForFile completed",
+                              );
+                            }
+                          : undefined
+                      }
+                      showAuditButton={deduplicatedAttachments.length === 1}
+                    />
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Main Composer Container - Minimalist ChatGPT style */}
           <motion.div
             role="form"
             aria-label="Compositor de mensajes"
             className={cn(
               "grid items-center gap-2",
-              "rounded-2xl p-2",
+              "rounded-[2rem] p-2",
               "bg-[var(--surface)]",
               "shadow-sm",
               // Dynamic grid: smaller space when tools hidden, full 44px when shown
@@ -616,7 +781,7 @@ export function CompactChatComposer({
                   onClick={() => setShowToolsMenu(!showToolsMenu)}
                   disabled={disabled || loading}
                   className={cn(
-                    "h-11 w-11 rounded-xl",
+                    "h-11 w-11 rounded-full",
                     "grid place-items-center",
                     "text-neutral-300 bg-transparent",
                     "hover:bg-[var(--surface-strong)] active:bg-[var(--surface-strong)]",
@@ -694,7 +859,7 @@ export function CompactChatComposer({
                 onClick={handleSendClick}
                 disabled={!canSubmit}
                 className={cn(
-                  "h-11 w-11 shrink-0 rounded-xl",
+                  "h-11 w-11 shrink-0 rounded-full",
                   "grid place-items-center",
                   "transition-all duration-150",
                   "outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
@@ -774,7 +939,10 @@ export function CompactChatComposer({
             )}
           </AnimatePresence>
 
-          {/* File Upload Cards with Progress */}
+          {/* File Upload Cards with Progress - DESHABILITADO: Usando PreviewAttachment en su lugar */}
+          {/* NOTA: Esta sección mostraba tarjetas grandes con gradientes y barras de progreso */}
+          {/* Reemplazado por PreviewAttachment más arriba (líneas 584-613) para UX más limpia */}
+          {/*
           <AnimatePresence>
             {(uploadingFiles.size > 0 ||
               (attachments && attachments.length > 0)) && (
@@ -786,7 +954,6 @@ export function CompactChatComposer({
                 className="mt-2 overflow-hidden"
               >
                 <div className="space-y-2">
-                  {/* Uploading files */}
                   {Array.from(uploadingFiles.entries()).map(
                     ([filename, progress]) => {
                       const fileExt = filename.split(".").pop()?.toLowerCase();
@@ -805,7 +972,6 @@ export function CompactChatComposer({
                           className="group rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-500/10 to-indigo-500/10 p-4 shadow-md hover:shadow-lg hover:scale-[1.01] transition-all duration-200"
                         >
                           <div className="flex items-center gap-4">
-                            {/* Enhanced File Icon */}
                             <div
                               className={cn(
                                 "flex h-14 w-14 items-center justify-center rounded-xl shadow-md transition-all duration-200 group-hover:scale-110 group-hover:shadow-lg",
@@ -905,7 +1071,6 @@ export function CompactChatComposer({
                     },
                   )}
 
-                  {/* Uploaded files */}
                   {attachments?.map((attachment) => {
                     const fileExt = attachment.name
                       .split(".")
@@ -926,7 +1091,6 @@ export function CompactChatComposer({
                         className="group rounded-2xl border border-emerald-500/40 bg-gradient-to-br from-emerald-500/15 to-green-500/15 p-4 shadow-md hover:shadow-lg hover:scale-[1.01] transition-all duration-200"
                       >
                         <div className="flex items-center gap-4">
-                          {/* Enhanced File Icon with Check Mark */}
                           <div className="relative">
                             <div
                               className={cn(
@@ -999,7 +1163,6 @@ export function CompactChatComposer({
                                 </svg>
                               )}
                             </div>
-                            {/* Success Check Badge */}
                             <div className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-green-600 shadow-lg ring-2 ring-zinc-900">
                               <svg
                                 className="h-3.5 w-3.5 text-white"
@@ -1047,9 +1210,13 @@ export function CompactChatComposer({
               </motion.div>
             )}
           </AnimatePresence>
+          */}
 
-          {/* Files V1 Section - MINIMALISMO FUNCIONAL: Solo lista (agregar desde tools) */}
-          {onAddFilesV1Attachment && (
+          {/* Files V1 Section - DESHABILITADO: Usando PreviewAttachment en su lugar */}
+          {/* NOTA: FileAttachmentList mostraba lista detallada con botones de auditoría */}
+          {/* Ahora usamos solo PreviewAttachment arriba del input (estilo Vercel) */}
+          {/* Si necesitas botones de auditoría, descomentar esta sección */}
+          {/* {onAddFilesV1Attachment && (
             <AnimatePresence>
               {(filesV1Attachments?.length ?? 0) > 0 && (
                 <motion.div
@@ -1059,7 +1226,6 @@ export function CompactChatComposer({
                   transition={{ duration: 0.16, ease: "easeOut" }}
                   className="mt-3 space-y-2"
                 >
-                  {/* File Attachments List - Agregar más archivos desde botón + */}
                   {onRemoveFilesV1Attachment && (
                     <FileAttachmentList
                       attachments={filesV1Attachments}
@@ -1070,7 +1236,7 @@ export function CompactChatComposer({
                 </motion.div>
               )}
             </AnimatePresence>
-          )}
+          )} */}
 
           {/* FE-UX-1: Enhanced "thinking" animation with ARIA live region */}
           <AnimatePresence>

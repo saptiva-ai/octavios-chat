@@ -20,6 +20,10 @@ import { buildModelList, getDefaultModelSlug } from "../modelMap";
 import { getAllModels } from "../../config/modelCatalog";
 import { createDefaultToolsState, normalizeToolsState } from "../tool-mapping";
 
+// ISSUE-018: UUID format validation
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const mergeToolsState = (seed?: Record<string, boolean>) => {
   const extraKeys = seed ? Object.keys(seed) : [];
   const base = createDefaultToolsState(extraKeys);
@@ -53,7 +57,9 @@ interface ChatState {
   addMessage: (message: ChatMessage) => void;
   updateMessage: (messageId: string, updates: Partial<ChatMessage>) => void;
   clearMessages: () => void;
+  setMessages: (messages: ChatMessage[]) => void;
   setLoading: (loading: boolean) => void;
+  setHydratedStatus: (chatId: string, status: boolean) => void;
   setSelectedModel: (model: string) => void;
   toggleTool: (toolName: string) => Promise<void>;
   setToolEnabled: (toolName: string, enabled: boolean) => Promise<void>;
@@ -118,6 +124,14 @@ export const useChatStore = create<ChatState>()(
           nextId: string,
           draftToolsEnabled?: Record<string, boolean>,
         ) => {
+          // ISSUE-018: Validate chat_id format (UUID or temp-*)
+          const isValidId =
+            nextId.startsWith("temp-") || UUID_REGEX.test(nextId);
+          if (!isValidId) {
+            logWarn("switchChat: Invalid chat_id format", { nextId });
+            return;
+          }
+
           const {
             currentChatId,
             selectionEpoch,
@@ -190,7 +204,12 @@ export const useChatStore = create<ChatState>()(
           })),
 
         clearMessages: () => set({ messages: [] }),
+        setMessages: (messages) => set({ messages }),
         setLoading: (loading) => set({ isLoading: loading }),
+        setHydratedStatus: (chatId, status) =>
+          set((state) => ({
+            hydratedByChatId: { ...state.hydratedByChatId, [chatId]: status },
+          })),
         setSelectedModel: (model) => {
           logDebug("UI model changed", model);
           set({ selectedModel: model });
@@ -340,16 +359,34 @@ export const useChatStore = create<ChatState>()(
 
             for (const event of historyData.events) {
               if (event.event_type === "chat_message" && event.chat_data) {
+                // FIX: Schema v2 stores files in explicit fields, but ChatMessage component
+                // expects them in metadata.files for display. Merge explicit files into metadata.
+                const enrichedMetadata: Record<string, any> = {
+                  ...(event.chat_data.metadata || {}),
+                };
+
+                // Add file_ids and files to metadata if they exist (schema v2)
+                if (
+                  event.chat_data.file_ids &&
+                  event.chat_data.file_ids.length > 0
+                ) {
+                  enrichedMetadata.file_ids = event.chat_data.file_ids;
+                }
+                if (event.chat_data.files && event.chat_data.files.length > 0) {
+                  enrichedMetadata.files = event.chat_data.files;
+                }
+
                 // DEBUG: Log metadata from backend
                 if (event.chat_data.role === "user") {
                   logDebug("[ChatStore] Loading user message from history", {
                     message_id: event.message_id,
                     role: event.chat_data.role,
+                    hasFiles: !!(
+                      event.chat_data.files && event.chat_data.files.length > 0
+                    ),
+                    fileCount: event.chat_data.files?.length || 0,
                     hasMetadata: !!event.chat_data.metadata,
-                    metadata: event.chat_data.metadata,
-                    metadataKeys: event.chat_data.metadata
-                      ? Object.keys(event.chat_data.metadata)
-                      : [],
+                    enrichedHasFiles: !!enrichedMetadata.files,
                   });
                 }
 
@@ -361,9 +398,9 @@ export const useChatStore = create<ChatState>()(
                   model: event.chat_data.model,
                   tokens: event.chat_data.tokens,
                   latency: event.chat_data.latency_ms,
-                  // MVP-LOCK: Include metadata if present (for file_ids indicator)
-                  ...(event.chat_data.metadata && {
-                    metadata: event.chat_data.metadata,
+                  // MVP-LOCK: Include enriched metadata with files for backwards compatibility
+                  ...(Object.keys(enrichedMetadata).length > 0 && {
+                    metadata: enrichedMetadata,
                   }),
                 });
               }

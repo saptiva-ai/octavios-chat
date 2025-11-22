@@ -32,6 +32,8 @@ import { legacyKeyToToolId, toolIdToLegacyKey } from "@/lib/tool-mapping";
 // Files V1 imports
 import type { FileAttachment } from "@/types/files";
 import type { LastReadyFile } from "@/hooks/useFiles";
+// React Query hooks
+import { useSendMessage } from "@/hooks/useSendMessage";
 
 interface ChatInterfaceProps {
   messages: ChatMessageProps[];
@@ -177,6 +179,9 @@ export function ChatInterface({
     (state) => state.toolVisibilityLoaded,
   );
 
+  // React Query: Optimistic updates for message sending
+  const sendMessage = useSendMessage(currentChatId);
+
   React.useEffect(() => {
     if (!toolVisibilityLoaded) {
       loadToolVisibility();
@@ -300,6 +305,25 @@ export function ChatInterface({
     [addMessage, currentChatId, onAuditError, onStartAudit],
   );
 
+  // Calculate selected tools BEFORE handleSend (needed for optimistic updates)
+  const selectedToolIds = React.useMemo<ToolId[]>(() => {
+    // Prefer the new selectedTools prop if available (including empty arrays)
+    if (selectedTools !== undefined) {
+      return selectedTools;
+    }
+
+    // Fallback to legacy toolsEnabled only if selectedTools is not passed
+    if (!toolsEnabled) return [];
+
+    return Object.entries(toolsEnabled)
+      .filter(([, enabled]) => enabled)
+      .map(([legacyKey]) => legacyKeyToToolId(legacyKey))
+      .filter((id): id is ToolId => {
+        if (!id) return false;
+        return Boolean(toolVisibility[id]);
+      });
+  }, [selectedTools, toolsEnabled, toolVisibility]);
+
   const handleSend = React.useCallback(async () => {
     const trimmed = inputValue.trim();
 
@@ -331,6 +355,30 @@ export function ChatInterface({
     }
 
     // Always route to chat with file_ids
+    // Optimistic update: Add user message to UI instantly
+    const readyFiles = filesV1Attachments.filter((a) => a.status === "READY");
+    const fileIds = readyFiles.map((a) => a.file_id);
+
+    // Build tools configuration
+    const toolsConfig = selectedToolIds.reduce(
+      (acc, toolId) => {
+        acc[toolId] = true;
+        return acc;
+      },
+      {} as Record<string, boolean>,
+    );
+
+    if (currentChatId && (trimmed || fileIds.length > 0)) {
+      sendMessage.mutate({
+        content: trimmed,
+        fileIds: fileIds.length > 0 ? fileIds : undefined,
+        files: readyFiles.length > 0 ? readyFiles : undefined,
+        toolsEnabled:
+          Object.keys(toolsConfig).length > 0 ? toolsConfig : undefined,
+      });
+    }
+
+    // Continue with existing streaming flow
     onSendMessage(trimmed, attachments.length ? attachments : undefined);
     setInputValue("");
     setAttachments([]);
@@ -341,6 +389,9 @@ export function ChatInterface({
     onSendMessage,
     attachments,
     filesV1Attachments,
+    currentChatId,
+    sendMessage,
+    selectedToolIds,
   ]);
 
   const handleFileAttachmentChange = React.useCallback(
@@ -349,24 +400,6 @@ export function ChatInterface({
     },
     [],
   );
-
-  const selectedToolIds = React.useMemo<ToolId[]>(() => {
-    // Prefer the new selectedTools prop if available (including empty arrays)
-    if (selectedTools !== undefined) {
-      return selectedTools;
-    }
-
-    // Fallback to legacy toolsEnabled only if selectedTools is not passed
-    if (!toolsEnabled) return [];
-
-    return Object.entries(toolsEnabled)
-      .filter(([, enabled]) => enabled)
-      .map(([legacyKey]) => legacyKeyToToolId(legacyKey))
-      .filter((id): id is ToolId => {
-        if (!id) return false;
-        return Boolean(toolVisibility[id]);
-      });
-  }, [selectedTools, toolsEnabled, toolVisibility]);
 
   const handleRemoveToolInternal = React.useCallback(
     (id: ToolId) => {
@@ -396,8 +429,7 @@ export function ChatInterface({
     if (loading && messages.length === 0 && !submitIntent) return true;
 
     return false;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, messages.length, submitIntent]);
+  }, [loading, messages.length, submitIntent, isCreating, isHydrating]);
 
   const showHero = React.useMemo(() => {
     // Never show hero if we have messages
@@ -469,6 +501,7 @@ export function ChatInterface({
                 value={inputValue}
                 onChange={setInputValue}
                 onSubmit={handleSend}
+                onSendMessageDirect={onSendMessage}
                 onCancel={loading ? onStopStreaming : undefined}
                 disabled={disabled}
                 loading={loading}
@@ -539,6 +572,7 @@ export function ChatInterface({
               value={inputValue}
               onChange={setInputValue}
               onSubmit={handleSend}
+              onSendMessageDirect={onSendMessage}
               onCancel={loading ? onStopStreaming : undefined}
               disabled={disabled}
               loading={loading}

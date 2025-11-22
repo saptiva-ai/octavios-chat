@@ -108,7 +108,15 @@ class Settings(BaseSettings):
     jwt_algorithm: str = Field(default="HS256", description="JWT algorithm")
     jwt_access_token_expire_minutes: int = Field(default=60, description="Access token expiry")
     jwt_refresh_token_expire_days: int = Field(default=7, description="Refresh token expiry")
-    
+
+    # Email (SMTP for password reset)
+    smtp_host: str = Field(default="smtp.gmail.com", description="SMTP server host")
+    smtp_port: int = Field(default=587, description="SMTP server port")
+    smtp_user: str = Field(default="", description="SMTP username (email)")
+    smtp_password: str = Field(default="", description="SMTP password (app password for Gmail)")
+    smtp_from_email: str = Field(default="support@saptiva.com", description="From email address")
+    password_reset_url_base: str = Field(default="http://localhost:3000", description="Base URL for password reset links")
+
     # Aletheia
     aletheia_base_url: str = Field(
         default="http://aletheia:8000",
@@ -334,7 +342,7 @@ class Settings(BaseSettings):
 
     # Prompt Registry (System Prompts por Modelo)
     prompt_registry_path: str = Field(
-        default="apps/api/prompts/registry.yaml",
+        default="/app/prompts/registry.yaml",
         description="Ruta al archivo YAML de registro de prompts"
     )
     enable_model_system_prompt: bool = Field(

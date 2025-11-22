@@ -10,6 +10,7 @@ import uuid
 from typing import Any, Dict, List, Optional, AsyncGenerator, Tuple
 
 import httpx
+from fastapi import HTTPException  # FIX ISSUE-017: For timeout exception handling
 from pydantic import BaseModel
 
 from ..core.config import get_settings
@@ -84,7 +85,12 @@ class SaptivaClient:
             self.force_mock_reason = _global_mock_reason or "fallback_on_error"
         else:
             self.force_mock = False
-        self.allow_mock_fallback = _env_flag("SAPTIVA_ALLOW_MOCK_FALLBACK", True)
+        # Default: do NOT fall back to mock when an API key is configured.
+        # You can re-enable fallback by setting SAPTIVA_ALLOW_MOCK_FALLBACK=1.
+        self.allow_mock_fallback = _env_flag(
+            "SAPTIVA_ALLOW_MOCK_FALLBACK",
+            False if self.api_key else True,
+        )
         self.mock_mode = False
         self.mock_reason: Optional[str] = None
         self._last_mock_reason: Optional[str] = None
@@ -312,10 +318,14 @@ class SaptivaClient:
         model: str = "SAPTIVA_CORTEX",
         temperature: float = 0.7,
         max_tokens: int = 1024,
-        tools: Optional[List[str]] = None
+        tools: Optional[List[str]] = None,
+        timeout: int = 120  # FIX ISSUE-017: Default 2 minutes timeout
     ) -> AsyncGenerator[SaptivaStreamChunk, None]:
         """
         Generar respuesta de chat con streaming usando SAPTIVA API
+
+        Args:
+            timeout: Timeout in seconds for the entire streaming operation (default: 120s)
         """
 
         # Validar API key
@@ -352,38 +362,85 @@ class SaptivaClient:
             logger.info(
                 "Starting SAPTIVA streaming request",
                 model=model,
-                message_count=len(messages)
+                message_count=len(messages),
+                timeout_seconds=timeout
             )
 
-            # Hacer streaming request (Saptiva requires trailing slash)
-            url = f"{self.base_url.rstrip('/')}/v1/chat/completions/"
-            async with self.client.stream(
-                "POST",
-                url,
-                json=request_data
-            ) as response:
-                response.raise_for_status()
+            # FIX ISSUE-017: Wrap streaming with timeout
+            try:
+                async with asyncio.timeout(timeout):
+                    # Hacer streaming request (Saptiva requires trailing slash)
+                    url = f"{self.base_url.rstrip('/')}/v1/chat/completions/"
+                    async with self.client.stream(
+                        "POST",
+                        url,
+                        json=request_data
+                    ) as response:
+                        # Log error details before raising
+                        if response.status_code >= 400:
+                            error_body = await response.aread()
+                            logger.error(
+                                "Saptiva API error response",
+                                status_code=response.status_code,
+                                error_body=error_body.decode('utf-8'),
+                                request_url=url,
+                                model=model
+                            )
+                        response.raise_for_status()
 
-                async for line in response.aiter_lines():
-                    if line.startswith("data: "):
-                        data = line[6:]  # Remove "data: " prefix
+                        async for line in response.aiter_lines():
+                            if line.startswith("data: "):
+                                data = line[6:]  # Remove "data: " prefix
 
-                        if data == "[DONE]":
-                            break
+                                if data == "[DONE]":
+                                    break
 
-                        try:
-                            import json
-                            chunk_data = json.loads(data)  # Parse JSON safely
-                            yield SaptivaStreamChunk(**chunk_data)
-                        except Exception as e:
-                            logger.warning("Error parsing stream chunk", error=str(e))
+                                try:
+                                    import json
+                                    chunk_data = json.loads(data)  # Parse JSON safely
+                                    yield SaptivaStreamChunk(**chunk_data)
+                                except Exception as e:
+                                    logger.warning("Error parsing stream chunk", error=str(e))
+
+            except asyncio.TimeoutError:
+                logger.error(
+                    "Saptiva streaming timed out",
+                    model=model,
+                    timeout=timeout,
+                    message_count=len(messages)
+                )
+                raise HTTPException(
+                    status_code=504,  # Gateway Timeout
+                    detail=f"Saptiva API timed out after {timeout}s"
+                )
 
         except Exception as e:
+            import traceback
+            error_info = {
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "traceback": traceback.format_exc(),
+                "model": model,
+                "message_count": len(messages),
+                "temperature": temperature,
+                "max_tokens": max_tokens
+            }
+
             logger.error(
-                "Error in SAPTIVA streaming",
-                error=str(e),
-                model=model
+                "🚨 SAPTIVA STREAMING ERROR - CRITICAL",
+                **error_info,
+                exc_info=True
             )
+
+            # Print to stderr for immediate visibility
+            print(f"\n{'='*80}")
+            print(f"🚨 SAPTIVA CLIENT STREAMING ERROR")
+            print(f"Error Type: {type(e).__name__}")
+            print(f"Error Message: {str(e)}")
+            print(f"Model: {model}")
+            print(f"Traceback:\n{traceback.format_exc()}")
+            print(f"{'='*80}\n")
+
             # Re-raise the exception without fallback
             if self.allow_mock_fallback:
                 self._enable_mock_mode("fallback_on_error")

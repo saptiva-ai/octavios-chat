@@ -35,12 +35,14 @@ interface UseAuditFlowOptions {
   setValue: (value: string) => void;
   /** Callback to trigger message submission */
   onSubmit: () => void | Promise<void>;
+  /** Optional callback to clear file attachments after successful audit */
+  clearFiles?: (chatId?: string) => void;
   /** Optional conversation ID for telemetry */
   conversationId?: string;
 }
 
 export function useAuditFlow(options: UseAuditFlowOptions) {
-  const { setValue, onSubmit, conversationId } = options;
+  const { setValue, onSubmit, clearFiles, conversationId } = options;
   const [isAuditing, setIsAuditing] = useState(false);
 
   /**
@@ -54,9 +56,20 @@ export function useAuditFlow(options: UseAuditFlowOptions) {
    */
   const sendAuditForFile = useCallback(
     async (file: FileAttachment): Promise<void> => {
+      logDebug("[useAuditFlow] sendAuditForFile called", {
+        fileId: file.file_id,
+        filename: file.filename,
+        status: file.status,
+      });
+
       if (file.status !== "READY") {
-        logError("[useAuditFlow] File not ready", { status: file.status });
-        toast.error("El archivo no está listo para auditar");
+        logError("[useAuditFlow] File not ready", {
+          status: file.status,
+          file,
+        });
+        toast.error(
+          "El archivo no está listo para auditar. Espera a que termine de procesar.",
+        );
         return;
       }
 
@@ -79,20 +92,61 @@ export function useAuditFlow(options: UseAuditFlowOptions) {
         });
 
         // Auto-fill composer input
+        logDebug("[useAuditFlow] Setting value", { auditMessage });
         setValue(auditMessage);
 
-        // Trigger submit after a brief delay to ensure setValue has taken effect
-        setTimeout(async () => {
-          await onSubmit();
+        // Success notification (show before submit to provide immediate feedback)
+        toast.success("Iniciando auditoría...", {
+          icon: "🔍",
+          duration: 2000,
+        });
 
-          // Success notification
-          toast.success("Auditoría en proceso...", {
-            icon: "🔍",
-            duration: 2000,
-          });
+        logDebug("[useAuditFlow] Waiting for React to update state...");
 
-          logDebug("[useAuditFlow] Audit triggered successfully");
-        }, 50);
+        // Trigger submit after a delay to ensure setValue has taken effect
+        // Need to wait longer for React to update state and re-render
+        await new Promise<void>((resolve) => {
+          // Wait 300ms to ensure React has fully updated the input value
+          setTimeout(async () => {
+            try {
+              logDebug("[useAuditFlow] Calling onSubmit after state update...");
+              await onSubmit();
+              logDebug("[useAuditFlow] Audit triggered successfully");
+
+              // 🔧 FIX: Clear files IMMEDIATELY after successful submit with EXPLICIT chatId
+              // Pass conversationId explicitly to avoid stale closure issues
+              logDebug(
+                "[useAuditFlow] Clearing files after successful audit submit",
+                {
+                  conversationId,
+                },
+              );
+              if (clearFiles) {
+                clearFiles(conversationId);
+                logDebug(
+                  "[useAuditFlow] ✅ Files cleared successfully after audit",
+                );
+              }
+
+              resolve();
+            } catch (err) {
+              logError("[useAuditFlow] Submit failed", { error: err });
+
+              // Even on error, try to clear files to avoid stuck state
+              if (clearFiles) {
+                logDebug(
+                  "[useAuditFlow] Clearing files after error (cleanup)",
+                  {
+                    conversationId,
+                  },
+                );
+                clearFiles(conversationId);
+              }
+
+              resolve();
+            }
+          }, 300);
+        });
       } catch (error: any) {
         const errorMessage = error?.message || "Error al iniciar auditoría";
 
@@ -118,7 +172,7 @@ export function useAuditFlow(options: UseAuditFlowOptions) {
         setIsAuditing(false);
       }
     },
-    [setValue, onSubmit, conversationId],
+    [setValue, onSubmit, clearFiles, conversationId],
   );
 
   return {

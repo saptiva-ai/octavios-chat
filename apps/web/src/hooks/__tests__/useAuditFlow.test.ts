@@ -43,6 +43,7 @@ beforeAll(() => {
 describe("useAuditFlow", () => {
   let mockSetValue: jest.Mock;
   let mockOnSubmit: jest.Mock;
+  let mockClearFiles: jest.Mock;
 
   beforeEach(() => {
     // Reset all mocks
@@ -51,6 +52,7 @@ describe("useAuditFlow", () => {
     // Setup composer mocks
     mockSetValue = jest.fn();
     mockOnSubmit = jest.fn();
+    mockClearFiles = jest.fn();
 
     // Clear timers
     jest.useFakeTimers();
@@ -81,6 +83,7 @@ describe("useAuditFlow", () => {
         useAuditFlow({
           setValue: mockSetValue,
           onSubmit: mockOnSubmit,
+          clearFiles: mockClearFiles,
           conversationId: "chat-123",
         }),
       );
@@ -130,7 +133,13 @@ describe("useAuditFlow", () => {
     });
 
     it("uses currentChatId from store when conversationId not provided", async () => {
-      const { result } = renderHook(() => useAuditFlow());
+      const { result } = renderHook(() =>
+        useAuditFlow({
+          setValue: mockSetValue,
+          onSubmit: mockOnSubmit,
+          clearFiles: mockClearFiles,
+        }),
+      );
 
       const file = createMockFile("file-123", "report.pdf", "READY");
 
@@ -148,7 +157,13 @@ describe("useAuditFlow", () => {
     it("rejects if no conversation ID available", async () => {
       mockChatStore.currentChatId = null;
 
-      const { result } = renderHook(() => useAuditFlow());
+      const { result } = renderHook(() =>
+        useAuditFlow({
+          setValue: mockSetValue,
+          onSubmit: mockOnSubmit,
+          clearFiles: mockClearFiles,
+        }),
+      );
 
       const file = createMockFile("file-456", "test.pdf", "READY");
 
@@ -165,7 +180,12 @@ describe("useAuditFlow", () => {
 
     it("rejects if file is not READY", async () => {
       const { result } = renderHook(() =>
-        useAuditFlow({ conversationId: "chat-123" }),
+        useAuditFlow({
+          setValue: mockSetValue,
+          onSubmit: mockOnSubmit,
+          clearFiles: mockClearFiles,
+          conversationId: "chat-123",
+        }),
       );
 
       const processingFile = createMockFile(
@@ -202,7 +222,12 @@ describe("useAuditFlow", () => {
       mockApiClient.sendChatMessage.mockRejectedValue(apiError);
 
       const { result } = renderHook(() =>
-        useAuditFlow({ conversationId: "chat-123" }),
+        useAuditFlow({
+          setValue: mockSetValue,
+          onSubmit: mockOnSubmit,
+          clearFiles: mockClearFiles,
+          conversationId: "chat-123",
+        }),
       );
 
       const file = createMockFile("file-999", "error.pdf", "READY");
@@ -241,7 +266,12 @@ describe("useAuditFlow", () => {
       mockApiClient.sendChatMessage.mockRejectedValue(networkError);
 
       const { result } = renderHook(() =>
-        useAuditFlow({ conversationId: "chat-123" }),
+        useAuditFlow({
+          setValue: mockSetValue,
+          onSubmit: mockOnSubmit,
+          clearFiles: mockClearFiles,
+          conversationId: "chat-123",
+        }),
       );
 
       const file = createMockFile("file-888", "network.pdf", "READY");
@@ -275,7 +305,12 @@ describe("useAuditFlow", () => {
       mockApiClient.sendChatMessage.mockReturnValue(apiPromise);
 
       const { result } = renderHook(() =>
-        useAuditFlow({ conversationId: "chat-123" }),
+        useAuditFlow({
+          setValue: mockSetValue,
+          onSubmit: mockOnSubmit,
+          clearFiles: mockClearFiles,
+          conversationId: "chat-123",
+        }),
       );
 
       const file = createMockFile("file-777", "slow.pdf", "READY");
@@ -324,8 +359,10 @@ describe("useAuditFlow", () => {
 
       const { result } = renderHook(() =>
         useAuditFlow({
+          setValue: mockSetValue,
+          onSubmit: mockOnSubmit,
+          clearFiles: mockClearFiles,
           conversationId: "chat-123",
-          onAuditComplete,
         }),
       );
 
@@ -342,7 +379,12 @@ describe("useAuditFlow", () => {
 
     it("constructs correct audit message with filename", async () => {
       const { result } = renderHook(() =>
-        useAuditFlow({ conversationId: "chat-123" }),
+        useAuditFlow({
+          setValue: mockSetValue,
+          onSubmit: mockOnSubmit,
+          clearFiles: mockClearFiles,
+          conversationId: "chat-123",
+        }),
       );
 
       const file = createMockFile(
@@ -371,7 +413,12 @@ describe("useAuditFlow", () => {
 
     it("handles special characters in filename", async () => {
       const { result } = renderHook(() =>
-        useAuditFlow({ conversationId: "chat-123" }),
+        useAuditFlow({
+          setValue: mockSetValue,
+          onSubmit: mockOnSubmit,
+          clearFiles: mockClearFiles,
+          conversationId: "chat-123",
+        }),
       );
 
       const file = createMockFile(
@@ -398,7 +445,12 @@ describe("useAuditFlow", () => {
       mockApiClient.sendChatMessage.mockRejectedValue(new Error("API error"));
 
       const { result } = renderHook(() =>
-        useAuditFlow({ conversationId: "chat-123" }),
+        useAuditFlow({
+          setValue: mockSetValue,
+          onSubmit: mockOnSubmit,
+          clearFiles: mockClearFiles,
+          conversationId: "chat-123",
+        }),
       );
 
       const file = createMockFile("file-111", "error.pdf", "READY");
@@ -421,7 +473,12 @@ describe("useAuditFlow", () => {
   describe("Telemetry Integration", () => {
     it("tracks all telemetry events in correct order", async () => {
       const { result } = renderHook(() =>
-        useAuditFlow({ conversationId: "chat-456" }),
+        useAuditFlow({
+          setValue: mockSetValue,
+          onSubmit: mockOnSubmit,
+          clearFiles: mockClearFiles,
+          conversationId: "chat-456",
+        }),
       );
 
       const file = createMockFile("file-telemetry", "tracking.pdf", "READY");
@@ -449,7 +506,12 @@ describe("useAuditFlow", () => {
       delete (global as any).window.analytics;
 
       const { result } = renderHook(() =>
-        useAuditFlow({ conversationId: "chat-789" }),
+        useAuditFlow({
+          setValue: mockSetValue,
+          onSubmit: mockOnSubmit,
+          clearFiles: mockClearFiles,
+          conversationId: "chat-789",
+        }),
       );
 
       const file = createMockFile("file-no-analytics", "test.pdf", "READY");
@@ -467,7 +529,12 @@ describe("useAuditFlow", () => {
   describe("Edge Cases", () => {
     it("handles undefined file properties gracefully", async () => {
       const { result } = renderHook(() =>
-        useAuditFlow({ conversationId: "chat-123" }),
+        useAuditFlow({
+          setValue: mockSetValue,
+          onSubmit: mockOnSubmit,
+          clearFiles: mockClearFiles,
+          conversationId: "chat-123",
+        }),
       );
 
       const partialFile: FileAttachment = {
@@ -487,7 +554,12 @@ describe("useAuditFlow", () => {
 
     it("handles very long filenames", async () => {
       const { result } = renderHook(() =>
-        useAuditFlow({ conversationId: "chat-123" }),
+        useAuditFlow({
+          setValue: mockSetValue,
+          onSubmit: mockOnSubmit,
+          clearFiles: mockClearFiles,
+          conversationId: "chat-123",
+        }),
       );
 
       const longFilename = "A".repeat(500) + ".pdf";
@@ -506,7 +578,12 @@ describe("useAuditFlow", () => {
 
     it("handles concurrent audit requests", async () => {
       const { result } = renderHook(() =>
-        useAuditFlow({ conversationId: "chat-123" }),
+        useAuditFlow({
+          setValue: mockSetValue,
+          onSubmit: mockOnSubmit,
+          clearFiles: mockClearFiles,
+          conversationId: "chat-123",
+        }),
       );
 
       const file1 = createMockFile("file-1", "concurrent1.pdf", "READY");

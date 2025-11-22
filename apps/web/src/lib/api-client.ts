@@ -15,6 +15,9 @@ import type {
   SaptivaKeyStatus,
   UpdateSaptivaKeyPayload,
   FeatureFlagsResponse,
+  ArtifactRecord,
+  ArtifactType,
+  ToolInvocation,
 } from "./types";
 
 export interface LoginRequest {
@@ -83,7 +86,10 @@ export interface ChatResponse {
     docs_used?: number;
     docs_expired?: string[];
   };
-  metadata?: Record<string, any>; // Include audit metadata (report_pdf_url, etc.)
+  metadata?: {
+    tool_invocations?: ToolInvocation[];
+    [key: string]: any;
+  }; // Include audit metadata (report_pdf_url, etc.)
 }
 
 export interface ChatMessageRecord {
@@ -262,12 +268,15 @@ class ApiClient {
 
     // Client-side: Direct inline check ensures Next.js static replacement works
     // This pattern MUST NOT use intermediate constants or the bundler will collapse it
-    if (process.env.NEXT_PUBLIC_API_URL) {
-      return process.env.NEXT_PUBLIC_API_URL;
+    // IMPORTANT: Empty string means use Next.js proxy (relative paths)
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (apiUrl && apiUrl.trim() !== "") {
+      return apiUrl;
     }
 
-    // Development fallback only - should never reach here in production builds
-    return window.location.origin;
+    // Empty or undefined: use relative paths for Next.js proxy
+    // In dev: /api/* -> next.config.js proxy -> http://api:8001/api/*
+    return "";
   }
 
   private initializeClient() {
@@ -418,6 +427,31 @@ class ApiClient {
     await this.client.post("/api/auth/logout");
   }
 
+  async get<T = any>(
+    url: string,
+    config?: import("axios").AxiosRequestConfig,
+  ): Promise<{ data: T }> {
+    const response = await this.client.get<T>(url, config);
+    return { data: response.data };
+  }
+
+  async post<T = any>(
+    url: string,
+    body?: any,
+    config?: import("axios").AxiosRequestConfig,
+  ): Promise<{ data: T }> {
+    const response = await this.client.post<T>(url, body, config);
+    return { data: response.data };
+  }
+
+  async delete<T = any>(
+    url: string,
+    config?: import("axios").AxiosRequestConfig,
+  ): Promise<{ data: T }> {
+    const response = await this.client.delete<T>(url, config);
+    return { data: response.data };
+  }
+
   private transformUserProfile(payload: any): UserProfile {
     if (!payload) {
       throw new Error("Invalid user payload");
@@ -469,24 +503,53 @@ class ApiClient {
   }
 
   // Chat endpoints
-  async sendChatMessage(request: ChatRequest): Promise<ChatResponse> {
+  async sendChatMessage(
+    request: ChatRequest,
+    retries: number = 2,
+  ): Promise<ChatResponse> {
     // FE-3 MVP: Force 'Saptiva Turbo' default if model not specified
     const payload = { model: "Saptiva Turbo", ...request };
-    try {
-      const response = await this.client.post<ChatResponse>(
-        "/api/chat",
-        payload,
-      );
-      return response.data;
-    } catch (e: any) {
-      // Fix Pack: Defensive logging for debugging file_ids issues
-      console.error("POST /api/chat failed", {
-        status: e?.response?.status,
-        data: e?.response?.data,
-        payload,
-      });
-      throw e;
+
+    // ISSUE-026: Retry logic with exponential backoff
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const response = await this.client.post<ChatResponse>(
+          "/api/chat",
+          payload,
+        );
+        return response.data;
+      } catch (e: any) {
+        // Determine if we should retry
+        const shouldRetry =
+          !e.response || // Network error
+          (e.response.status >= 500 && e.response.status < 600); // Server error
+
+        const isLastAttempt = attempt === retries;
+
+        if (!shouldRetry || isLastAttempt) {
+          // Fix Pack: Defensive logging for debugging file_ids issues
+          console.error("POST /api/chat failed", {
+            status: e?.response?.status,
+            data: e?.response?.data,
+            payload,
+            attempt: attempt + 1,
+            totalAttempts: retries + 1,
+          });
+          throw e;
+        }
+
+        // Exponential backoff: 1s, 2s, max 5s
+        const delay = Math.min(1000 * Math.pow(2, attempt), 5000);
+        console.warn(`POST /api/chat failed, retrying in ${delay}ms`, {
+          attempt: attempt + 1,
+          status: e?.response?.status,
+        });
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
     }
+
+    // This should never be reached, but TypeScript requires it
+    throw new Error("Unexpected: retry loop exited without return");
   }
 
   /**
@@ -508,6 +571,7 @@ class ApiClient {
     unknown
   > {
     const payload = { model: "Saptiva Turbo", ...request, stream: true };
+    // console.log("[🔍 PAYLOAD DEBUG] Request payload:", JSON.stringify(payload, null, 2));
     const token = authTokenGetter?.();
 
     // Build query params
@@ -522,6 +586,7 @@ class ApiClient {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Accept: "text/event-stream", // CRITICAL: Tell backend we want SSE format
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify(payload),
@@ -542,16 +607,46 @@ class ApiClient {
     const decoder = new TextDecoder();
     let buffer = "";
     let currentEvent = "";
+    let chunkCount = 0;
+
+    // console.log("[🔍 SSE DEBUG] Starting to read SSE stream");
 
     try {
       while (true) {
         const { done, value } = await reader.read();
 
         if (done) {
+          // console.log("[🔍 SSE DEBUG] Stream done - total chunks received:", chunkCount);
           break;
         }
 
-        buffer += decoder.decode(value, { stream: true });
+        const chunk = decoder.decode(value, { stream: true });
+        // console.log("[🔍 SSE DEBUG] Raw chunk received (length:", chunk.length, "):", chunk.substring(0, 200));
+        chunkCount++;
+        buffer += chunk;
+
+        // WORKAROUND: Detect if backend sent JSON response (non-streaming mode)
+        // When documents are attached, backend forces non-streaming and returns plain JSON
+        if (
+          chunkCount === 1 &&
+          chunk.trim().startsWith("{") &&
+          !chunk.includes("event:") &&
+          !chunk.includes("data:")
+        ) {
+          // console.log("[🔍 NON-STREAMING DETECTED] Backend sent JSON response, parsing as ChatResponse");
+          try {
+            const jsonResponse = JSON.parse(buffer);
+            // console.log("[🔍 NON-STREAMING] Parsed response:", jsonResponse);
+            yield { type: "done", data: jsonResponse as ChatResponse };
+            return; // Exit early - no more chunks expected
+          } catch (jsonError) {
+            console.error(
+              "[🔍 NON-STREAMING] Failed to parse JSON response:",
+              jsonError,
+            );
+          }
+        }
+
         const lines = buffer.split("\n");
         buffer = lines.pop() || ""; // Keep incomplete line in buffer
 
@@ -561,11 +656,13 @@ class ApiClient {
           // Parse SSE format: "event: chunk\ndata: {...}"
           if (line.startsWith("event:")) {
             currentEvent = line.slice(6).trim();
+            // console.log("[🔍 SSE DEBUG] Event type:", currentEvent);
             continue;
           }
 
           if (line.startsWith("data:")) {
             const dataStr = line.slice(5).trim();
+            // console.log("[🔍 SSE DEBUG] Data received for event:", currentEvent, "data length:", dataStr.length);
 
             if (dataStr === "[DONE]") {
               return;
@@ -576,19 +673,28 @@ class ApiClient {
 
               // Use the event type from the "event:" line
               if (currentEvent === "meta") {
+                // console.log("[🔍 SSE DEBUG] Yielding meta event");
                 yield { type: "meta", data: parsed };
               } else if (currentEvent === "chunk") {
+                // console.log("[🔍 SSE DEBUG] Yielding chunk event");
                 yield { type: "chunk", data: parsed };
               } else if (currentEvent === "done") {
+                // console.log("[🔍 SSE DEBUG] Yielding done event");
                 yield { type: "done", data: parsed as ChatResponse };
               } else if (currentEvent === "error") {
+                // console.log("[🔍 SSE DEBUG] Yielding error event");
                 yield { type: "error", data: parsed };
               }
 
               // Reset current event after processing
               currentEvent = "";
             } catch (parseError) {
-              console.error("Failed to parse SSE data:", parseError);
+              console.error(
+                "[🔍 SSE DEBUG] Failed to parse SSE data:",
+                parseError,
+                "data:",
+                dataStr.substring(0, 100),
+              );
             }
           }
         }
@@ -596,6 +702,25 @@ class ApiClient {
     } finally {
       reader.releaseLock();
     }
+  }
+
+  // Artifact endpoints
+  async getArtifact(artifactId: string): Promise<ArtifactRecord> {
+    const response = await this.client.get<ArtifactRecord>(
+      `/api/artifacts/${artifactId}`,
+    );
+    return response.data;
+  }
+
+  async updateArtifact(
+    artifactId: string,
+    payload: { title?: string; content: string | Record<string, any> },
+  ): Promise<ArtifactRecord> {
+    const response = await this.client.put<ArtifactRecord>(
+      `/api/artifacts/${artifactId}`,
+      payload,
+    );
+    return response.data;
   }
 
   // Document endpoints
@@ -773,15 +898,19 @@ class ApiClient {
    */
   async listDocuments(
     conversationId?: string,
+    limit: number = 50,
+    offset: number = 0,
   ): Promise<Array<import("@/types/files").FileAttachment>> {
     try {
-      const params = conversationId
-        ? new URLSearchParams({ conversation_id: conversationId })
-        : undefined;
+      // ISSUE-012: Add pagination parameters
+      const params = new URLSearchParams();
+      if (conversationId) {
+        params.set("conversation_id", conversationId);
+      }
+      params.set("limit", limit.toString());
+      params.set("offset", offset.toString());
 
-      const url = params
-        ? `/api/documents?${params.toString()}`
-        : "/api/documents";
+      const url = `/api/documents?${params.toString()}`;
 
       const response = await this.client.get(url, {
         withCredentials: true,
