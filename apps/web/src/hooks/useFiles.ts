@@ -52,15 +52,19 @@ export interface UseFilesReturn {
   attachments: FileAttachment[];
   addAttachment: (attachment: FileAttachment) => void;
   removeAttachment: (fileId: string) => void;
-  clearAttachments: () => void;
+  clearAttachments: (overrideChatId?: string) => void;
   lastReadyFile: LastReadyFile;
 }
 
 /**
  * MVP-LOCK: Hook now accepts optional chatId for persistent storage
  * @param chatId - Optional conversation ID to persist attachments (defaults to "draft")
+ * @param hasMessages - Whether the chat has messages (used for firewall logic)
  */
-export function useFiles(chatId?: string): UseFilesReturn {
+export function useFiles(
+  chatId?: string,
+  hasMessages?: boolean,
+): UseFilesReturn {
   const apiClient = useApiClient();
   const filesStore = useFilesStore();
 
@@ -91,14 +95,49 @@ export function useFiles(chatId?: string): UseFilesReturn {
 
   // MVP-LOCK: Initialize and sync with persistent store when chatId changes
   useEffect(() => {
-    const storedAttachments = filesStore.getForChat(effectiveChatId);
+    // 🛡️ FIREWALL DE HISTORIAL: Detectar si es un chat existente (histórico) CON mensajes
+    // Los chats históricos NO deben pre-cargar archivos en el input del compositor.
+    // Los archivos ya enviados deben verse en el historial de mensajes, no en el input.
+    const isExistingChat =
+      effectiveChatId &&
+      effectiveChatId !== "draft" &&
+      !effectiveChatId.startsWith("temp-") &&
+      !effectiveChatId.startsWith("creating") &&
+      hasMessages === true; // ← CLAVE: solo bloquear si tiene mensajes
 
+    if (isExistingChat) {
+      logDebug(
+        "[useFiles] 🛡️ FIREWALL: Existing chat with messages detected. Blocking attachment restoration.",
+        {
+          chatId: effectiveChatId,
+          hasMessages,
+          reason:
+            "Historical chats should not pre-populate the input composer with old files",
+          hint: "Files from history are visible in message list, not in the input area",
+        },
+      );
+
+      // Asegurar que el input esté limpio para chats históricos
+      setAttachments([]);
+      return; // 🚫 Early exit: NO cargar archivos del store para chats existentes
+    }
+
+    // ✅ Cargar archivos para: draft, temp-, creating, o chats nuevos sin mensajes
+    const storedAttachments = filesStore.getForChat(effectiveChatId);
     setAttachments(storedAttachments);
-    logDebug("[useFiles] Loaded attachments from store", {
+
+    logDebug("[useFiles] 📂 Loaded attachments from store", {
       chatId: effectiveChatId,
       count: storedAttachments.length,
+      hasMessages: hasMessages || false,
+      isDraft: effectiveChatId === "draft",
+      files: storedAttachments.map((f) => ({
+        file_id: f.file_id,
+        filename: f.filename,
+        status: f.status,
+      })),
     });
-  }, [effectiveChatId, filesStore]);
+  }, [effectiveChatId, filesStore, hasMessages]);
 
   // Cleanup SSE connection on unmount
   useEffect(() => {
@@ -144,24 +183,41 @@ export function useFiles(chatId?: string): UseFilesReturn {
   );
 
   // MVP-LOCK: Sync with persistent store
-  const clearAttachments = useCallback(() => {
-    setAttachments([]);
-    filesStore.clearForChat(effectiveChatId);
+  // 🔧 FIX: Accept optional chatId to avoid stale closure issues
+  const clearAttachments = useCallback(
+    (overrideChatId?: string) => {
+      const targetChatId = overrideChatId || effectiveChatId;
 
-    // FIX: Also clear "draft" key to prevent orphaned attachments after new chat creation
-    // Scenario: User uploads file (stored under "draft"), sends message (creates chatId),
-    // clear is called with new chatId, but "draft" key remains in localStorage
-    if (effectiveChatId !== "draft") {
-      filesStore.clearForChat("draft");
-      logDebug("[useFiles] Also cleared draft attachments", {
-        primaryChatId: effectiveChatId,
+      logDebug("[useFiles] 🔧 clearAttachments called", {
+        targetChatId,
+        effectiveChatId,
+        overrideProvided: !!overrideChatId,
+        currentAttachments: attachments.length,
+        chatIdType: targetChatId === "draft" ? "draft" : "uuid",
       });
-    }
 
-    logDebug("[useFiles] Cleared attachments from store", {
-      chatId: effectiveChatId,
-    });
-  }, [effectiveChatId, filesStore]);
+      // Clear React state
+      setAttachments([]);
+
+      // Clear from Zustand store (will auto-persist to localStorage)
+      filesStore.clearForChat(targetChatId);
+
+      // Also clear "draft" if we're clearing a real chat ID
+      // This prevents orphaned attachments when transitioning draft → UUID
+      if (targetChatId !== "draft") {
+        filesStore.clearForChat("draft");
+        logDebug("[useFiles] Also cleared draft attachments", {
+          primaryChatId: targetChatId,
+        });
+      }
+
+      logDebug("[useFiles] ✅ Cleared attachments from store", {
+        clearedChatId: targetChatId,
+        remainingInStore: filesStore.getForChat(targetChatId).length,
+      });
+    },
+    [effectiveChatId, filesStore, attachments],
+  );
 
   /**
    * Check client-side rate limit (informational, server enforces)
@@ -377,7 +433,7 @@ export function useFiles(chatId?: string): UseFilesReturn {
         setError("⚠️ Error al conectar para actualizaciones de progreso");
       }
     },
-    [effectiveChatId, filesStore],
+    [effectiveChatId, filesStore, apiClient],
   );
 
   /**

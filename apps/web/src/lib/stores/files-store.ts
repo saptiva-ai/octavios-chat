@@ -67,18 +67,31 @@ export const useFilesStore = create<FilesStoreState>()(
         })),
 
       clearForChat: (chatId) =>
-        set((state) => {
-          const newByChat = { ...state.byChat };
-          delete newByChat[chatId];
-          return { byChat: newByChat };
-        }),
+        set((state) => ({
+          byChat: {
+            ...state.byChat,
+            [chatId]: [], // 🔧 FIX: Use empty array instead of delete for better proxy/persist compatibility
+          },
+        })),
 
       clearAll: () => set({ byChat: {} }),
     }),
     {
       name: "files-by-chat", // localStorage key
-      // Only persist necessary data (file_ids, status, metadata)
-      partialize: (state) => ({ byChat: state.byChat }),
+      // CRITICAL FIX: Persist byChat to survive refreshes, but exclude "draft" and temp chats
+      // Files should persist ONLY for real conversations (UUID chatIds), not drafts
+      partialize: (state) => {
+        const persistable: AttachmentsByChat = {};
+
+        // Only persist attachments for real chat IDs (not "draft" or "temp-*")
+        for (const [chatId, files] of Object.entries(state.byChat)) {
+          if (chatId !== "draft" && !chatId.startsWith("temp-")) {
+            persistable[chatId] = files;
+          }
+        }
+
+        return { byChat: persistable };
+      },
     },
   ),
 );
