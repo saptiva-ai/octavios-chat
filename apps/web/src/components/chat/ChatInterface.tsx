@@ -32,6 +32,8 @@ import { legacyKeyToToolId, toolIdToLegacyKey } from "@/lib/tool-mapping";
 // Files V1 imports
 import type { FileAttachment } from "@/types/files";
 import type { LastReadyFile } from "@/hooks/useFiles";
+// React Query hooks
+import { useSendMessage } from "@/hooks/useSendMessage";
 
 interface ChatInterfaceProps {
   messages: ChatMessageProps[];
@@ -177,6 +179,9 @@ export function ChatInterface({
   const toolVisibilityLoaded = useSettingsStore(
     (state) => state.toolVisibilityLoaded,
   );
+
+  // React Query: Optimistic updates for message sending
+  const sendMessage = useSendMessage(currentChatId);
 
   React.useEffect(() => {
     if (!toolVisibilityLoaded) {
@@ -332,6 +337,19 @@ export function ChatInterface({
     }
 
     // Always route to chat with file_ids
+    // Optimistic update: Add user message to UI instantly
+    const fileIds = filesV1Attachments
+      .filter((a) => a.status === "READY")
+      .map((a) => a.file_id);
+
+    if (currentChatId && (trimmed || fileIds.length > 0)) {
+      sendMessage.mutate({
+        content: trimmed,
+        fileIds: fileIds.length > 0 ? fileIds : undefined,
+      });
+    }
+
+    // Continue with existing streaming flow
     onSendMessage(trimmed, attachments.length ? attachments : undefined);
     setInputValue("");
     setAttachments([]);
@@ -342,6 +360,8 @@ export function ChatInterface({
     onSendMessage,
     attachments,
     filesV1Attachments,
+    currentChatId,
+    sendMessage,
   ]);
 
   const handleFileAttachmentChange = React.useCallback(
