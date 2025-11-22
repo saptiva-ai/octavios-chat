@@ -123,7 +123,6 @@ export function ChatInterface({
   const prevChatIdRef = React.useRef(currentChatId);
   const mountChatIdRef = React.useRef(currentChatId);
 
-
   // Log component mount/unmount for debugging re-selection
   React.useEffect(() => {
     const mountChatId = mountChatIdRef.current;
@@ -361,17 +360,21 @@ export function ChatInterface({
     const fileIds = readyFiles.map((a) => a.file_id);
 
     // Build tools configuration
-    const toolsConfig = selectedToolIds.reduce((acc, toolId) => {
-      acc[toolId] = true;
-      return acc;
-    }, {} as Record<string, boolean>);
+    const toolsConfig = selectedToolIds.reduce(
+      (acc, toolId) => {
+        acc[toolId] = true;
+        return acc;
+      },
+      {} as Record<string, boolean>,
+    );
 
     if (currentChatId && (trimmed || fileIds.length > 0)) {
       sendMessage.mutate({
         content: trimmed,
         fileIds: fileIds.length > 0 ? fileIds : undefined,
         files: readyFiles.length > 0 ? readyFiles : undefined,
-        toolsEnabled: Object.keys(toolsConfig).length > 0 ? toolsConfig : undefined,
+        toolsEnabled:
+          Object.keys(toolsConfig).length > 0 ? toolsConfig : undefined,
       });
     }
 
@@ -426,8 +429,7 @@ export function ChatInterface({
     if (loading && messages.length === 0 && !submitIntent) return true;
 
     return false;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, messages.length, submitIntent]);
+  }, [loading, messages.length, submitIntent, isCreating, isHydrating]);
 
   const showHero = React.useMemo(() => {
     // Never show hero if we have messages
@@ -493,7 +495,6 @@ export function ChatInterface({
               <h1 className="text-3xl font-semibold text-white/95">
                 ¿Cómo puedo ayudarte, {user?.username || "Usuario"}?
               </h1>
-
 
               {/* Composer in hero mode - NO onActivate, NO focus triggers */}
               <CompactChatComposer
@@ -565,7 +566,6 @@ export function ChatInterface({
                 <div ref={messagesEndRef} />
               </div>
             </section>
-
 
             {/* Composer at bottom in chat mode */}
             <CompactChatComposer
