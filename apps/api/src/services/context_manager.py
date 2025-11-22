@@ -163,9 +163,14 @@ class ContextManager:
         if "aggregate" in operations:
             agg = operations["aggregate"]
             for col, values in agg.items():
+                mean_val = values.get('mean')
+                sum_val = values.get('sum')
+                
+                mean_str = f"{mean_val:.2f}" if isinstance(mean_val, (int, float)) else "N/A"
+                sum_str = f"{sum_val:.2f}" if isinstance(sum_val, (int, float)) else "N/A"
+                
                 summary_parts.append(
-                    f"- {col}: mean={values.get('mean', 'N/A'):.2f}, "
-                    f"sum={values.get('sum', 'N/A'):.2f}"
+                    f"- {col}: mean={mean_str}, sum={sum_str}"
                 )
 
         return "\n".join(summary_parts)
