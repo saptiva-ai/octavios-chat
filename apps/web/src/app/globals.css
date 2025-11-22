@@ -208,6 +208,11 @@
   body > div.tsqd-parent-container > div {
     display: none !important;
   }
+  /* Extra guard in case structure changes */
+  body > div.tsqd-parent-container,
+  body > div.tsqd-parent-container * {
+    display: none !important;
+  }
 
   /* Composer height variable for layout shift prevention */
   :root {
