@@ -61,7 +61,10 @@ export function useChatMessages(chatId: string | null) {
               ...(event.chat_data.metadata || {}),
             };
 
-            if (event.chat_data.file_ids && event.chat_data.file_ids.length > 0) {
+            if (
+              event.chat_data.file_ids &&
+              event.chat_data.file_ids.length > 0
+            ) {
               enrichedMetadata.file_ids = event.chat_data.file_ids;
             }
             if (event.chat_data.files && event.chat_data.files.length > 0) {
@@ -91,7 +94,10 @@ export function useChatMessages(chatId: string | null) {
 
     // Only run query for real chats (not draft/temp)
     enabled:
-      !!chatId && chatId !== "draft" && !chatId.startsWith("temp-") && !chatId.startsWith("creating"),
+      !!chatId &&
+      chatId !== "draft" &&
+      !chatId.startsWith("temp-") &&
+      !chatId.startsWith("creating"),
 
     // Cache configuration
     staleTime: 30 * 1000, // 30 seconds (messages can change frequently)
@@ -115,20 +121,40 @@ export function useChatMessages(chatId: string | null) {
     }
   }, [serverMessages, chatId, setMessages, setHydratedStatus]);
 
-  // Synchronize loading state
+  // Handle draft/temp/null chats (no backend fetch needed) - MUST run before loading sync
   useEffect(() => {
-    setLoading(isLoading);
-  }, [isLoading, setLoading]);
+    const isDraftOrTemp =
+      !chatId ||
+      chatId === "draft" ||
+      chatId.startsWith("temp-") ||
+      chatId.startsWith("creating");
 
-  // Handle draft/temp chats (no backend fetch needed)
-  useEffect(() => {
-    if (chatId === "draft" || chatId?.startsWith("temp-") || chatId?.startsWith("creating")) {
+    if (isDraftOrTemp) {
       setMessages([]);
-      if (chatId) {
+      setLoading(false); // Ensure loading is false for draft/temp/null
+      if (chatId && chatId !== "draft") {
         setHydratedStatus(chatId, true);
       }
+
+      logDebug("[useChatMessages] Draft/temp/null chat - skipping fetch", {
+        chatId,
+      });
     }
-  }, [chatId, setMessages, setHydratedStatus]);
+  }, [chatId, setMessages, setHydratedStatus, setLoading]);
+
+  // Synchronize loading state for real chats
+  useEffect(() => {
+    const isDraftOrTemp =
+      !chatId ||
+      chatId === "draft" ||
+      chatId.startsWith("temp-") ||
+      chatId.startsWith("creating");
+
+    // Only sync loading state for real chats (not draft/temp/null)
+    if (!isDraftOrTemp) {
+      setLoading(isLoading);
+    }
+  }, [isLoading, setLoading, chatId]);
 
   return {
     messages: serverMessages ?? [],
