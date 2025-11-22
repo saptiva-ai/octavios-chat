@@ -36,6 +36,7 @@ show_help() {
     echo "  backup [env]         - Backup environment file"
     echo "  restore [env]        - Restore environment from backup"
     echo "  diff [env1] [env2]   - Compare two environments"
+    echo "  load [env]           - Output exports for eval (e.g. eval \$(./env-manager.sh load local))"
     echo "  list                 - List all environments"
     echo "  template [env]       - Create template from existing env"
     echo ""
@@ -211,6 +212,37 @@ diff_environments() {
     diff -u "$file1" "$file2" || echo -e "${YELLOW}Environments differ${NC}"
 }
 
+load_environment() {
+    local env="${1:-local}"
+    local env_file="$ENVS_DIR/.env.$env"
+
+    if [[ ! -f "$env_file" ]]; then
+        # Fallback to root .env if it exists and no specific env was forced
+        if [[ -f ".env" && -z "$1" ]]; then
+            env_file=".env"
+        else
+            echo "echo 'Error: Environment file $env_file not found'; exit 1"
+            return 1
+        fi
+    fi
+
+    # Read file and output export commands
+    # Filters comments and empty lines
+    grep -v '^#' "$env_file" | grep -v '^$' | while read -r line; do
+        local key=$(echo "$line" | cut -d'=' -f1)
+        local value=$(echo "$line" | cut -d'=' -f2-)
+        # Remove existing quotes to avoid double quoting
+        value="${value%\"}"
+        value="${value#\"}"
+        value="${value%\'}"
+        value="${value#\'}"
+        # Use single quotes to wrap value, preserving internal double quotes (needed for JSON)
+        # If value contains single quotes, escape them
+        value="${value//\'/\'\\\'\'}"
+        echo "export $key='$value'"
+    done
+}
+
 # Main command dispatcher
 case "${1:-help}" in
     "check")
@@ -228,6 +260,9 @@ case "${1:-help}" in
             exit 1
         fi
         switch_environment "$2"
+        ;;
+    "load")
+        load_environment "$2"
         ;;
     "validate")
         if [[ -z "$2" ]]; then
