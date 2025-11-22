@@ -157,4 +157,112 @@ describe("useSendMessage", () => {
     ]);
     expect(cachedMessages?.[0]?.status).toBe("sending");
   });
+
+  it("should include enriched file attachments for instant display", async () => {
+    const chatId = "test-enriched-files";
+    const { result } = renderHook(() => useSendMessage(chatId), { wrapper });
+
+    const mockFiles = [
+      {
+        file_id: "file-1",
+        filename: "document.pdf",
+        bytes: 1024,
+        mimetype: "application/pdf",
+        status: "READY" as const,
+      },
+    ];
+
+    act(() => {
+      result.current.mutate({
+        content: "Message with enriched files",
+        fileIds: ["file-1"],
+        files: mockFiles,
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    const cachedMessages = queryClient.getQueryData<any[]>([
+      "chat",
+      chatId,
+      "messages",
+    ]);
+    expect(cachedMessages?.[0]?.metadata?.files).toBeDefined();
+    expect(cachedMessages?.[0]?.metadata?.files[0].filename).toBe(
+      "document.pdf",
+    );
+    expect(cachedMessages?.[0]?.metadata?.files[0].bytes).toBe(1024);
+  });
+
+  it("should include tools configuration when provided", async () => {
+    const chatId = "test-tools";
+    const { result } = renderHook(() => useSendMessage(chatId), { wrapper });
+
+    act(() => {
+      result.current.mutate({
+        content: "Message with tools",
+        toolsEnabled: {
+          web_search: true,
+          code_interpreter: true,
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    const cachedMessages = queryClient.getQueryData<any[]>([
+      "chat",
+      chatId,
+      "messages",
+    ]);
+    expect(cachedMessages?.[0]?.metadata?.tools_enabled).toEqual({
+      web_search: true,
+      code_interpreter: true,
+    });
+  });
+
+  it("should handle message with files, tools, and content together", async () => {
+    const chatId = "test-complete";
+    const { result } = renderHook(() => useSendMessage(chatId), { wrapper });
+
+    const mockFiles = [
+      {
+        file_id: "file-1",
+        filename: "data.csv",
+        bytes: 512,
+        mimetype: "text/csv",
+        status: "READY" as const,
+      },
+    ];
+
+    act(() => {
+      result.current.mutate({
+        content: "Analyze this data",
+        fileIds: ["file-1"],
+        files: mockFiles,
+        toolsEnabled: { code_interpreter: true },
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    const cachedMessages = queryClient.getQueryData<any[]>([
+      "chat",
+      chatId,
+      "messages",
+    ]);
+    const message = cachedMessages?.[0];
+
+    expect(message?.content).toBe("Analyze this data");
+    expect(message?.status).toBe("sending");
+    expect(message?.metadata?.file_ids).toEqual(["file-1"]);
+    expect(message?.metadata?.files[0].filename).toBe("data.csv");
+    expect(message?.metadata?.tools_enabled).toEqual({ code_interpreter: true });
+  });
 });
