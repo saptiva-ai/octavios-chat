@@ -137,59 +137,13 @@ export function ChatMessage({
     return <FileReviewMessage message={message} />;
   }
 
-  // Render audit card if message contains validation_report_id (P2.FE.3)
-  // Only render inline if AUDIT_INLINE feature flag is enabled
+  // Identify audit messages to append inline audit card after content
   const isAuditMessage =
     featureFlags.auditInline &&
     metadata &&
     typeof metadata === "object" &&
     "validation_report_id" in metadata &&
     metadata.validation_report_id;
-
-  if (isAuditMessage) {
-    return (
-      <div
-        className={cn(
-          "group flex gap-3 px-4 py-6 transition-colors duration-150",
-          "hover:bg-white/5",
-          className,
-        )}
-        role="article"
-        aria-label={`Resultado de auditoría - ${formatRelativeTime(timestamp || new Date())}`}
-      >
-        {/* Avatar */}
-        <div
-          className={cn(
-            "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-medium uppercase",
-            "bg-white/10 text-white opacity-60",
-          )}
-        >
-          AI
-        </div>
-
-        {/* Audit Card */}
-        <div className="flex-1 min-w-0">
-          <MessageAuditCard
-            metadata={metadata as any}
-            onViewFull={() =>
-              onViewAuditReport?.(
-                metadata.validation_report_id as string,
-                metadata.document_id as string,
-                metadata.filename as string | undefined,
-              )
-            }
-            onReAudit={() =>
-              onReAuditDocument?.(
-                metadata.document_id as string,
-                metadata.job_id as string | undefined,
-                metadata.filename as string | undefined,
-              )
-            }
-          />
-        </div>
-      </div>
-    );
-  }
 
   const handleCopy = async () => {
     const success = await copyToClipboard(content);
@@ -294,24 +248,6 @@ export function ChatMessage({
           </div>
         )}
 
-        {artifactInvocations.length > 0 && (
-          <div
-            className={cn(
-              "mb-3 flex flex-col gap-2",
-              isUser ? "items-end" : "items-start",
-            )}
-          >
-            {artifactInvocations.map((inv) => (
-              <ArtifactCard
-                key={(inv.result?.id as string) || inv.tool_name}
-                id={(inv.result?.id as string) || ""}
-                title={inv.result?.title || "Artefacto"}
-                type={(inv.result?.type as any) || "markdown"}
-              />
-            ))}
-          </div>
-        )}
-
         <div
           className={cn(
             "inline-flex max-w-full rounded-3xl px-5 py-4 text-left text-sm leading-relaxed",
@@ -347,6 +283,48 @@ export function ChatMessage({
             )}
           </div>
         </div>
+
+        {/* Inline audit card after the assistant's summary */}
+        {isAssistant && isAuditMessage && (
+          <div className="mt-3">
+            <MessageAuditCard
+              metadata={metadata as any}
+              onViewFull={() =>
+                onViewAuditReport?.(
+                  metadata?.validation_report_id as string,
+                  metadata?.document_id as string,
+                  (metadata as any)?.filename as string | undefined,
+                )
+              }
+              onReAudit={() =>
+                onReAuditDocument?.(
+                  metadata?.document_id as string,
+                  metadata?.job_id as string | undefined,
+                  (metadata as any)?.filename as string | undefined,
+                )
+              }
+            />
+          </div>
+        )}
+
+        {/* Artifact cards should appear after the assistant's summary (and audit card) */}
+        {artifactInvocations.length > 0 && (
+          <div
+            className={cn(
+              "mt-3 flex flex-col gap-2",
+              isUser ? "items-end" : "items-start",
+            )}
+          >
+            {artifactInvocations.map((inv) => (
+              <ArtifactCard
+                key={(inv.result?.id as string) || inv.tool_name}
+                id={(inv.result?.id as string) || ""}
+                title={(inv.result?.title as string) || "Artefacto"}
+                type={(inv.result?.type as any) || "markdown"}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Removed: Footer with "XXX tokens Saptiva Turbo" for minimal UI */}
         {/* Only show error retry button */}
