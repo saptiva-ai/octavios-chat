@@ -19,15 +19,21 @@ import structlog
 from ..core.redis_cache import get_redis_cache
 from ..domain.chat_context import ChatContext
 from ..mcp import get_mcp_adapter
+from ..core.constants import (
+    TOOL_NAME_AUDIT,
+    TOOL_NAME_EXCEL,
+    TOOL_NAME_RESEARCH,
+    TOOL_NAME_EXTRACT
+)
 
 logger = structlog.get_logger(__name__)
 
 # TTL configuration for each tool (in seconds)
 TOOL_CACHE_TTL = {
-    "audit_file": 3600,       # 1 hour (findings don't change)
-    "excel_analyzer": 1800,   # 30 min (data might update)
-    "deep_research": 86400,   # 24 hours (research is expensive)
-    "extract_document_text": 3600,  # 1 hour (text is stable)
+    TOOL_NAME_AUDIT: 3600,       # 1 hour (findings don't change)
+    TOOL_NAME_EXCEL: 1800,   # 30 min (data might update)
+    TOOL_NAME_RESEARCH: 86400,   # 24 hours (research is expensive)
+    TOOL_NAME_EXTRACT: 3600,  # 1 hour (text is stable)
 }
 
 class ToolExecutionService:
@@ -178,10 +184,10 @@ class ToolExecutionService:
             tool_map = await mcp_adapter._get_tool_map()
 
             # 1. Audit File Tool
-            if context.tools_enabled.get("audit_file", False) and "audit_file" in tool_map:
+            if context.tools_enabled.get(TOOL_NAME_AUDIT, False) and TOOL_NAME_AUDIT in tool_map:
                 for doc_id in context.document_ids:
                     audit_result = await cls._execute_tool_with_cache(
-                        tool_name="audit_file",
+                        tool_name=TOOL_NAME_AUDIT,
                         doc_id=doc_id,
                         user_id=user_id,
                         payload={
@@ -196,15 +202,15 @@ class ToolExecutionService:
                     )
                     
                     if audit_result:
-                        results[f"audit_file_{doc_id}"] = audit_result
+                        results[f"{TOOL_NAME_AUDIT}_{doc_id}"] = audit_result
                         logger.info(
-                            "audit_file tool succeeded",
+                            f"{TOOL_NAME_AUDIT} tool succeeded",
                             doc_id=doc_id,
                             findings_count=len(audit_result.get("findings", []))
                         )
 
             # 2. Excel Analyzer Tool
-            if context.tools_enabled.get("excel_analyzer", False) and "excel_analyzer" in tool_map:
+            if context.tools_enabled.get(TOOL_NAME_EXCEL, False) and TOOL_NAME_EXCEL in tool_map:
                 from ..models.document import Document
                 
                 for doc_id in context.document_ids:
@@ -223,7 +229,7 @@ class ToolExecutionService:
                             continue
 
                         excel_result = await cls._execute_tool_with_cache(
-                            tool_name="excel_analyzer",
+                            tool_name=TOOL_NAME_EXCEL,
                             doc_id=doc_id,
                             user_id=user_id,
                             payload={
@@ -238,15 +244,15 @@ class ToolExecutionService:
                         )
 
                         if excel_result:
-                            results[f"excel_analyzer_{doc_id}"] = excel_result
+                            results[f"{TOOL_NAME_EXCEL}_{doc_id}"] = excel_result
                             logger.info(
-                                "excel_analyzer tool succeeded",
+                                f"{TOOL_NAME_EXCEL} tool succeeded",
                                 doc_id=doc_id
                             )
                             
                     except Exception as e:
                         logger.warning(
-                            "Error checking document for excel_analyzer",
+                            f"Error checking document for {TOOL_NAME_EXCEL}",
                             doc_id=doc_id,
                             error=str(e)
                         )
