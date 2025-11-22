@@ -306,6 +306,25 @@ export function ChatInterface({
     [addMessage, currentChatId, onAuditError, onStartAudit],
   );
 
+  // Calculate selected tools BEFORE handleSend (needed for optimistic updates)
+  const selectedToolIds = React.useMemo<ToolId[]>(() => {
+    // Prefer the new selectedTools prop if available (including empty arrays)
+    if (selectedTools !== undefined) {
+      return selectedTools;
+    }
+
+    // Fallback to legacy toolsEnabled only if selectedTools is not passed
+    if (!toolsEnabled) return [];
+
+    return Object.entries(toolsEnabled)
+      .filter(([, enabled]) => enabled)
+      .map(([legacyKey]) => legacyKeyToToolId(legacyKey))
+      .filter((id): id is ToolId => {
+        if (!id) return false;
+        return Boolean(toolVisibility[id]);
+      });
+  }, [selectedTools, toolsEnabled, toolVisibility]);
+
   const handleSend = React.useCallback(async () => {
     const trimmed = inputValue.trim();
 
@@ -378,24 +397,6 @@ export function ChatInterface({
     },
     [],
   );
-
-  const selectedToolIds = React.useMemo<ToolId[]>(() => {
-    // Prefer the new selectedTools prop if available (including empty arrays)
-    if (selectedTools !== undefined) {
-      return selectedTools;
-    }
-
-    // Fallback to legacy toolsEnabled only if selectedTools is not passed
-    if (!toolsEnabled) return [];
-
-    return Object.entries(toolsEnabled)
-      .filter(([, enabled]) => enabled)
-      .map(([legacyKey]) => legacyKeyToToolId(legacyKey))
-      .filter((id): id is ToolId => {
-        if (!id) return false;
-        return Boolean(toolVisibility[id]);
-      });
-  }, [selectedTools, toolsEnabled, toolVisibility]);
 
   const handleRemoveToolInternal = React.useCallback(
     (id: ToolId) => {
