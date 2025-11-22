@@ -230,15 +230,14 @@ export function LoginForm() {
         </Button>
       </form>
 
-      {/* Temporarily hidden - Forgot password link */}
-      {/* <div className="mt-6 text-center text-sm text-text-muted">
+      <div className="mt-6 text-center text-sm text-text-muted">
         <Link
           href="/forgot-password"
           className="text-link transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
         >
           ¿Olvidaste tu contraseña?
         </Link>
-      </div> */}
+      </div>
 
       <p className="mt-4 text-center text-sm text-text-muted">
         ¿Aún no tienes cuenta?{" "}

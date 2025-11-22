@@ -5,19 +5,25 @@ Extracts business logic from chat router for better separation of concerns.
 Handles chat session management, message processing, and AI response generation.
 """
 
+import json
 import time
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
 import structlog
 from fastapi import HTTPException, status
 
 from ..core.config import Settings
 from ..core.redis_cache import get_redis_cache
-from ..models.chat import ChatSession as ChatSessionModel, ChatMessage as ChatMessageModel, MessageRole
+from ..core.telemetry import trace_span
+from ..models.artifact import Artifact, ArtifactType
+from ..models.chat import (
+    ChatMessage as ChatMessageModel,
+    ChatSession as ChatSessionModel,
+    MessageRole,
+)
 from ..services.saptiva_client import SaptivaClient, build_payload
 from ..services.tools import normalize_tools_state
-from ..core.telemetry import trace_span
 
 logger = structlog.get_logger(__name__)
 
@@ -28,6 +34,58 @@ class ChatService:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.saptiva_client = SaptivaClient()
+
+    async def _handle_tool_invocation(
+        self,
+        name: str,
+        args: Dict[str, Any],
+        user_id: str,
+        chat_id: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Execute supported tool calls emitted by the LLM.
+
+        Currently supports:
+            - create_artifact: persists an artifact and returns minimal metadata.
+        """
+        if name != "create_artifact":
+            return None
+
+        try:
+            title = args.get("title") or "Documento sin título"
+            raw_type = args.get("type") or ArtifactType.MARKDOWN.value
+            try:
+                artifact_type = ArtifactType(raw_type)
+            except ValueError:
+                artifact_type = ArtifactType.MARKDOWN
+
+            content = args.get("content", "")
+
+            artifact = Artifact(
+                user_id=user_id,
+                chat_session_id=chat_id,
+                title=title,
+                type=artifact_type,
+                content=content,
+                versions=[],
+            )
+            artifact.add_version(content)
+            await artifact.insert()
+
+            return {
+                "id": str(artifact.id),
+                "title": artifact.title,
+                "type": artifact.type.value,
+            }
+        except Exception as exc:  # pragma: no cover - best-effort tool execution
+            logger.warning(
+                "Tool invocation failed",
+                tool=name,
+                error=str(exc),
+                user_id=user_id,
+                chat_id=chat_id,
+            )
+            return None
 
     async def get_or_create_session(
         self,
@@ -57,10 +115,20 @@ class ChatService:
             # Get existing session
             chat_session = await ChatSessionModel.get(chat_id)
             if not chat_session:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Chat session not found"
+                # Fallback: create a new session if the provided chat_id is stale
+                logger.warning(
+                    "Chat session not found, creating a new one instead",
+                    chat_id=chat_id,
+                    user_id=user_id
                 )
+                title = first_message[:50] + "..." if len(first_message) > 50 else first_message
+                chat_session = ChatSessionModel(
+                    title=title,
+                    user_id=user_id,
+                    tools_enabled=tools_map
+                )
+                await chat_session.insert()
+                return chat_session
 
             if chat_session.user_id != user_id:
                 raise HTTPException(
@@ -178,6 +246,8 @@ class ChatService:
             context['chat_id'] = chat_id
             context['user_id'] = user_id
 
+            tool_invocations: List[Dict[str, Any]] = []
+
             # Build payload using prompt registry
             payload_data, metadata = build_payload(
                 model=model,
@@ -221,9 +291,13 @@ class ChatService:
                     "content": system_prompt
                 }
 
-                # Insert after the main system prompt (usually first message)
+                # Prefer to enrich the existing system prompt so downstream
+                # callers (and tests) see the document context in the first
+                # system message.
                 if payload_data["messages"] and payload_data["messages"][0]["role"] == "system":
-                    payload_data["messages"].insert(1, system_message)
+                    payload_data["messages"][0]["content"] = (
+                        f"{payload_data['messages'][0]['content']}\n\n{system_prompt}"
+                    )
                 else:
                     payload_data["messages"].insert(0, system_message)
 
@@ -257,6 +331,63 @@ class ChatService:
                 tools=payload_data.get("tools")
             )
 
+            # Handle tool calls returned by the model (function-calling style)
+            try:
+                choices = getattr(saptiva_response, "choices", []) or []
+                if choices:
+                    first_choice = choices[0]
+                    message_obj = first_choice.get("message", {}) if isinstance(first_choice, dict) else {}
+                    raw_tool_calls = []
+
+                    if isinstance(message_obj, dict):
+                        if message_obj.get("tool_calls"):
+                            raw_tool_calls = message_obj.get("tool_calls") or []
+                        elif message_obj.get("function_call"):
+                            raw_tool_calls = [
+                                {"type": "function", "function": message_obj.get("function_call")}
+                            ]
+
+                    for call in raw_tool_calls:
+                        func = call.get("function") if isinstance(call, dict) else None
+                        if not isinstance(func, dict):
+                            continue
+
+                        name = func.get("name")
+                        raw_args = func.get("arguments")
+
+                        parsed_args: Dict[str, Any] = {}
+                        if isinstance(raw_args, str):
+                            try:
+                                parsed_args = json.loads(raw_args)
+                            except json.JSONDecodeError:
+                                parsed_args = {}
+                        elif isinstance(raw_args, dict):
+                            parsed_args = raw_args
+
+                        if name:
+                            result = await self._handle_tool_invocation(
+                                name=name,
+                                args=parsed_args,
+                                user_id=user_id,
+                                chat_id=chat_id or None,
+                            )
+                            if result:
+                                tool_invocations.append(
+                                    {
+                                        "tool_name": name,
+                                        "arguments": parsed_args,
+                                        "result": result,
+                                    }
+                                )
+
+            except Exception as parse_exc:  # pragma: no cover - defensive parsing
+                logger.warning(
+                    "Failed to parse or execute tool calls",
+                    error=str(parse_exc),
+                    user_id=user_id,
+                    chat_id=chat_id,
+                )
+
             # Format as coordinated response
             return {
                 "type": "chat",
@@ -265,6 +396,7 @@ class ChatService:
                     "complexity": {"score": 0.0, "requires_research": False},
                     "reason": "Kill switch active - simple inference only"
                 },
+                "tool_invocations": tool_invocations,
                 "escalation_available": False,
                 "processing_time_ms": (time.time() - start_time) * 1000,
                 "_metadata": metadata
@@ -328,6 +460,16 @@ class ChatService:
                         # Fallback: save only file_ids without rich metadata
                         files = []
 
+            # FIX ISSUE-003: Clean metadata to prevent duplication
+            # Remove file_ids and files from metadata since they're stored in explicit fields
+            clean_metadata = {"source": "api"}
+            if metadata:
+                clean_metadata = {
+                    k: v for k, v in metadata.items()
+                    if k not in ("file_ids", "files")
+                }
+                clean_metadata["source"] = "api"
+
             # Create message with explicit typed fields
             user_message = ChatMessageModel(
                 chat_id=chat_session.id,
@@ -336,8 +478,8 @@ class ChatService:
                 file_ids=file_ids,
                 files=files,
                 schema_version=2,
-                # Legacy metadata for backwards compatibility
-                metadata={"source": "api"} if not metadata else {**metadata, "source": "api"}
+                # Legacy metadata for backwards compatibility (cleaned)
+                metadata=clean_metadata
             )
 
             # Ensure BSON/JSON serializability before insertion
@@ -437,16 +579,28 @@ class ChatService:
         tokens: Optional[Dict] = None,
         latency_ms: Optional[int] = None
     ) -> ChatMessageModel:
-        """Add assistant message to session and invalidate cache."""
+        """Add assistant message to session and record in unified history."""
+        # FIX ISSUE-003: Clean metadata to prevent duplication (defensive)
+        # Although assistant messages typically don't have file_ids, clean metadata to be safe
+        clean_metadata = {}
+        if metadata:
+            clean_metadata = {
+                k: v for k, v in metadata.items()
+                if k not in ("file_ids", "files")
+            }
+
         ai_message = await chat_session.add_message(
             role=MessageRole.ASSISTANT,
             content=content,
             model=model,
             task_id=task_id,
-            metadata=metadata or {},
+            metadata=clean_metadata,
             tokens=tokens,
             latency_ms=latency_ms
         )
+
+        # NOTE: History recording is handled by chat_session.add_message() (chat.py:236)
+        # No need to call HistoryService.record_chat_message() here
 
         # Invalidate cache
         cache = await get_redis_cache()

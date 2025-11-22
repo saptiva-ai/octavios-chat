@@ -78,18 +78,29 @@ class AuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
     
     def _extract_token(self, request: Request) -> Optional[str]:
-        """Extract JWT token from Authorization header."""
+        """
+        Extract JWT token from Authorization header or query string.
+
+        Query string support is for EventSource (SSE) which can't send custom headers.
+        """
+        # Try Authorization header first
         auth_header = request.headers.get("Authorization")
-        if not auth_header:
-            return None
-        
-        try:
-            scheme, token = auth_header.split()
-            if scheme.lower() != "bearer":
-                return None
-            return token
-        except ValueError:
-            return None
+        if auth_header:
+            try:
+                scheme, token = auth_header.split()
+                if scheme.lower() == "bearer":
+                    return token
+            except ValueError:
+                pass
+
+        # Fallback to query string for EventSource compatibility
+        # Only for SSE endpoints (/events/)
+        if "/events/" in request.url.path:
+            token = request.query_params.get("token")
+            if token:
+                return token
+
+        return None
     
     def _validate_token(self, token: str) -> Optional[dict]:
         """Validate JWT token and return payload."""

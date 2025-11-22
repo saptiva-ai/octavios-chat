@@ -25,6 +25,7 @@ export {
   useDraftStore,
   useChatStore,
   useHistoryStore,
+  useCanvasStore,
 
   // Selector hooks (backward compatibility)
   useUI,

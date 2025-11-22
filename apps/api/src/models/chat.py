@@ -11,6 +11,7 @@ from beanie import Document, Indexed, Link
 from pydantic import Field, BaseModel, ConfigDict
 
 from .user import User
+from .document_state import DocumentState, ProcessingStatus
 
 
 class MessageRole(str, Enum):
@@ -134,8 +135,17 @@ class ChatSession(Document):
     pinned: bool = Field(default=False, description="Whether the chat is pinned")
     tools_enabled: Dict[str, bool] = Field(default_factory=dict, description="Enabled tools for this chat")
 
-    # MVP-FILE-CONTEXT: Store file IDs attached to this session for persistent document context
-    attached_file_ids: List[str] = Field(default_factory=list, description="File IDs attached to this conversation")
+    # MVP-FILE-CONTEXT: Structured document states for this conversation
+    documents: List[DocumentState] = Field(
+        default_factory=list,
+        description="Documents with processing state attached to this conversation"
+    )
+
+    # DEPRECATED: Legacy field for backward compatibility (remove in v2.0)
+    attached_file_ids: List[str] = Field(
+        default_factory=list,
+        description="DEPRECATED: Use 'documents' field instead. Kept for migration."
+    )
 
     # P0-BE-UNIQ-EMPTY: State to track conversation lifecycle
     state: ConversationState = Field(default=ConversationState.DRAFT, description="Conversation state")
@@ -313,3 +323,99 @@ class ChatSession(Document):
         self.state = new_state
         self.updated_at = datetime.utcnow()
         await self.save()
+
+    # Document management helper methods
+    def add_document(self, doc_id: str, name: str, **kwargs) -> DocumentState:
+        """
+        Add a new document to the conversation.
+
+        Args:
+            doc_id: Document ID
+            name: Original filename
+            **kwargs: Additional metadata (pages, size_bytes, mimetype, etc.)
+
+        Returns:
+            The created DocumentState
+
+        Example:
+            >>> session = ChatSession(...)
+            >>> doc = session.add_document(
+            ...     doc_id="doc-123",
+            ...     name="report.pdf",
+            ...     pages=32,
+            ...     size_bytes=1024000
+            ... )
+        """
+        doc_state = DocumentState(doc_id=doc_id, name=name, **kwargs)
+        self.documents.append(doc_state)
+
+        # Keep legacy field in sync during migration
+        if doc_id not in self.attached_file_ids:
+            self.attached_file_ids.append(doc_id)
+
+        return doc_state
+
+    def get_document(self, doc_id: str) -> Optional[DocumentState]:
+        """
+        Get document state by ID.
+
+        Args:
+            doc_id: Document ID to search for
+
+        Returns:
+            DocumentState if found, None otherwise
+        """
+        return next((d for d in self.documents if d.doc_id == doc_id), None)
+
+    def get_ready_documents(self) -> List[DocumentState]:
+        """
+        Get all documents ready for RAG.
+
+        Returns:
+            List of documents with status=READY
+        """
+        return [d for d in self.documents if d.is_ready()]
+
+    def get_processing_documents(self) -> List[DocumentState]:
+        """
+        Get all documents currently being processed.
+
+        Returns:
+            List of documents in processing states
+        """
+        return [d for d in self.documents if d.is_processing()]
+
+    def update_document_status(
+        self,
+        doc_id: str,
+        status: ProcessingStatus,
+        **kwargs
+    ) -> Optional[DocumentState]:
+        """
+        Update document processing status.
+
+        Args:
+            doc_id: Document ID
+            status: New processing status
+            **kwargs: Additional fields to update (error, segments_count, etc.)
+
+        Returns:
+            Updated DocumentState if found, None otherwise
+
+        Example:
+            >>> session.update_document_status(
+            ...     "doc-123",
+            ...     ProcessingStatus.READY,
+            ...     segments_count=15
+            ... )
+        """
+        doc = self.get_document(doc_id)
+        if doc:
+            doc.status = status
+            doc.updated_at = datetime.utcnow()
+
+            for key, value in kwargs.items():
+                if hasattr(doc, key):
+                    setattr(doc, key, value)
+
+        return doc

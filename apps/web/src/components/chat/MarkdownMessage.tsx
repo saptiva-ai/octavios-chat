@@ -1,14 +1,28 @@
 "use client";
 
+/**
+ * MarkdownMessage Component
+ *
+ * CHANGELOG:
+ * - 2025-01-17: Integrado CodeBlock con react-syntax-highlighter (portado de Vercel)
+ * - Reemplazado rehype-highlight con CodeBlock custom
+ * - Agregado copy button a bloques de código
+ */
+
 import * as React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
+import rehypeSanitize from "rehype-sanitize"; // FIX ISSUE-008: Prevent XSS attacks
 import { cn } from "../../lib/utils";
 import type { PluggableList } from "unified";
 import "katex/dist/katex.min.css";
+import {
+  CodeBlock,
+  CodeBlockCopyButton,
+  getLanguageFromClassName,
+} from "./CodeBlock";
 
 interface MarkdownMessageProps {
   content: string;
@@ -21,25 +35,95 @@ interface MarkdownMessageProps {
 }
 
 const defaultComponents = {
-  a: ({ node: _, ...props }: any) => (
-    <a
-      {...props}
-      className={cn(
-        "text-saptiva-mint underline decoration-dotted underline-offset-2 hover:text-saptiva-light transition-colors",
-        props.className,
-      )}
-      target="_blank"
-      rel="noreferrer"
-    />
-  ),
+  a: ({ node: _, href, children, ...props }: any) => {
+    // Detect audit report download links
+    const isAuditReportDownload = href?.match(
+      /\/api\/reports\/audit\/([^/]+)\/download/,
+    );
+
+    if (isAuditReportDownload) {
+      const reportId = isAuditReportDownload[1];
+
+      return (
+        <button
+          onClick={async (e) => {
+            e.preventDefault();
+            try {
+              // Get auth token from localStorage
+              const authData = localStorage.getItem("auth-storage");
+              const token = authData
+                ? JSON.parse(authData)?.state?.token
+                : null;
+
+              if (!token) {
+                alert("Debes iniciar sesión para descargar el reporte");
+                return;
+              }
+
+              // Fetch the PDF with authentication
+              const response = await fetch(href, {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              });
+
+              if (!response.ok) {
+                throw new Error("Error al descargar el reporte");
+              }
+
+              // Create a blob and download
+              const blob = await response.blob();
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `reporte-auditoria-${reportId}.pdf`;
+              document.body.appendChild(a);
+              a.click();
+              window.URL.revokeObjectURL(url);
+              document.body.removeChild(a);
+            } catch (error) {
+              console.error("Error downloading audit report:", error);
+              alert(
+                "Error al descargar el reporte. Por favor intenta nuevamente.",
+              );
+            }
+          }}
+          className={cn(
+            "inline-flex items-center gap-2 px-4 py-2 rounded-md",
+            "bg-saptiva-mint/10 hover:bg-saptiva-mint/20",
+            "text-saptiva-mint font-medium",
+            "border border-saptiva-mint/30",
+            "transition-colors cursor-pointer",
+            props.className,
+          )}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    // Regular links
+    return (
+      <a
+        {...props}
+        href={href}
+        className={cn(
+          "text-saptiva-mint underline decoration-dotted underline-offset-2 hover:text-saptiva-light transition-colors",
+          props.className,
+        )}
+        target="_blank"
+        rel="noreferrer"
+      />
+    );
+  },
   code: ({
     inline,
     className,
     children,
     ...props
   }: React.HTMLAttributes<HTMLElement> & { inline?: boolean }) => {
-    const languageMatch = /language-(\w+)/.exec(className || "");
-    if (inline || !languageMatch) {
+    // Inline code (dentro de párrafos)
+    if (inline) {
       return (
         <code
           {...props}
@@ -53,16 +137,14 @@ const defaultComponents = {
       );
     }
 
+    // Bloques de código (fenced code blocks)
+    const language = getLanguageFromClassName(className);
+    const codeString = String(children).replace(/\n$/, ""); // Remove trailing newline
+
     return (
-      <pre
-        {...props}
-        className={cn(
-          "relative overflow-x-auto rounded-xl border border-white/10 bg-black/60 p-4 font-mono text-sm leading-relaxed",
-          className,
-        )}
-      >
-        <code>{children}</code>
-      </pre>
+      <CodeBlock code={codeString} language={language} className="my-4">
+        <CodeBlockCopyButton />
+      </CodeBlock>
     );
   },
   blockquote: ({ className, ...props }: React.HTMLAttributes<HTMLElement>) => (
@@ -176,15 +258,19 @@ export function MarkdownMessage({
   const markdownPlugins = React.useMemo(() => {
     const remarkPlugins: PluggableList = [remarkGfm, remarkMath];
     const rehypePlugins: PluggableList = [];
-    if (highlightCode) {
-      rehypePlugins.push(rehypeHighlight);
-    }
+
+    // FIX ISSUE-008: Sanitize HTML first to prevent XSS
+    rehypePlugins.push(rehypeSanitize);
+
+    // NOTE: Removed rehypeHighlight - now using CodeBlock component instead
+    // Syntax highlighting is handled by react-syntax-highlighter in CodeBlock
+
     rehypePlugins.push(rehypeKatex);
     return {
       remark: remarkPlugins,
       rehype: rehypePlugins,
     };
-  }, [highlightCode]);
+  }, []);
 
   return (
     <div className={cn("prose prose-invert max-w-none text-sm", className)}>

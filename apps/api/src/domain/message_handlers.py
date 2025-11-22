@@ -70,7 +70,6 @@ class MessageHandler(ABC):
         """
         pass
 
-    @abstractmethod
     async def handle(
         self,
         context: ChatContext,

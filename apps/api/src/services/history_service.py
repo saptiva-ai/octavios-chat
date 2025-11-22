@@ -2,6 +2,7 @@
 Unified history service for managing chat + research timeline
 """
 
+import re  # FIX ISSUE-021: For escaping regex special characters
 import structlog
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
@@ -542,8 +543,11 @@ class HistoryService:
 
             # Apply search filter
             if search:
+                # FIX ISSUE-021: Escape regex special characters to prevent ReDoS
+                # Prevents catastrophic backtracking from malicious regex patterns like (a+)+b
+                escaped_search = re.escape(search)
                 # Case-insensitive search in title
-                query = query.find({"title": {"$regex": search, "$options": "i"}})
+                query = query.find({"title": {"$regex": escaped_search, "$options": "i"}})
 
             # Get total count
             total_count = await query.count()
@@ -629,6 +633,42 @@ class HistoryService:
             # Convert to response schema (reverse to get chronological order for display)
             messages = []
             for msg in reversed(messages_docs):
+                # ISSUE-007: On-the-fly migration for legacy messages
+                file_ids = getattr(msg, 'file_ids', [])
+                files = getattr(msg, 'files', [])
+                schema_version = getattr(msg, 'schema_version', 1)
+
+                # If schema < 2 and no explicit files but has legacy metadata, migrate
+                if schema_version < 2 and not files and msg.metadata:
+                    if 'file_ids' in msg.metadata or 'files' in msg.metadata:
+                        from ..models.chat import FileMetadata
+                        try:
+                            legacy_file_ids = msg.metadata.get('file_ids', [])
+                            legacy_files = msg.metadata.get('files', [])
+
+                            # Migrate file_ids
+                            if legacy_file_ids and not file_ids:
+                                file_ids = legacy_file_ids
+
+                            # Migrate and validate files
+                            if legacy_files and not files:
+                                files = [
+                                    FileMetadata.model_validate(f) if isinstance(f, dict) else f
+                                    for f in legacy_files
+                                ]
+
+                            logger.debug(
+                                "Migrated legacy file metadata",
+                                msg_id=msg.id,
+                                file_count=len(files)
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                "Failed to migrate legacy file metadata",
+                                error=str(e),
+                                msg_id=msg.id
+                            )
+
                 messages.append(ChatMessage(
                     id=msg.id,
                     chat_id=msg.chat_id,
@@ -637,10 +677,10 @@ class HistoryService:
                     status=msg.status,
                     created_at=msg.created_at,
                     updated_at=msg.updated_at,
-                    # NEW: Include typed file fields
-                    file_ids=getattr(msg, 'file_ids', []),
-                    files=getattr(msg, 'files', []),
-                    schema_version=getattr(msg, 'schema_version', 1),
+                    # ISSUE-007: Use migrated fields
+                    file_ids=file_ids,
+                    files=files,
+                    schema_version=schema_version,
                     # Legacy metadata for backwards compatibility
                     metadata=msg.metadata,
                     model=msg.model,

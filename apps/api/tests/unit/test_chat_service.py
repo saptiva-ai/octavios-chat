@@ -112,23 +112,32 @@ class TestGetOrCreateSession:
             assert result == mock_chat_session
 
     @pytest.mark.asyncio
-    async def test_raises_404_when_session_not_found(self, chat_service):
-        """Should raise HTTPException 404 when session doesn't exist"""
-        from fastapi import HTTPException
-
+    async def test_creates_new_session_when_not_found(self, chat_service):
+        """Should create new session when requested session doesn't exist (fallback)"""
         with patch('src.services.chat_service.ChatSessionModel') as MockChatSession:
+            # Simulate not found
             MockChatSession.get = AsyncMock(return_value=None)
+            
+            # Mock the new session instance that will be created
+            mock_new_session = AsyncMock()
+            mock_new_session.id = "new-session-id"
+            mock_new_session.insert = AsyncMock()
+            MockChatSession.return_value = mock_new_session
 
-            with pytest.raises(HTTPException) as exc_info:
-                await chat_service.get_or_create_session(
-                    chat_id="nonexistent-id",
-                    user_id="user-123",
-                    first_message="Message",
-                    tools_enabled={}
-                )
+            result = await chat_service.get_or_create_session(
+                chat_id="nonexistent-id",
+                user_id="user-123",
+                first_message="Message",
+                tools_enabled={}
+            )
 
-            assert exc_info.value.status_code == 404
-            assert "not found" in exc_info.value.detail.lower()
+            # Should have tried to get it
+            MockChatSession.get.assert_called_once_with("nonexistent-id")
+            
+            # Should have created a new one
+            MockChatSession.assert_called()  # Constructor called
+            mock_new_session.insert.assert_called_once()
+            assert result == mock_new_session
 
     @pytest.mark.asyncio
     async def test_raises_403_when_user_unauthorized(self, chat_service, mock_chat_session):
