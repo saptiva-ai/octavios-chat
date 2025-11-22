@@ -338,14 +338,21 @@ export function ChatInterface({
 
     // Always route to chat with file_ids
     // Optimistic update: Add user message to UI instantly
-    const fileIds = filesV1Attachments
-      .filter((a) => a.status === "READY")
-      .map((a) => a.file_id);
+    const readyFiles = filesV1Attachments.filter((a) => a.status === "READY");
+    const fileIds = readyFiles.map((a) => a.file_id);
+
+    // Build tools configuration
+    const toolsConfig = selectedToolIds.reduce((acc, toolId) => {
+      acc[toolId] = true;
+      return acc;
+    }, {} as Record<string, boolean>);
 
     if (currentChatId && (trimmed || fileIds.length > 0)) {
       sendMessage.mutate({
         content: trimmed,
         fileIds: fileIds.length > 0 ? fileIds : undefined,
+        files: readyFiles.length > 0 ? readyFiles : undefined,
+        toolsEnabled: Object.keys(toolsConfig).length > 0 ? toolsConfig : undefined,
       });
     }
 
@@ -362,6 +369,7 @@ export function ChatInterface({
     filesV1Attachments,
     currentChatId,
     sendMessage,
+    selectedToolIds,
   ]);
 
   const handleFileAttachmentChange = React.useCallback(
