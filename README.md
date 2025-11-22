@@ -277,7 +277,16 @@ flowchart TB
 Tres vistas complementarias: frontend, backend y cómo se comunican. Cada diagrama resalta los módulos principales y el patrón de diseño aplicado.
 
 ### Frontend (Next.js 14)
-Arquitectura client-side completa con App Router, componentes especializados, gestión de estado con Zustand, y clientes HTTP/MCP con SSE.
+
+Arquitectura reactiva moderna con React Query + Zustand, optimistic updates, y eliminación de race conditions.
+
+**Stack**:
+- **React Query**: Server state management (caching, deduplicación, SWR)
+- **Zustand**: UI state (streaming, optimistic updates)
+- **Pure Functions**: Business logic (file-policies.ts)
+- **TypeScript**: Type safety end-to-end
+
+**Arquitectura Reactiva**:
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#111111','primaryBorderColor': '#4b5563','primaryTextColor': '#f9fafb','lineColor': '#4b5563','secondaryColor': '#ffffff','secondaryBorderColor': '#4b5563','secondaryTextColor': '#111111','tertiaryColor': '#d1d5db','tertiaryBorderColor': '#4b5563','tertiaryTextColor': '#111111'}}}%%
