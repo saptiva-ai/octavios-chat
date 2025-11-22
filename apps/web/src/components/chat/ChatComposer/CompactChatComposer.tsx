@@ -233,7 +233,7 @@ export function CompactChatComposer({
   const { sendAuditForFile } = useAuditFlow({
     setValue: onChange,
     onSubmit: directSubmitForAudit,
-    clearFiles: onClearFilesV1Attachments || (() => {}),
+    // clearFiles is optional - not available in CompactChatComposer context
     conversationId: conversationId || currentChatId || undefined,
   });
 
