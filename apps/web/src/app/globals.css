@@ -204,6 +204,11 @@
     background: rgba(255, 255, 255, 0.28);
   }
 
+  /* Hide TanStack React Query Devtools bubble */
+  body > div.tsqd-parent-container > div {
+    display: none !important;
+  }
+
   /* Composer height variable for layout shift prevention */
   :root {
     --composer-h: 88px;
