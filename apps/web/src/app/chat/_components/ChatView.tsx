@@ -126,6 +126,11 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
   const isCanvasOpen = useCanvasStore((state) => state.isSidebarOpen);
   const toggleCanvas = useCanvasStore((state) => state.toggleSidebar);
 
+  // DEBUG: Log canvas state in ChatView
+  React.useEffect(() => {
+    logDebug("🏠 [ChatView] isCanvasOpen changed", { isCanvasOpen });
+  }, [isCanvasOpen]);
+
   // Files V1 state - MVP-LOCK: Pass chatId to persist attachments
   // FIX: Use resolvedChatId (from URL) instead of currentChatId (from async store)
   // to prevent race condition where files are stored under chatId but loaded from "draft"
@@ -135,7 +140,10 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
     removeAttachment: removeFilesV1Attachment,
     clearAttachments: clearFilesV1Attachments,
     lastReadyFile: lastReadyAuditFile,
-  } = useFiles(resolvedChatId || currentChatId || undefined);
+  } = useFiles(
+    resolvedChatId || currentChatId || undefined,
+    messages.length > 0, // hasMessages: true si ya hay mensajes cargados
+  );
 
   const [nudgeMessage, setNudgeMessage] = React.useState<string | null>(null);
   const [pendingWizard, setPendingWizard] = React.useState<{
@@ -156,6 +164,19 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
     fileId: string;
     filename: string;
   } | null>(null);
+
+  // 🔍 DEBUG: Log on every render to verify code is loaded
+  logDebug("🔍 [ChatView] RENDER - Code version check", {
+    messagesLen: messages.length,
+    filesV1AttachmentsLen: filesV1Attachments.length,
+    activeAudit,
+    currentChatId,
+  });
+
+  // State for current audit report PDF URL
+  const [currentReportPdfUrl, setCurrentReportPdfUrl] = React.useState<
+    string | null
+  >(null);
 
   const selectedTools = React.useMemo<ToolId[]>(() => {
     return Object.entries(toolsEnabled)
@@ -443,14 +464,43 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
       }
 
       try {
-        logDebug("[ChatView] Loading documents from backend", {
-          chatId: resolvedChatId,
-        });
+        // 🛡️ FIREWALL DE HISTORIAL: NO cargar documentos para chats existentes CON mensajes
+        // Los documentos históricos deben verse en los mensajes, NO en el input
+        const isExistingChat =
+          resolvedChatId &&
+          !resolvedChatId.startsWith("temp-") &&
+          !resolvedChatId.startsWith("creating") &&
+          resolvedChatId !== "draft" &&
+          messages.length > 0; // ← CLAVE: solo bloquear si tiene mensajes
+
+        if (isExistingChat) {
+          logDebug(
+            "[ChatView] 🛡️ FIREWALL: Skipping document restoration for existing chat with messages",
+            {
+              chatId: resolvedChatId,
+              messagesLen: messages.length,
+              reason:
+                "Historical documents should not be loaded into input composer",
+              hint: "Documents are visible in message history, not in the input area",
+            },
+          );
+
+          // Mark as loaded to prevent re-loading
+          loadedChatsRef.current.add(resolvedChatId);
+          return;
+        }
+
+        logDebug(
+          "[ChatView] Loading documents from backend (draft/temp chat)",
+          {
+            chatId: resolvedChatId,
+          },
+        );
 
         const documents = await apiClient.listDocuments(resolvedChatId);
 
         // Re-populate filesStore with documents from backend
-        // This ensures files persist after page refresh, even if localStorage was cleared
+        // This ensures files persist after page refresh for DRAFT chats
         // Get fresh state from store to avoid stale closure issues
         const currentAttachments = filesV1Attachments;
 
@@ -767,18 +817,39 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
             }
 
             // Ensure response was set (should always be the case after streaming or non-streaming)
+            logDebug("[ChatView] 🔍 About to check response", {
+              hasResponse: !!response,
+              responseKeys: response ? Object.keys(response) : [],
+            });
+
             if (!response) {
               throw new Error("Failed to get response from API");
             }
 
-            // POLÍTICA: Limpieza absoluta de attachments post-envío
-            // No heredar adjuntos entre turnos
-            if (filesV1Attachments.length > 0) {
+            logDebug(
+              "[ChatView] 🔍 Response exists, proceeding to file cleanup",
+            );
+
+            // 🔧 FIX: Clear file attachments IMMEDIATELY after successful response
+            // This must happen BEFORE any other processing (auto-title, reconciliation, etc.)
+            // to prevent files from persisting if subsequent operations fail
+            logDebug(
+              "[ChatView] ✅ Response received, clearing files immediately",
+              {
+                readyFilesLength: readyFiles.length,
+                readyFiles: readyFiles.map((f) => ({
+                  file_id: f.file_id,
+                  filename: f.filename,
+                })),
+              },
+            );
+
+            if (readyFiles.length > 0) {
               clearFilesV1Attachments();
               logDebug(
-                "[ChatView] Attachments cleared post-send (no inheritance)",
+                "[ChatView] ✅ Cleared file attachments after successful response",
                 {
-                  cleared_count: filesV1Attachments.length,
+                  clearedCount: readyFiles.length,
                 },
               );
             }
@@ -895,12 +966,35 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
               metadata: response.metadata, // Include audit metadata (report_pdf_url, etc.)
             };
 
-            // NOTE: File attachments are cleared after a successful backend response
-            // to avoid losing attachments if the request fails mid-flight.
+            // Extract report PDF URL from audit metadata
+            if (response.metadata?.decision_metadata?.report_pdf_url) {
+              setCurrentReportPdfUrl(
+                response.metadata.decision_metadata.report_pdf_url,
+              );
+              logDebug("[ChatView] Audit report PDF URL extracted", {
+                url: response.metadata.decision_metadata.report_pdf_url,
+              });
+            }
 
+            // NOTE: Files were already cleared earlier (see line ~790)
             return assistantMessage;
           } catch (error) {
-            logError("Failed to send chat message", error);
+            logError("❌ [ChatView] Failed to send chat message", {
+              error,
+              errorMessage:
+                error instanceof Error ? error.message : String(error),
+              errorStack: error instanceof Error ? error.stack : undefined,
+              readyFilesLength: readyFiles.length,
+            });
+
+            // Even on error, try to clear files to avoid stuck state
+            if (readyFiles.length > 0) {
+              clearFilesV1Attachments();
+              logDebug("[ChatView] ✅ Cleared files after error (cleanup)", {
+                clearedCount: readyFiles.length,
+              });
+            }
+
             return {
               id: placeholderId,
               role: "assistant",
@@ -951,18 +1045,48 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
 
   const handleAuditComplete = React.useCallback(() => {
     setActiveAudit(null);
+
+    // 🔧 FIX: Clear file attachments after audit completes
+    // This ensures audit files don't persist after the audit report is received
+    if (filesV1Attachments.length > 0) {
+      clearFilesV1Attachments();
+      logDebug("[ChatView] Cleared file attachments after audit completion", {
+        clearedCount: filesV1Attachments.length,
+      });
+    }
+
     logDebug("[ChatView] Audit completed");
-  }, []);
+  }, [filesV1Attachments, clearFilesV1Attachments]);
 
   // Auto-clear audit progress when new message with validation arrives
   React.useEffect(() => {
-    if (!activeAudit) return;
+    logDebug("[ChatView] Audit cleanup useEffect triggered", {
+      activeAudit,
+      messagesLen: messages.length,
+      hasLatestMessage: messages.length > 0,
+    });
+
+    if (!activeAudit) {
+      logDebug("[ChatView] No active audit, skipping cleanup");
+      return;
+    }
 
     const latestMessage = messages[messages.length - 1];
+    logDebug("[ChatView] Checking latest message for validation_report_id", {
+      hasMetadata: !!latestMessage?.metadata,
+      metadataKeys: latestMessage?.metadata
+        ? Object.keys(latestMessage.metadata)
+        : [],
+      hasValidationReportId:
+        latestMessage?.metadata &&
+        "validation_report_id" in latestMessage.metadata,
+    });
+
     if (
       latestMessage?.metadata &&
       "validation_report_id" in latestMessage.metadata
     ) {
+      logDebug("[ChatView] Calling handleAuditComplete");
       handleAuditComplete();
     }
   }, [messages, activeAudit, handleAuditComplete]);
@@ -1533,22 +1657,25 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                 filesV1Attachments={filesV1Attachments}
                 onAddFilesV1Attachment={addFilesV1Attachment}
                 onRemoveFilesV1Attachment={removeFilesV1Attachment}
+                onClearFilesV1Attachments={clearFilesV1Attachments}
                 lastReadyFile={lastReadyAuditFile}
                 // Copiloto 414: Audit progress callback
                 onStartAudit={handleStartAudit}
                 onAuditError={handleAuditError}
               />
             </div>
-            <div
-              className={cn(
-                "relative hidden h-full lg:block transition-[width] duration-200",
-                isCanvasOpen ? "w-[380px]" : "w-0",
-              )}
-            >
-              <CanvasPanel className="h-full" />
-            </div>
+            {/* Canvas: Desktop - side by side with chat */}
+            {isCanvasOpen && (
+              <div className="hidden lg:block h-full">
+                <CanvasPanel
+                  className="h-full"
+                  reportPdfUrl={currentReportPdfUrl || undefined}
+                />
+              </div>
+            )}
           </div>
 
+          {/* Canvas: Mobile - overlay */}
           {isCanvasOpen && (
             <div
               className="lg:hidden fixed inset-0 z-40 bg-black/60"
@@ -1558,7 +1685,10 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                 className="absolute right-0 top-0 h-full w-[90%] max-w-md shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
               >
-                <CanvasPanel className="h-full" />
+                <CanvasPanel
+                  className="h-full"
+                  reportPdfUrl={currentReportPdfUrl || undefined}
+                />
               </div>
             </div>
           )}

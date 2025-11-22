@@ -35,12 +35,14 @@ interface UseAuditFlowOptions {
   setValue: (value: string) => void;
   /** Callback to trigger message submission */
   onSubmit: () => void | Promise<void>;
+  /** Callback to clear file attachments after successful audit */
+  clearFiles: (chatId?: string) => void;
   /** Optional conversation ID for telemetry */
   conversationId?: string;
 }
 
 export function useAuditFlow(options: UseAuditFlowOptions) {
-  const { setValue, onSubmit, conversationId } = options;
+  const { setValue, onSubmit, clearFiles, conversationId } = options;
   const [isAuditing, setIsAuditing] = useState(false);
 
   /**
@@ -110,9 +112,30 @@ export function useAuditFlow(options: UseAuditFlowOptions) {
               logDebug("[useAuditFlow] Calling onSubmit after state update...");
               await onSubmit();
               logDebug("[useAuditFlow] Audit triggered successfully");
+
+              // 🔧 FIX: Clear files IMMEDIATELY after successful submit with EXPLICIT chatId
+              // Pass conversationId explicitly to avoid stale closure issues
+              logDebug(
+                "[useAuditFlow] Clearing files after successful audit submit",
+                {
+                  conversationId,
+                },
+              );
+              clearFiles(conversationId);
+              logDebug(
+                "[useAuditFlow] ✅ Files cleared successfully after audit",
+              );
+
               resolve();
             } catch (err) {
               logError("[useAuditFlow] Submit failed", { error: err });
+
+              // Even on error, try to clear files to avoid stuck state
+              logDebug("[useAuditFlow] Clearing files after error (cleanup)", {
+                conversationId,
+              });
+              clearFiles(conversationId);
+
               resolve();
             }
           }, 300);
@@ -142,7 +165,7 @@ export function useAuditFlow(options: UseAuditFlowOptions) {
         setIsAuditing(false);
       }
     },
-    [setValue, onSubmit, conversationId],
+    [setValue, onSubmit, clearFiles, conversationId],
   );
 
   return {
