@@ -22,15 +22,21 @@ from datetime import datetime, timedelta
 
 import structlog
 
+from ...core.constants import AUDIT_COMMAND_PREFIX
 from .message_handlers import MessageHandler
 from .chat_context import ChatContext, ChatProcessingResult, MessageMetadata
 from ..models.document import Document, DocumentStatus
 from ..models.validation_report import ValidationReport
+from ..models.artifact import Artifact, ArtifactType
 from ..services.validation_coordinator import validate_document
 from ..services.policy_manager import resolve_policy
 from ..services.minio_storage import get_minio_storage
 from ..services.report_generator import generate_audit_report_pdf
-from ..services.summary_formatter import generate_executive_summary, format_executive_summary_as_markdown
+from ..services.summary_formatter import (
+    generate_executive_summary,
+    format_executive_summary_as_markdown,
+    generate_human_summary,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -45,7 +51,7 @@ class AuditCommandHandler(MessageHandler):
     This handler is client-specific and only exists in branches with audit support.
     """
 
-    AUDIT_COMMAND_PREFIX = "Auditar archivo:"
+    AUDIT_COMMAND_PREFIX = AUDIT_COMMAND_PREFIX
 
     async def can_handle(self, context: ChatContext) -> bool:
         """
@@ -144,26 +150,35 @@ class AuditCommandHandler(MessageHandler):
             # Generate report URL (MinIO or on-demand endpoint)
             report_url = await self._generate_report_url(validation_report, target_doc)
 
-            # Generate executive summary
+            # Generate HUMAN SUMMARY for chat message (conversational, non-technical)
+            human_summary = generate_human_summary(
+                report=validation_report,
+                filename=target_doc.filename,
+                report_url=report_url
+            )
+
+            # Generate TECHNICAL REPORT for canvas (detailed, all findings)
             executive_summary = generate_executive_summary(validation_report)
-            formatted_summary = format_executive_summary_as_markdown(
+            technical_report = format_executive_summary_as_markdown(
                 summary=executive_summary,
                 filename=target_doc.filename,
                 report_url=report_url
             )
 
-            # Save assistant message with summary
-            audit_assistant_message = await chat_service.add_assistant_message(
-                chat_session=chat_session,
-                content=formatted_summary,
-                model=context.model,
-                metadata={
-                    "audit": True,
-                    "document_id": str(target_doc.id),
-                    "validation_report_id": str(validation_report.id),
-                    "findings_count": len(validation_report.findings),
-                    "report_pdf_url": report_url,
-                }
+            # Create artifact for canvas display (TECHNICAL REPORT)
+            artifact = Artifact(
+                user_id=context.user_id,
+                chat_session_id=context.session_id,
+                title=f"Reporte de Auditoría: {target_doc.filename}",
+                type=ArtifactType.MARKDOWN,
+                content=technical_report  # Technical version for canvas
+            )
+            await artifact.insert()
+
+            logger.info(
+                "Artifact created for audit report",
+                artifact_id=artifact.id,
+                report_id=str(validation_report.id)
             )
 
             # Cleanup temp PDF if created
@@ -178,16 +193,17 @@ class AuditCommandHandler(MessageHandler):
                 "Audit completed successfully",
                 doc_id=str(target_doc.id),
                 findings_count=len(validation_report.findings),
-                message_id=str(audit_assistant_message.id)
+                artifact_id=str(artifact.id)
             )
 
-            # Build ChatProcessingResult
+            # Build ChatProcessingResult with tool_invocations in decision_metadata
+            # The endpoint will use this to create the final assistant message
             processing_time = (time.time() - start_time) * 1000
             metadata = MessageMetadata(
-                message_id=str(audit_assistant_message.id),
+                message_id="",  # Will be set by endpoint
                 chat_id=str(chat_session.id),
                 user_message_id=str(user_message.id) if user_message else "",
-                assistant_message_id=str(audit_assistant_message.id),
+                assistant_message_id=None,  # Will be set by endpoint
                 model_used=context.model,
                 tokens_used=None,
                 latency_ms=int(processing_time),
@@ -195,13 +211,23 @@ class AuditCommandHandler(MessageHandler):
                     "audit": True,
                     "validation_report_id": str(validation_report.id),
                     "findings_count": len(validation_report.findings),
-                    "report_pdf_url": report_url
+                    "report_pdf_url": report_url,
+                    "tool_invocations": [
+                        {
+                            "tool_name": "create_artifact",
+                            "result": {
+                                "id": str(artifact.id),
+                                "title": artifact.title,
+                                "type": "markdown"
+                            }
+                        }
+                    ]
                 }
             )
 
             return ChatProcessingResult(
-                content=formatted_summary,
-                sanitized_content=formatted_summary,
+                content=human_summary,  # Human-friendly summary for chat message
+                sanitized_content=human_summary,
                 metadata=metadata,
                 processing_time_ms=processing_time,
                 strategy_used="audit_command",
@@ -230,38 +256,114 @@ class AuditCommandHandler(MessageHandler):
     async def _find_target_document(self, filename: str, file_ids: list) -> Optional[Document]:
         """Find document by filename from attached files."""
         if not file_ids:
+            logger.warning(
+                "No file_ids provided for document lookup",
+                filename=filename
+            )
             return None
 
-        for file_id in file_ids:
-            doc = await Document.get(file_id)
-            if doc and doc.filename == filename:
-                return doc
+        logger.info(
+            "Searching for document by filename",
+            filename=filename,
+            file_ids=file_ids,
+            file_ids_count=len(file_ids)
+        )
 
+        for file_id in file_ids:
+            try:
+                logger.debug(
+                    "Attempting to fetch document",
+                    file_id=file_id,
+                    filename=filename
+                )
+                doc = await Document.get(file_id)
+
+                if doc:
+                    logger.debug(
+                        "Document fetched successfully",
+                        file_id=file_id,
+                        doc_filename=doc.filename,
+                        target_filename=filename,
+                        match=doc.filename == filename
+                    )
+
+                    if doc.filename == filename:
+                        logger.info(
+                            "Found matching document",
+                            file_id=file_id,
+                            filename=filename
+                        )
+                        return doc
+                else:
+                    logger.warning(
+                        "Document.get returned None",
+                        file_id=file_id
+                    )
+
+            except Exception as e:
+                logger.error(
+                    "Error fetching document",
+                    file_id=file_id,
+                    error=str(e),
+                    exc_type=type(e).__name__
+                )
+
+        logger.warning(
+            "No matching document found",
+            filename=filename,
+            file_ids=file_ids
+        )
         return None
 
     async def _get_pdf_path(self, document: Document) -> tuple[Optional[Path], Optional[Path]]:
         """Get PDF path, materializing from MinIO if needed."""
-        pdf_path = Path(document.minio_key)
-        temp_pdf_path = None
+        minio_storage = get_minio_storage()
 
-        if not pdf_path.exists():
-            minio_storage = get_minio_storage()
-            try:
-                pdf_path, is_temp = minio_storage.materialize_document(
-                    document.minio_key,
-                    filename=document.filename,
-                )
-                if is_temp:
-                    temp_pdf_path = pdf_path
-            except Exception as storage_exc:
-                logger.error(
-                    "Failed to materialize PDF",
-                    doc_id=str(document.id),
-                    error=str(storage_exc)
-                )
-                return None, None
+        if not minio_storage:
+            logger.error(
+                "MinIO storage not available",
+                doc_id=str(document.id)
+            )
+            return None, None
 
-        return pdf_path, temp_pdf_path
+        try:
+            # Try to materialize document from MinIO
+            logger.info(
+                "Materializing document from MinIO",
+                doc_id=str(document.id),
+                minio_key=document.minio_key,
+                minio_bucket=document.minio_bucket,
+                filename=document.filename
+            )
+
+            pdf_path, is_temp = minio_storage.materialize_document(
+                document.minio_key,
+                filename=document.filename,
+                bucket=document.minio_bucket,
+            )
+
+            temp_pdf_path = pdf_path if is_temp else None
+
+            logger.info(
+                "Document materialized successfully",
+                doc_id=str(document.id),
+                pdf_path=str(pdf_path),
+                is_temp=is_temp
+            )
+
+            return pdf_path, temp_pdf_path
+
+        except Exception as storage_exc:
+            logger.error(
+                "Failed to materialize PDF from MinIO",
+                doc_id=str(document.id),
+                minio_key=document.minio_key,
+                filename=document.filename,
+                error=str(storage_exc),
+                exc_type=type(storage_exc).__name__,
+                exc_info=True
+            )
+            return None, None
 
     async def _execute_validation(
         self,
@@ -386,11 +488,11 @@ class AuditCommandHandler(MessageHandler):
 
             except Exception as pdf_exc:
                 logger.error("Failed to generate/upload PDF report", error=str(pdf_exc), exc_type=type(pdf_exc).__name__)
-                # Fallback to on-demand endpoint
-                return f"/api/reports/audit/{validation_report.id}/download"
+                # Fallback to on-demand endpoint with absolute URL
+                return f"http://localhost:8001/api/reports/audit/{validation_report.id}/download"
         else:
-            # MinIO disabled - use on-demand endpoint
-            report_url = f"/api/reports/audit/{validation_report.id}/download"
+            # MinIO disabled - use on-demand endpoint with absolute URL
+            report_url = f"http://localhost:8001/api/reports/audit/{validation_report.id}/download"
             logger.info("MinIO disabled, using on-demand PDF endpoint", report_url=report_url)
             return report_url
 
