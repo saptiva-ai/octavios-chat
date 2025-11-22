@@ -18,11 +18,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { v4 as uuidv4 } from "uuid";
 import type { ChatMessage } from "../lib/types";
+import type { FileAttachment } from "../types/files";
 import { logDebug, logError } from "../lib/logger";
 
 interface SendMessageVariables {
   content: string;
   fileIds?: string[];
+  files?: FileAttachment[];
+  toolsEnabled?: Record<string, boolean>;
 }
 
 interface SendMessageContext {
@@ -91,16 +94,37 @@ export function useSendMessage(chatId: string | null) {
       // 3. Generate temporary ID
       const tempId = `temp-${uuidv4()}`;
 
-      // 4. Create optimistic user message
+      // 4. Create enriched file attachments for optimistic display
+      const enrichedMetadata: Record<string, any> = {};
+
+      if (variables.fileIds && variables.fileIds.length > 0) {
+        enrichedMetadata.file_ids = variables.fileIds;
+
+        // If full file objects provided, include them for instant display
+        if (variables.files && variables.files.length > 0) {
+          enrichedMetadata.files = variables.files.map((file) => ({
+            file_id: file.file_id,
+            filename: file.filename,
+            bytes: file.bytes,
+            mimetype: file.mimetype,
+          }));
+        }
+      }
+
+      // Include tools configuration if provided
+      if (variables.toolsEnabled) {
+        enrichedMetadata.tools_enabled = variables.toolsEnabled;
+      }
+
+      // 5. Create optimistic user message
       const optimisticMessage: ChatMessage = {
         id: tempId,
         role: "user",
         content: variables.content,
         timestamp: new Date().toISOString(),
         status: "sending",
-        // Include file metadata if present
-        metadata: variables.fileIds
-          ? { file_ids: variables.fileIds }
+        metadata: Object.keys(enrichedMetadata).length > 0
+          ? enrichedMetadata
           : undefined,
       };
 
