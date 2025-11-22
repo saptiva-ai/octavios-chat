@@ -43,6 +43,9 @@ import { useCanvasStore } from "@/lib/stores/canvas-store";
 // Files V1 imports
 import { useFiles } from "../../../hooks/useFiles";
 import type { FileAttachment } from "../../../types/files";
+// React Query hooks
+import { useChatMessages } from "../../../hooks/useChatMessages";
+import { useChatMetadata } from "../../../hooks/useChatMetadata";
 // Demo banner intentionally hidden per stakeholder request
 
 interface ChatViewProps {
@@ -111,6 +114,12 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
     hydratedByChatId,
     isHydratingByChatId,
   } = useChat();
+
+  // React Query: Load messages with automatic caching and deduplication
+  const { isLoading: isLoadingMessages } = useChatMessages(resolvedChatId);
+
+  // Centralized metadata for file restoration policies
+  const { hasMessages, isReady } = useChatMetadata(resolvedChatId);
 
   const { checkConnection } = useUI();
   const {
