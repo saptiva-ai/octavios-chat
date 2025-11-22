@@ -1,5 +1,6 @@
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { Providers } from "./providers";
 import { ToasterProvider } from "../components/providers/ToasterProvider";
 import { SyncProvider } from "../components/providers/SyncProvider";
 import { SessionExpiredToast } from "../components/ui/SessionExpiredToast";
@@ -29,10 +30,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        {children}
-        <ToasterProvider />
-        <SyncProvider />
-        <SessionExpiredToast />
+        <Providers>
+          {children}
+          <ToasterProvider />
+          <SyncProvider />
+          <SessionExpiredToast />
+        </Providers>
       </body>
     </html>
   );

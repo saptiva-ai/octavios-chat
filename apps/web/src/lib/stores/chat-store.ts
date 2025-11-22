@@ -57,7 +57,9 @@ interface ChatState {
   addMessage: (message: ChatMessage) => void;
   updateMessage: (messageId: string, updates: Partial<ChatMessage>) => void;
   clearMessages: () => void;
+  setMessages: (messages: ChatMessage[]) => void;
   setLoading: (loading: boolean) => void;
+  setHydratedStatus: (chatId: string, status: boolean) => void;
   setSelectedModel: (model: string) => void;
   toggleTool: (toolName: string) => Promise<void>;
   setToolEnabled: (toolName: string, enabled: boolean) => Promise<void>;
@@ -202,7 +204,12 @@ export const useChatStore = create<ChatState>()(
           })),
 
         clearMessages: () => set({ messages: [] }),
+        setMessages: (messages) => set({ messages }),
         setLoading: (loading) => set({ isLoading: loading }),
+        setHydratedStatus: (chatId, status) =>
+          set((state) => ({
+            hydratedByChatId: { ...state.hydratedByChatId, [chatId]: status },
+          })),
         setSelectedModel: (model) => {
           logDebug("UI model changed", model);
           set({ selectedModel: model });
