@@ -5,7 +5,7 @@
 # Original: 2624 lines → Consolidated: ~150 lines (94% reduction)
 # ============================================================================ 
 
-.PHONY: help setup dev stop restart clean logs shell test deploy db health
+.PHONY: help setup dev stop restart clean logs shell test deploy db health install install-web
 
 # --- CONFIGURATION ---
 ifneq (,$(wildcard envs/.env))
@@ -183,7 +183,19 @@ endif
 	@$(COMPOSE) up -d $(S)
 	@echo "$(GREEN)✅ Environment reloaded$(NC)"
 
-# ============================================================================ 
+# ============================================================================
+# PACKAGE MANAGEMENT
+# ============================================================================
+
+install-web:
+	@echo "$(YELLOW)📦 Installing web dependencies in container...$(NC)"
+	@$(COMPOSE) exec -T web sh -c "cd /app && pnpm install"
+	@echo "$(GREEN)✅ Web dependencies installed$(NC)"
+
+install: install-web
+	@echo "$(GREEN)✅ All dependencies installed$(NC)"
+
+# ============================================================================
 # TESTING
 # ============================================================================ 
 
