@@ -48,7 +48,7 @@ export function setLogoutHandler(handler: LogoutHandler) {
 // Types for API requests/responses
 export interface ChatRequest {
   message: string;
-  chat_id?: string;
+  chat_id?: string | null; // Allow explicit null to indicate "create new chat"
   model?: string;
   temperature?: number;
   max_tokens?: number;
@@ -510,12 +510,23 @@ class ApiClient {
     // FE-3 MVP: Force 'Saptiva Turbo' default if model not specified
     const payload = { model: "Saptiva Turbo", ...request };
 
+    // Detect if request involves file analysis
+    const hasFiles =
+      (request.file_ids && request.file_ids.length > 0) ||
+      (request.metadata?.files &&
+        Array.isArray(request.metadata.files) &&
+        request.metadata.files.length > 0);
+
+    // Increase timeout for file analysis (3 minutes vs 30s default)
+    const timeout = hasFiles ? 180000 : 30000;
+
     // ISSUE-026: Retry logic with exponential backoff
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         const response = await this.client.post<ChatResponse>(
           "/api/chat",
           payload,
+          { timeout },
         );
         return response.data;
       } catch (e: any) {
@@ -523,6 +534,18 @@ class ApiClient {
         const shouldRetry =
           !e.response || // Network error
           (e.response.status >= 500 && e.response.status < 600); // Server error
+
+        // Don't retry if it was a timeout on a file request (it might still be processing)
+        // But wait, if it's a network timeout, e.code might be 'ECONNABORTED'
+        const isTimeout = e.code === "ECONNABORTED";
+        if (isTimeout && hasFiles) {
+          // If it timed out after 3 minutes, retrying probably won't help and will cause duplicates
+          // Better to let it fail so user knows it's taking too long
+          console.warn(
+            "File analysis timed out after 3m, not retrying to avoid duplicates",
+          );
+          throw e;
+        }
 
         const isLastAttempt = attempt === retries;
 
@@ -534,6 +557,7 @@ class ApiClient {
             payload,
             attempt: attempt + 1,
             totalAttempts: retries + 1,
+            isTimeout: e.code === "ECONNABORTED",
           });
           throw e;
         }
@@ -581,126 +605,171 @@ class ApiClient {
     const baseURL = this.client.defaults.baseURL || "";
     const url = `${baseURL}/api/chat`;
 
-    // Use fetch with SSE
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "text/event-stream", // CRITICAL: Tell backend we want SSE format
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(payload),
-      signal: abortSignal,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`HTTP ${response.status}: ${errorText}`);
-    }
-
-    if (!response.body) {
-      throw new Error("Response body is null");
-    }
-
-    // Parse SSE stream
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let currentEvent = "";
-    let chunkCount = 0;
-
-    // console.log("[🔍 SSE DEBUG] Starting to read SSE stream");
-
     try {
-      while (true) {
-        const { done, value } = await reader.read();
+      // Use fetch with SSE
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream", // CRITICAL: Tell backend we want SSE format
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(payload),
+        signal: abortSignal,
+      });
 
-        if (done) {
-          // console.log("[🔍 SSE DEBUG] Stream done - total chunks received:", chunkCount);
-          break;
+      if (!response.ok) {
+        // 🚨 ENHANCED ERROR LOGGING: Capture full error details from backend
+        const errorText = await response.text();
+
+        // Try to parse as JSON for structured errors (e.g., Pydantic validation errors)
+        let errorBody: any = errorText;
+        try {
+          errorBody = JSON.parse(errorText);
+        } catch {
+          // Not JSON, use raw text
         }
 
-        const chunk = decoder.decode(value, { stream: true });
-        // console.log("[🔍 SSE DEBUG] Raw chunk received (length:", chunk.length, "):", chunk.substring(0, 200));
-        chunkCount++;
-        buffer += chunk;
+        console.error("🚨 API CHAT ERROR:", {
+          status: response.status,
+          statusText: response.statusText,
+          url: url,
+          body: errorBody,
+          payload: payload, // Include payload for debugging
+        });
 
-        // WORKAROUND: Detect if backend sent JSON response (non-streaming mode)
-        // When documents are attached, backend forces non-streaming and returns plain JSON
-        if (
-          chunkCount === 1 &&
-          chunk.trim().startsWith("{") &&
-          !chunk.includes("event:") &&
-          !chunk.includes("data:")
-        ) {
-          // console.log("[🔍 NON-STREAMING DETECTED] Backend sent JSON response, parsing as ChatResponse");
-          try {
-            const jsonResponse = JSON.parse(buffer);
-            // console.log("[🔍 NON-STREAMING] Parsed response:", jsonResponse);
-            yield { type: "done", data: jsonResponse as ChatResponse };
-            return; // Exit early - no more chunks expected
-          } catch (jsonError) {
-            console.error(
-              "[🔍 NON-STREAMING] Failed to parse JSON response:",
-              jsonError,
-            );
+        // Throw with detailed message
+        const errorMessage =
+          typeof errorBody === "object"
+            ? errorBody.detail || errorBody.message || JSON.stringify(errorBody)
+            : errorBody;
+
+        throw new Error(
+          `Failed to send message (${response.status} ${response.statusText}): ${errorMessage}`,
+        );
+      }
+
+      if (!response.body) {
+        throw new Error("Response body is null");
+      }
+
+      // Parse SSE stream
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let currentEvent = "";
+      let chunkCount = 0;
+
+      // console.log("[🔍 SSE DEBUG] Starting to read SSE stream");
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+
+          if (done) {
+            // console.log("[🔍 SSE DEBUG] Stream done - total chunks received:", chunkCount);
+            break;
           }
-        }
 
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || ""; // Keep incomplete line in buffer
+          const chunk = decoder.decode(value, { stream: true });
+          // console.log("[🔍 SSE DEBUG] Raw chunk received (length:", chunk.length, "):", chunk.substring(0, 200));
+          chunkCount++;
+          buffer += chunk;
 
-        for (const line of lines) {
-          if (!line.trim() || line.startsWith(":")) continue;
-
-          // Parse SSE format: "event: chunk\ndata: {...}"
-          if (line.startsWith("event:")) {
-            currentEvent = line.slice(6).trim();
-            // console.log("[🔍 SSE DEBUG] Event type:", currentEvent);
-            continue;
-          }
-
-          if (line.startsWith("data:")) {
-            const dataStr = line.slice(5).trim();
-            // console.log("[🔍 SSE DEBUG] Data received for event:", currentEvent, "data length:", dataStr.length);
-
-            if (dataStr === "[DONE]") {
-              return;
-            }
-
+          // WORKAROUND: Detect if backend sent JSON response (non-streaming mode)
+          // When documents are attached, backend forces non-streaming and returns plain JSON
+          if (
+            chunkCount === 1 &&
+            chunk.trim().startsWith("{") &&
+            !chunk.includes("event:") &&
+            !chunk.includes("data:")
+          ) {
+            // console.log("[🔍 NON-STREAMING DETECTED] Backend sent JSON response, parsing as ChatResponse");
             try {
-              const parsed = JSON.parse(dataStr);
-
-              // Use the event type from the "event:" line
-              if (currentEvent === "meta") {
-                // console.log("[🔍 SSE DEBUG] Yielding meta event");
-                yield { type: "meta", data: parsed };
-              } else if (currentEvent === "chunk") {
-                // console.log("[🔍 SSE DEBUG] Yielding chunk event");
-                yield { type: "chunk", data: parsed };
-              } else if (currentEvent === "done") {
-                // console.log("[🔍 SSE DEBUG] Yielding done event");
-                yield { type: "done", data: parsed as ChatResponse };
-              } else if (currentEvent === "error") {
-                // console.log("[🔍 SSE DEBUG] Yielding error event");
-                yield { type: "error", data: parsed };
-              }
-
-              // Reset current event after processing
-              currentEvent = "";
-            } catch (parseError) {
+              const jsonResponse = JSON.parse(buffer);
+              // console.log("[🔍 NON-STREAMING] Parsed response:", jsonResponse);
+              yield { type: "done", data: jsonResponse as ChatResponse };
+              return; // Exit early - no more chunks expected
+            } catch (jsonError) {
               console.error(
-                "[🔍 SSE DEBUG] Failed to parse SSE data:",
-                parseError,
-                "data:",
-                dataStr.substring(0, 100),
+                "[🔍 NON-STREAMING] Failed to parse JSON response:",
+                jsonError,
               );
             }
           }
+
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+          for (const line of lines) {
+            if (!line.trim() || line.startsWith(":")) continue;
+
+            // Parse SSE format: "event: chunk\ndata: {...}"
+            if (line.startsWith("event:")) {
+              currentEvent = line.slice(6).trim();
+              // console.log("[🔍 SSE DEBUG] Event type:", currentEvent);
+              continue;
+            }
+
+            if (line.startsWith("data:")) {
+              const dataStr = line.slice(5).trim();
+              // console.log("[🔍 SSE DEBUG] Data received for event:", currentEvent, "data length:", dataStr.length);
+
+              if (dataStr === "[DONE]") {
+                return;
+              }
+
+              try {
+                const parsed = JSON.parse(dataStr);
+
+                // Use the event type from the "event:" line
+                if (currentEvent === "meta") {
+                  // console.log("[🔍 SSE DEBUG] Yielding meta event");
+                  yield { type: "meta", data: parsed };
+                } else if (currentEvent === "chunk") {
+                  // console.log("[🔍 SSE DEBUG] Yielding chunk event");
+                  yield { type: "chunk", data: parsed };
+                } else if (currentEvent === "done") {
+                  // console.log("[🔍 SSE DEBUG] Yielding done event");
+                  yield { type: "done", data: parsed as ChatResponse };
+                } else if (currentEvent === "error") {
+                  // console.log("[🔍 SSE DEBUG] Yielding error event");
+                  yield { type: "error", data: parsed };
+                }
+
+                // Reset current event after processing
+                currentEvent = "";
+              } catch (parseError) {
+                console.error(
+                  "[🔍 SSE DEBUG] Failed to parse SSE data:",
+                  parseError,
+                  "data:",
+                  dataStr.substring(0, 100),
+                );
+              }
+            }
+          }
         }
+      } finally {
+        reader.releaseLock();
       }
-    } finally {
-      reader.releaseLock();
+    } catch (networkError: any) {
+      // 🚨 CRITICAL NETWORK ERROR: Capture fetch failures (connection refused, timeout, etc.)
+      // This catches errors that happen BEFORE response.ok can be checked
+      console.error("🚨 CRITICAL NETWORK ERROR:", {
+        message: networkError?.message || "Unknown network error",
+        name: networkError?.name,
+        cause: networkError?.cause,
+        stack: networkError?.stack,
+        url: url,
+        payload: payload,
+      });
+
+      // Re-throw with more context
+      throw new Error(
+        `Network error during chat request: ${networkError?.message || "Connection failed"}. ` +
+          `Check if backend is running at ${url}`,
+      );
     }
   }
 
@@ -928,6 +997,17 @@ class ApiClient {
 
       return documents;
     } catch (error: any) {
+      // 🔧 GRACEFUL FALLBACK: Handle 404 for "Chat Fantasma" (UUID not yet persisted)
+      // When refreshing a new chat URL, the backend may not have the chat yet
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        console.warn(
+          `[ApiClient] Chat not found on server (404), returning empty documents list.`,
+          { conversationId },
+        );
+        return []; // ✅ Safe fallback - chat exists locally but not on server yet
+      }
+
+      // For other errors, throw as usual
       console.error("API Error Details:", error);
       throw new Error(
         `Failed to list documents: ${error.response?.data?.detail || error.message}`,
@@ -1001,10 +1081,26 @@ class ApiClient {
   }
 
   async getChatHistory(chatId: string, limit = 50, offset = 0): Promise<any> {
-    const response = await this.client.get(`/api/history/${chatId}`, {
-      params: { limit, offset },
-    });
-    return response.data;
+    try {
+      const response = await this.client.get(`/api/history/${chatId}`, {
+        params: { limit, offset },
+      });
+      return response.data;
+    } catch (error: any) {
+      // 🔧 GRACEFUL FALLBACK: Handle 404 for "Chat Fantasma"
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        console.warn(
+          `[ApiClient] Chat not found on server (404), returning empty history.`,
+          { chatId },
+        );
+        return {
+          chat_id: chatId,
+          messages: [],
+          total: 0,
+        };
+      }
+      throw error;
+    }
   }
 
   // Unified history endpoints
@@ -1015,20 +1111,66 @@ class ApiClient {
     includeResearch = true,
     includeSources = false,
   ): Promise<any> {
-    const response = await this.client.get(`/api/history/${chatId}/unified`, {
-      params: {
-        limit,
-        offset,
-        include_research: includeResearch,
-        include_sources: includeSources,
-      },
-    });
-    return response.data;
+    try {
+      const response = await this.client.get(`/api/history/${chatId}/unified`, {
+        params: {
+          limit,
+          offset,
+          include_research: includeResearch,
+          include_sources: includeSources,
+        },
+      });
+      return response.data;
+    } catch (error: any) {
+      // 🔧 GRACEFUL FALLBACK: Handle 404 for "Chat Fantasma" (UUID not yet persisted)
+      // When refreshing a new chat URL, the backend may not have the chat yet
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        console.warn(
+          `[ApiClient] Chat not found on server (404), returning empty history.`,
+          { chatId },
+        );
+        // Return empty history structure matching backend response format
+        return {
+          chat_id: chatId,
+          events: [],
+          total: 0,
+          limit,
+          offset,
+        };
+      }
+
+      // For other errors, throw as usual
+      throw error;
+    }
   }
 
   async getChatStatus(chatId: string): Promise<any> {
-    const response = await this.client.get(`/api/history/${chatId}/status`);
-    return response.data;
+    try {
+      const response = await this.client.get(`/api/history/${chatId}/status`);
+      return response.data;
+    } catch (error: any) {
+      // 🛡️ GRACEFUL FALLBACK: Handle 404 (Not Found) AND 500 (Server Error on lookup)
+      // When refreshing a new chat URL, the backend may crash (500) or return 404
+      // if the chat isn't initialized yet. Assume it's a draft to avoid blocking the UI.
+      if (
+        axios.isAxiosError(error) &&
+        (error.response?.status === 404 || error.response?.status === 500)
+      ) {
+        const statusCode = error.response?.status;
+        console.warn(
+          `[ApiClient] Chat status check failed (${statusCode}), assuming new draft.`,
+          { chatId, statusCode },
+        );
+        // Return default status for non-existent or uninitialized chat
+        return {
+          chat_id: chatId,
+          state: "draft", // New chats start as draft
+          message_count: 0,
+        };
+      }
+      // For other errors (e.g., network issues, auth errors), throw as usual
+      throw error;
+    }
   }
 
   async getResearchTimeline(chatId: string, taskId: string): Promise<any> {
