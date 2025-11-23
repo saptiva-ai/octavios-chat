@@ -303,19 +303,22 @@ class MinioStorageService:
             )
             raise
 
-    def get_document(self, object_name: str) -> bytes:
+    def get_document(self, object_name: str, bucket: Optional[str] = None) -> bytes:
         """
         Download a document from MinIO.
 
         Args:
             object_name: Full object path in MinIO
+            bucket: Bucket name (defaults to documents bucket)
 
         Returns:
             File data as bytes
         """
+        bucket_name = bucket or self.bucket_documents
+
         try:
             response = self.client.get_object(
-                bucket_name=self.bucket_documents,
+                bucket_name=bucket_name,
                 object_name=object_name,
             )
 
@@ -325,6 +328,7 @@ class MinioStorageService:
 
             logger.debug(
                 "Document retrieved from MinIO",
+                bucket=bucket_name,
                 object_name=object_name,
                 size=len(data)
             )
@@ -334,6 +338,7 @@ class MinioStorageService:
         except S3Error as e:
             logger.error(
                 "Failed to retrieve document from MinIO",
+                bucket=bucket_name,
                 object_name=object_name,
                 error=str(e)
             )
@@ -344,6 +349,7 @@ class MinioStorageService:
         object_name: str,
         *,
         filename: Optional[str] = None,
+        bucket: Optional[str] = None,
     ) -> Tuple[Path, bool]:
         """
         Ensure the requested document is available on the local filesystem.
@@ -351,6 +357,7 @@ class MinioStorageService:
         Args:
             object_name: MinIO object path or filesystem path
             filename: Optional original filename (used for temp file suffix)
+            bucket: Bucket name (defaults to documents bucket)
 
         Returns:
             Tuple of (path_to_file, is_temporary)
@@ -370,7 +377,7 @@ class MinioStorageService:
                 if storage_path.exists():
                     return storage_path, False
 
-        data = self.get_document(object_name)
+        data = self.get_document(object_name, bucket=bucket)
 
         suffix_source = filename or Path(object_name).name
         suffix = Path(suffix_source).suffix or ".bin"
