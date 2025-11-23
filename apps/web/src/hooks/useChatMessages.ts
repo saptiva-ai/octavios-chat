@@ -112,7 +112,53 @@ export function useChatMessages(chatId: string | null) {
         count: serverMessages.length,
       });
 
-      setMessages(serverMessages);
+      // ⚠️ CRITICAL FIX: Only sync server messages if they're non-empty
+      // During optimistic creation, backend returns empty array for new chats
+      // We must NOT overwrite optimistic messages with empty server response
+      const currentMessages = useChatStore.getState().messages;
+
+      // 🚨 CRITICAL: Check if any message is currently streaming
+      // If streaming is active, NEVER overwrite with server data (it's stale)
+      const hasStreamingMessage = currentMessages.some(
+        (msg) => msg.isStreaming === true,
+      );
+
+      // console.log("[🔍 useChatMessages] Server sync decision", {
+      //   chatId,
+      //   serverCount: serverMessages.length,
+      //   currentCount: currentMessages.length,
+      //   hasStreamingMessage,
+      //   willSync: !hasStreamingMessage && (serverMessages.length > 0 || currentMessages.length === 0),
+      // });
+
+      if (hasStreamingMessage) {
+        // 🚨 STREAMING ACTIVE: NEVER overwrite, server data is stale
+        // console.log("[🔍 useChatMessages] BLOCKING sync - streaming in progress", {
+        //   chatId,
+        //   currentCount: currentMessages.length,
+        // });
+        return; // Don't sync anything while streaming
+      }
+
+      if (serverMessages.length > 0) {
+        // Server has messages → sync them (user navigated to existing chat)
+        // console.log("[🔍 useChatMessages] Syncing server messages (server has data)");
+        setMessages(serverMessages);
+      } else if (currentMessages.length === 0) {
+        // Server has no messages AND store is empty → safe to sync empty array
+        // console.log("[🔍 useChatMessages] Syncing empty array (store is empty)");
+        setMessages(serverMessages);
+      } else {
+        // Server has no messages BUT store has optimistic messages → preserve them
+        // console.log("[🔍 useChatMessages] PRESERVING optimistic messages", {
+        //   chatId,
+        //   optimisticCount: currentMessages.length,
+        // });
+        logDebug("[useChatMessages] Preserving optimistic messages", {
+          chatId,
+          optimisticCount: currentMessages.length,
+        });
+      }
 
       // Mark chat as hydrated (enables file restoration policies)
       if (chatId && chatId !== "draft") {
@@ -130,7 +176,14 @@ export function useChatMessages(chatId: string | null) {
       chatId.startsWith("creating");
 
     if (isDraftOrTemp) {
-      setMessages([]);
+      // ⚠️ CRITICAL FIX: Only clear messages if transitioning FROM a real chat TO draft/temp
+      // DO NOT clear messages during optimistic creation flow (temp → real ID transition)
+      // This preserves optimistic user messages and streaming assistant responses
+      const currentMessages = useChatStore.getState().messages;
+      if (currentMessages.length === 0) {
+        setMessages([]);
+      }
+
       setLoading(false); // Ensure loading is false for draft/temp/null
       if (chatId && chatId !== "draft") {
         setHydratedStatus(chatId, true);
@@ -138,6 +191,7 @@ export function useChatMessages(chatId: string | null) {
 
       logDebug("[useChatMessages] Draft/temp/null chat - skipping fetch", {
         chatId,
+        preservingMessages: currentMessages.length > 0,
       });
     }
   }, [chatId, setMessages, setHydratedStatus, setLoading]);
