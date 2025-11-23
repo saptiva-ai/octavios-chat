@@ -14,9 +14,11 @@ Responsibilities:
 import os
 import json
 import asyncio
+import time
 from pathlib import Path
 from typing import AsyncGenerator, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
+from uuid import uuid4
 from asyncio import Queue, create_task, CancelledError
 
 import structlog
@@ -33,7 +35,9 @@ from ....services.saptiva_client import get_saptiva_client
 from ....services.validation_coordinator import validate_document_streaming
 from ....services.policy_manager import resolve_policy
 from ....services.minio_storage import get_minio_storage
+from ....services.report_generator import generate_audit_report_pdf
 from ....models.document import Document, DocumentStatus
+from ....models.validation_report import ValidationReport
 from ....domain import ChatContext
 from ....mcp.tools.ingest_files import IngestFilesTool
 from ....mcp.tools.get_segments import GetRelevantSegmentsTool
@@ -44,6 +48,36 @@ from ....services.empty_response_handler import (
 )
 
 logger = structlog.get_logger(__name__)
+
+
+class _InlineValidationReport:
+    """
+    Lightweight report model for generating PDFs in streaming context
+    without persisting to the database.
+    """
+
+    def __init__(
+        self,
+        *,
+        document_id: str,
+        user_id: str,
+        job_id: str,
+        status: str,
+        client_name: Optional[str],
+        findings: list,
+        summary: dict,
+        attachments: Optional[dict] = None,
+    ):
+        self.id = str(uuid4())
+        self.document_id = document_id
+        self.user_id = user_id
+        self.job_id = job_id
+        self.status = status
+        self.client_name = client_name
+        self.findings = findings
+        self.summary = summary
+        self.attachments = attachments or {}
+        self.created_at = datetime.utcnow()
 
 
 async def generate_executive_summary(validation_event: dict, saptiva_client) -> str:
@@ -159,6 +193,9 @@ Sé directo, profesional, sin emojis. Usa párrafos cortos.
             logger.warning("No valid response from LLM", response_type=type(response).__name__ if response else None)
             return None
 
+    except RuntimeError as e:
+        logger.error("Failed to generate executive summary", error=str(e), exc_type=type(e).__name__)
+        raise
     except Exception as e:
         logger.warning("Failed to generate executive summary", error=str(e), exc_type=type(e).__name__)
         return None
@@ -809,15 +846,27 @@ class StreamingHandler:
                     # Generate AI-powered executive summary
                     content = f"**Resultado de Auditoría**\n\n"
 
-                    executive_summary = await generate_executive_summary(
-                        validation_event=audit_event,
-                        saptiva_client=await get_saptiva_client()
-                    )
+                    summary_error_message = None
+                    try:
+                        executive_summary = await generate_executive_summary(
+                            validation_event=audit_event,
+                            saptiva_client=await get_saptiva_client()
+                        )
+                    except RuntimeError as summary_exc:
+                        executive_summary = None
+                        summary_error_message = str(summary_exc)
+                        logger.warning(
+                            "Executive summary unavailable",
+                            error=summary_error_message,
+                        )
 
                     logger.info("Executive summary generated", summary_length=len(executive_summary) if executive_summary else 0, has_summary=bool(executive_summary))
 
                     if executive_summary:
                         content += f"{executive_summary}\n\n"
+                        content += f"---\n\n"
+                    elif summary_error_message:
+                        content += f"⚠️ {summary_error_message}\n\n"
                         content += f"---\n\n"
 
                     # PRIORITIZED: Critical first
@@ -859,6 +908,137 @@ class StreamingHandler:
             # Build audit artifact from validation_complete event FIRST
             audit_artifact = None
             if validation_complete_event:
+                # Attempt to generate and upload full PDF report (streaming path)
+                attachments = validation_complete_event.get("attachments") or {}
+                report_pdf_url = attachments.get("full_report_pdf", {}).get("url")
+                validation_report_id = validation_complete_event.get("validation_report_id")
+                validation_report_doc = None
+
+                # Persist ValidationReport to enable on-demand download endpoint
+                if not validation_report_id:
+                    try:
+                        validation_report_doc = ValidationReport(
+                            document_id=str(document.id),
+                            user_id=str(document.user_id),
+                            job_id=validation_complete_event.get("job_id")
+                            or str(uuid4()),
+                            status=validation_complete_event.get("status", "done"),
+                            client_name=policy.client_name,
+                            auditors_enabled={
+                                "disclaimer": True,
+                                "format": True,
+                                "typography": True,
+                                "grammar": True,
+                                "logo": True,
+                                "color_palette": True,
+                                "entity_consistency": True,
+                                "semantic_consistency": True,
+                            },
+                            findings=validation_complete_event.get("findings", []),
+                            summary=validation_complete_event.get("summary", {}),
+                            attachments=attachments,
+                        )
+                        await validation_report_doc.insert()
+                        validation_report_id = str(validation_report_doc.id)
+                        logger.info(
+                            "Streaming audit: ValidationReport persisted",
+                            validation_report_id=validation_report_id,
+                            findings=len(validation_report_doc.findings),
+                        )
+                    except Exception as persist_exc:
+                        logger.error(
+                            "Streaming audit: failed to persist ValidationReport",
+                            error=str(persist_exc),
+                            exc_type=type(persist_exc).__name__,
+                        )
+
+                minio_storage = get_minio_storage()
+                if minio_storage and not report_pdf_url:
+                    try:
+                        source_report = validation_report_doc or _InlineValidationReport(
+                            document_id=str(document.id),
+                            user_id=str(document.user_id),
+                            job_id=validation_complete_event.get("job_id")
+                            or str(uuid4()),
+                            status=validation_complete_event.get("status", "done"),
+                            client_name=policy.client_name,
+                            findings=validation_complete_event.get("findings", []),
+                            summary=validation_complete_event.get("summary", {}),
+                            attachments=attachments,
+                        )
+
+                        pdf_buffer = await generate_audit_report_pdf(
+                            report=source_report,
+                            filename=document.filename,
+                            document_name=document.filename,
+                        )
+
+                        report_key = (
+                            f"reports/{validation_report_id or source_report.id}_{int(time.time())}.pdf"
+                        )
+
+                        await minio_storage.upload_file(
+                            bucket_name="audit-reports",
+                            object_name=report_key,
+                            data=pdf_buffer,
+                            length=pdf_buffer.getbuffer().nbytes,
+                            content_type="application/pdf",
+                        )
+
+                        report_pdf_url = minio_storage.get_presigned_url(
+                            object_name=report_key,
+                            bucket="audit-reports",
+                            expires=timedelta(hours=24),
+                        )
+
+                        attachments["full_report_pdf"] = {
+                            "url": report_pdf_url,
+                            "key": report_key,
+                            "generated_at": datetime.utcnow().isoformat(),
+                            "expires_at": (
+                                datetime.utcnow() + timedelta(hours=24)
+                            ).isoformat(),
+                            "storage": "minio",
+                        }
+                        validation_complete_event["attachments"] = attachments
+                        validation_complete_event["validation_report_id"] = validation_report_id
+                        if validation_report_doc:
+                            try:
+                                await validation_report_doc.set({"attachments": attachments})
+                            except Exception as update_exc:
+                                logger.warning(
+                                    "Streaming audit: failed to update ValidationReport attachments",
+                                    validation_report_id=validation_report_id,
+                                    error=str(update_exc),
+                                )
+
+                        logger.info(
+                            "PDF report generated/uploaded for streaming audit",
+                            report_key=report_key,
+                            has_url=bool(report_pdf_url),
+                            validation_report_id=validation_report_id,
+                        )
+                    except Exception as pdf_exc:
+                        logger.error(
+                            "Failed to generate/upload PDF report (streaming)",
+                            error=str(pdf_exc),
+                            exc_type=type(pdf_exc).__name__,
+                        )
+                # Ensure attachments are propagated even if empty
+                validation_complete_event["attachments"] = attachments
+                if report_pdf_url:
+                    validation_complete_event["report_pdf_url"] = report_pdf_url
+                    logger.info(
+                        "Streaming audit: report_pdf_url attached to event",
+                        report_pdf_url=report_pdf_url,
+                    )
+                if validation_report_id:
+                    validation_complete_event["validation_report_id"] = validation_report_id
+                    logger.info(
+                        "Streaming audit: validation_report_id attached to event",
+                        validation_report_id=validation_report_id,
+                    )
+
                 # Transform findings list into categories dict (grouped by category)
                 findings_list = validation_complete_event.get("findings", [])
                 categories = {}
@@ -879,6 +1059,15 @@ class StreamingHandler:
                             "id": validation_complete_event.get("policy_id"),
                             "name": validation_complete_event.get("policy_name", "N/D"),
                         },
+                        # Attach any generated artifacts (e.g., full PDF report from report_generator.py)
+                        "attachments": validation_complete_event.get("attachments", {}),
+                        "validation_report_id": validation_complete_event.get("validation_report_id"),
+                        # Convenience: direct link to full PDF report if present
+                        "report_pdf_url": (
+                            validation_complete_event.get("attachments", {})
+                            .get("full_report_pdf", {})
+                            .get("url")
+                        ),
                     },
                     "stats": {
                         "critical": validation_complete_event.get("summary", {}).get("findings_by_severity", {}).get("critical", 0),
@@ -894,17 +1083,43 @@ class StreamingHandler:
 
             # Save final response with artifact in metadata
             full_content = "".join(accumulated_content)
+            artifact_report_url = (
+                audit_artifact.get("metadata", {}).get("report_pdf_url")
+                if audit_artifact
+                else None
+            )
+            artifact_attachments = (
+                validation_complete_event.get("attachments", {}) if validation_complete_event else {}
+            )
+            message_metadata = {
+                "audit_completed": True,
+                "document_id": str(document.id),
+                "filename": document.filename,
+                "job_id": last_job_id,
+                "artifact": audit_artifact,  # Include artifact in metadata for persistence
+                "report_pdf_url": artifact_report_url,
+                "attachments": artifact_attachments,
+                "validation_report_id": validation_complete_event.get("validation_report_id") if validation_complete_event else None,
+                "decision_metadata": {
+                    "report_pdf_url": artifact_report_url,
+                    "attachments": artifact_attachments,
+                    "audit_artifact": audit_artifact,
+                    "validation_report_id": validation_complete_event.get("validation_report_id") if validation_complete_event else None,
+                },
+            }
+
             assistant_message = await chat_service.add_assistant_message(
                 chat_session=chat_session,
                 content=full_content,
                 model=context.model,
-                metadata={
-                    "audit_completed": True,
-                    "document_id": str(document.id),
-                    "filename": document.filename,
-                    "job_id": last_job_id,
-                    "artifact": audit_artifact,  # Include artifact in metadata for persistence
-                }
+                metadata=message_metadata,
+            )
+            logger.info(
+                "Streaming audit: assistant message saved with PDF metadata",
+                message_id=str(assistant_message.id),
+                has_report_pdf=bool(artifact_report_url),
+                report_pdf_url=artifact_report_url,
+                validation_report_id=message_metadata.get("validation_report_id"),
             )
 
             # Yield done event
@@ -913,6 +1128,7 @@ class StreamingHandler:
                 "content": full_content,
                 "model": context.model,
                 "chat_id": str(chat_session.id),
+                "metadata": message_metadata,
             }
 
             # Include artifact if audit completed successfully

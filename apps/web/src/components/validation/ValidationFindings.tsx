@@ -58,6 +58,18 @@ const categoryIcons: Record<FindingCategory, string> = {
   linguistic: "✍️",
 };
 
+const auditorDisplayNames: Record<string, string> = {
+  compliance: "Cumplimiento legal",
+  disclaimer: "Descargos",
+  format: "Formato y estilo",
+  typography: "Tipografía",
+  grammar: "Gramática",
+  logo: "Identidad visual",
+  color_palette: "Paleta de colores",
+  entity_consistency: "Consistencia de entidades",
+  semantic_consistency: "Consistencia semántica",
+};
+
 interface ValidationFindingsProps {
   report: ValidationReportResponse;
   className?: string;
@@ -213,6 +225,20 @@ export function ValidationFindings({
     findingsBySeverity[finding.severity].push(finding);
   });
 
+  const friendlyAuditors =
+    summary.auditors_run
+      ?.map((auditorKey) => {
+        if (!auditorKey) return null;
+        const normalized = auditorKey.toLowerCase();
+        return (
+          auditorDisplayNames[normalized] ||
+          normalized
+            .replace(/_/g, " ")
+            .replace(/\b\w/g, (char) => char.toUpperCase())
+        );
+      })
+      .filter((label): label is string => Boolean(label)) ?? [];
+
   return (
     <div
       className={cn(
@@ -263,7 +289,11 @@ export function ValidationFindings({
           <SummaryCard
             title="Tiempo de Procesamiento"
             value={`${(summary.total_duration_ms / 1000).toFixed(1)}s`}
-            subtitle={`Auditores: ${summary.auditors_run.join(", ")}`}
+            subtitle={
+              friendlyAuditors.length > 0
+                ? `Auditores: ${friendlyAuditors.join(", ")}`
+                : undefined
+            }
             icon="⏱️"
           />
         )}
