@@ -697,9 +697,9 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
               metadata_present: !!userMessageMetadata,
             });
 
-            // Check if streaming is enabled (RE-ENABLED with dict fix)
-            // Audit commands NOW support streaming with real-time progress!
-            const enableStreaming = true;
+            // Streaming causes JSON blobs for audit_file; disable when auditing or with documents
+            const enableStreaming =
+              !toolsForPayload?.audit_file && documentIds.length === 0;
 
             let response: ChatResponse | undefined;
 
