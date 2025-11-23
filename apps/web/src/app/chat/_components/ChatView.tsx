@@ -39,7 +39,9 @@ import {
   toolIdToLegacyKey,
 } from "@/lib/tool-mapping";
 import { CanvasPanel } from "@/components/canvas/canvas-panel";
+import { useCanvas } from "@/context/CanvasContext";
 import { useCanvasStore } from "@/lib/stores/canvas-store";
+import { ResizableCanvas } from "@/components/ui/ResizableCanvas";
 // Files V1 imports
 import { useFiles } from "../../../hooks/useFiles";
 import type { FileAttachment } from "../../../types/files";
@@ -135,6 +137,7 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
   const isCanvasOpen = useCanvasStore((state) => state.isSidebarOpen);
   const toggleCanvas = useCanvasStore((state) => state.toggleSidebar);
   const resetCanvas = useCanvasStore((state) => state.reset);
+  const { closeCanvas } = useCanvas();
 
   // DEBUG: Log canvas state in ChatView
   React.useEffect(() => {
@@ -144,7 +147,8 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
   // Close/reset canvas when switching conversations to avoid leaking artifacts across chats
   React.useEffect(() => {
     resetCanvas();
-  }, [resetCanvas, resolvedChatId]);
+    closeCanvas();
+  }, [resetCanvas, closeCanvas, resolvedChatId]);
 
   // Files V1 state - MVP-LOCK: Pass chatId to persist attachments
   // FIX: Use resolvedChatId (from URL) instead of currentChatId (from async store)
@@ -1649,7 +1653,7 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
       selectedModel={selectedModel}
       onModelChange={setSelectedModel}
     >
-      <div className="flex h-full flex-col">
+      <div className="relative flex h-full flex-col">
         {(nudgeMessage || pendingWizard || activeResearch) && (
           <div className="flex flex-col items-center gap-4 px-4 pt-4">
             {nudgeMessage && (
@@ -1712,8 +1716,8 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
             </div>
           }
         >
-          <div className="flex h-full min-h-0">
-            <div className="flex-1 min-w-0">
+          <div className="flex h-full min-h-0 gap-4">
+            <div className="flex-1 min-w-0 transition-[flex-basis] duration-300">
               <ChatInterface
                 key={`chat-${currentChatId}-${selectionEpoch}`}
                 className="flex-1"
@@ -1750,12 +1754,7 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
             </div>
             {/* Canvas: Desktop - side by side with chat */}
             {isCanvasOpen && (
-              <div className="hidden lg:block h-full">
-                <CanvasPanel
-                  className="h-full"
-                  reportPdfUrl={currentReportPdfUrl || undefined}
-                />
-              </div>
+              <ResizableCanvas className="hidden h-full flex-shrink-0 lg:block" />
             )}
           </div>
 

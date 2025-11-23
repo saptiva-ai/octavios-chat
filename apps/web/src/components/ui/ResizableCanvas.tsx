@@ -4,30 +4,43 @@ import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCanvas } from "@/context/CanvasContext";
 import { AuditDetailView } from "@/components/canvas/views/AuditDetailView";
-import {
-  ClipboardDocumentListIcon,
-  ArrowDownTrayIcon,
-  XMarkIcon,
-} from "@heroicons/react/24/outline";
+import { ArrowDownTrayIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { cn } from "@/lib/utils";
 
 const MIN_WIDTH = 350;
 const MAX_WIDTH = 800;
 const DEFAULT_WIDTH = 400;
 
-export function ResizableCanvas() {
+interface ResizableCanvasProps {
+  className?: string;
+}
+
+export function ResizableCanvas({ className }: ResizableCanvasProps = {}) {
   const { isOpen, content, closeCanvas, reportPdfUrl } = useCanvas();
   const [width, setWidth] = React.useState<number>(DEFAULT_WIDTH);
   const [isDragging, setIsDragging] = React.useState(false);
 
   // Restore width from localStorage on mount
   React.useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
     const savedWidth = localStorage.getItem("canvas-width");
     if (savedWidth) {
       const parsedWidth = parseInt(savedWidth, 10);
       if (parsedWidth >= MIN_WIDTH && parsedWidth <= MAX_WIDTH) {
         setWidth(parsedWidth);
+        return;
       }
     }
+
+    const defaultViewportWidth = Math.round(window.innerWidth * 0.4);
+    const targetWidth = Math.max(
+      MIN_WIDTH,
+      Math.min(MAX_WIDTH, defaultViewportWidth),
+    );
+    setWidth(targetWidth);
   }, []);
 
   // Persist width to localStorage when changed
@@ -121,7 +134,7 @@ export function ResizableCanvas() {
     link.download = `${filename}.json`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(link.href), 3000);
-  }, [content]);
+  }, [content, reportPdfUrl]);
 
   // Attach global mouse listeners when dragging
   React.useEffect(() => {
@@ -153,34 +166,31 @@ export function ResizableCanvas() {
           animate={{ x: 0 }}
           exit={{ x: "100%" }}
           transition={{ type: "spring", damping: 30, stiffness: 300 }}
-          className="fixed right-0 top-0 h-full bg-slate-900 border-l border-white/10 z-50 shadow-2xl"
-          style={{ width: `${width}px` }}
+          className={cn(
+            "relative h-full border-l border-white/10 shadow-2xl",
+            className,
+          )}
+          style={{ width: `${width}px`, backgroundColor: "#232B3A" }}
         >
           {/* Resize Handle */}
           <div
             onMouseDown={handleMouseDown}
             onDoubleClick={handleDoubleClick}
-            className={`
-              absolute left-0 top-0 h-full w-1.5
-              cursor-col-resize hover:bg-saptiva/50 transition-colors
-              ${isDragging ? "bg-saptiva" : "bg-transparent"}
-            `}
+            className={`absolute left-0 top-0 h-full w-1.5 cursor-col-resize transition-colors ${
+              isDragging ? "bg-white/50" : "hover:bg-white/30"
+            }`}
             title="Arrastra para redimensionar. Doble clic para expandir al 50%."
           />
 
           {/* Header */}
-          <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-white/10">
+          <div
+            className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-white/10"
+            style={{ backgroundColor: "#232B3A" }}
+          >
             <h2 className="text-sm font-semibold text-white">
               Panel de hallazgos
             </h2>
             <div className="flex items-center gap-1">
-              <button
-                onClick={handleCopy}
-                className="flex items-center justify-center rounded-md border border-white/10 bg-white/5 p-1.5 text-xs font-semibold text-white hover:border-white/30 hover:bg-white/10 transition-colors"
-                aria-label="Copiar JSON"
-              >
-                <ClipboardDocumentListIcon className="h-4 w-4" />
-              </button>
               <button
                 onClick={handleDownload}
                 className="flex items-center justify-center rounded-md border border-white/10 bg-white/5 p-1.5 text-xs font-semibold text-white hover:border-white/30 hover:bg-white/10 transition-colors"
