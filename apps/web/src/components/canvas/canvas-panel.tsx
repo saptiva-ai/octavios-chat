@@ -228,29 +228,134 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
         className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/50 active:bg-primary transition-colors z-50"
         onMouseDown={handleMouseDown}
       />
-      <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-saptiva-light/60">
-            Canvas
-          </p>
-          <p className="text-sm font-semibold">
-            {reportPdfUrl
-              ? "Reporte de Auditoría"
-              : artifact?.title || "Sin selección"}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={toggleSidebar}
-          className="rounded-md border border-white/10 px-2 py-1 text-xs text-saptiva-light hover:border-white/30 hover:text-white"
-        >
-          {isSidebarOpen ? "Cerrar" : "Abrir"}
-        </button>
-      </div>
+      <Header
+        reportPdfUrl={reportPdfUrl}
+        artifact={artifact}
+        activeArtifactData={activeArtifactData}
+        onToggle={toggleSidebar}
+        isSidebarOpen={isSidebarOpen}
+      />
 
       <div className="h-[calc(100%-64px)] overflow-y-auto px-4 py-3">
         {renderContent()}
       </div>
+    </div>
+  );
+}
+
+function Header({
+  reportPdfUrl,
+  artifact,
+  activeArtifactData,
+  onToggle,
+  isSidebarOpen,
+}: {
+  reportPdfUrl?: string;
+  artifact: ArtifactRecord | null;
+  activeArtifactData: any;
+  onToggle: () => void;
+  isSidebarOpen: boolean;
+}) {
+  const auditPayload = React.useMemo(() => {
+    if (!activeArtifactData) return null;
+    const payload = (activeArtifactData as any).payload || activeArtifactData;
+    return payload && (payload as any).stats ? payload : null;
+  }, [activeArtifactData]);
+
+  const displayName = React.useMemo(() => {
+    if (auditPayload) {
+      const meta = (auditPayload as any).metadata || {};
+      const base =
+        meta.display_name || meta.filename || (auditPayload as any).doc_name;
+      if (base && /^[0-9a-fA-F-]{20,}$/.test(base)) return "Documento auditado";
+      return base || "Reporte de Auditoría";
+    }
+    if (reportPdfUrl) return "Reporte de Auditoría";
+    if (artifact?.title) return artifact.title;
+    return "Sin selección";
+  }, [auditPayload, reportPdfUrl, artifact]);
+
+  const summaryText = React.useMemo(() => {
+    if (!auditPayload) return null;
+    const meta = (auditPayload as any).metadata || {};
+    const summary = meta.summary;
+    if (!summary) return null;
+    if (typeof summary === "string") return summary;
+    if (typeof summary === "object") {
+      return (
+        summary.text ||
+        summary.summary ||
+        summary.overview ||
+        summary.short ||
+        null
+      );
+    }
+    return null;
+  }, [auditPayload]);
+
+  const stats = (auditPayload as any)?.stats;
+  const policy =
+    (auditPayload as any)?.metadata?.policy_used?.name ||
+    (auditPayload as any)?.metadata?.policy_used?.id ||
+    null;
+
+  const badges = stats && [
+    {
+      label: "Crítico",
+      value: stats.critical,
+      color: "bg-red-500/20 text-red-200",
+    },
+    {
+      label: "Alto",
+      value: stats.high,
+      color: "bg-orange-500/20 text-orange-200",
+    },
+    {
+      label: "Medio",
+      value: stats.medium,
+      color: "bg-yellow-500/20 text-yellow-200",
+    },
+    { label: "Bajo", value: stats.low, color: "bg-sky-500/20 text-sky-200" },
+  ];
+
+  return (
+    <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
+      <div className="min-w-0 space-y-1">
+        <p className="text-xs uppercase tracking-wide text-saptiva-light/60">
+          {auditPayload ? "Reporte de Auditoría" : "Canvas"}
+        </p>
+        <p className="text-sm font-semibold truncate">{displayName}</p>
+        {auditPayload && (
+          <>
+            <p className="text-xs text-saptiva-light/60">
+              {stats ? `${stats.total} hallazgos` : ""}{" "}
+              {policy ? `• Política: ${policy}` : ""}
+            </p>
+            {summaryText && (
+              <p className="text-xs text-saptiva-light line-clamp-2">
+                {summaryText}
+              </p>
+            )}
+            <div className="flex flex-wrap gap-1 pt-1 text-[11px] font-semibold">
+              {badges?.map((b) => (
+                <span
+                  key={b.label}
+                  className={cn("rounded-full px-2 py-1", b.color)}
+                >
+                  {b.value} {b.label}
+                </span>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="rounded-md border border-white/10 px-2 py-1 text-xs text-saptiva-light hover:border-white/30 hover:text-white"
+      >
+        {isSidebarOpen ? "Cerrar" : "Abrir"}
+      </button>
     </div>
   );
 }
