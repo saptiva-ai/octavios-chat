@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { useParams } from "next/navigation";
 import type { AuditReportResponse } from "@/lib/types";
+import { useCanvasStore } from "@/lib/stores/canvas-store";
 
 interface CanvasState {
   isOpen: boolean;
@@ -54,6 +55,11 @@ export function CanvasProvider({ children }: { children: React.ReactNode }) {
         content: null,
         activeTab: undefined,
         sessionId: null,
+      });
+      useCanvasStore.setState({
+        isSidebarOpen: false,
+        activeArtifactId: null,
+        activeArtifactData: null,
       });
     }
   }, [currentSessionId, state.sessionId]);
@@ -101,6 +107,11 @@ export function CanvasProvider({ children }: { children: React.ReactNode }) {
         sessionId: resolvedSessionId,
         reportPdfUrl: extractReportUrl(),
       });
+      useCanvasStore.setState({
+        isSidebarOpen: true,
+        activeArtifactId: null,
+        activeArtifactData: data,
+      });
     },
     [currentSessionId],
   );
@@ -110,12 +121,20 @@ export function CanvasProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       isOpen: false,
     }));
+    useCanvasStore.setState({
+      isSidebarOpen: false,
+      activeArtifactId: null,
+      activeArtifactData: null,
+    });
   }, []);
 
   const toggleCanvas = useCallback(() => {
     setState((prev) => ({
       ...prev,
       isOpen: !prev.isOpen,
+    }));
+    useCanvasStore.setState((prevState) => ({
+      isSidebarOpen: !prevState.isSidebarOpen,
     }));
   }, []);
 

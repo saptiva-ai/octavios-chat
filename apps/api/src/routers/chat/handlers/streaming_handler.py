@@ -15,6 +15,7 @@ import os
 import json
 import asyncio
 import time
+import re
 from pathlib import Path
 from typing import AsyncGenerator, Optional
 from datetime import datetime, timedelta
@@ -48,6 +49,178 @@ from ....services.empty_response_handler import (
 )
 
 logger = structlog.get_logger(__name__)
+
+
+AUDITOR_ANALYSIS_PATTERN = re.compile(r"^(el auditor|la auditoría|auditor)", re.IGNORECASE)
+AUDITOR_ORDER = [
+    "compliance",
+    "format",
+    "typography",
+    "grammar",
+    "logo",
+    "color_palette",
+    "entity_consistency",
+    "semantic_consistency",
+]
+AUDITOR_DISPLAY_NAMES = {
+    "compliance": "Cumplimiento",
+    "format": "Formato",
+    "typography": "Tipografía",
+    "grammar": "Lingüístico",
+    "logo": "Identidad visual",
+    "color_palette": "Paleta de colores",
+    "entity_consistency": "Consistencia de entidades",
+    "semantic_consistency": "Consistencia semántica",
+    "other": "Otros",
+}
+AUDITOR_HUMANIZE_NAMES = {
+    "compliance": "Disclaimer Auditor",
+    "format": "Format Auditor",
+    "typography": "Typography Auditor",
+    "grammar": "Grammar Auditor",
+    "logo": "Logo Auditor",
+    "color_palette": "Color Palette Auditor",
+    "entity_consistency": "Entity Consistency Auditor",
+    "semantic_consistency": "Semantic Consistency Auditor",
+    "other": "General Auditor",
+}
+SEVERITY_DISPLAY = {
+    "critical": "críticos",
+    "high": "altos",
+    "medium": "medios",
+    "low": "bajos",
+}
+
+
+def format_auditor_markdown(text: str) -> str:
+    """
+    Ensure auditor analysis sentences render as markdown sub-lists.
+    """
+    if not text:
+        return text
+
+    formatted_lines = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            formatted_lines.append("")
+            continue
+
+        if AUDITOR_ANALYSIS_PATTERN.match(stripped) and not stripped.startswith("-"):
+            formatted_lines.append(f"   - {stripped}")
+        else:
+            formatted_lines.append(line)
+
+    return "\n".join(formatted_lines)
+
+
+def _normalize_auditor_key(category: str) -> str:
+    value = (category or "").lower()
+    if not value:
+        return "other"
+    if value in {"compliance", "cumplimiento"} or "disclaimer" in value:
+        return "compliance"
+    if value in {"format", "formato"} or "layout" in value or "margen" in value or "tabla" in value:
+        return "format"
+    if value in {"typography", "tipografia", "tipografía"} or "font" in value or "tipograf" in value:
+        return "typography"
+    if value in {"grammar", "gramatica", "gramática"} or "linguistic" in value or "ortograf" in value:
+        return "grammar"
+    if value in {"logo", "identidad"} or "visual" in value:
+        return "logo"
+    if value in {"color_palette", "color"} or "paleta" in value:
+        return "color_palette"
+    if value in {"entity_consistency"} or "entidad" in value or "entity" in value:
+        return "entity_consistency"
+    if value in {"semantic_consistency"} or "semant" in value or "coherencia" in value:
+        return "semantic_consistency"
+    return "other"
+
+
+def _aggregate_auditors(validation_event: dict) -> dict:
+    summary = validation_event.get("summary") or {}
+    by_auditor = summary.get("by_auditor")
+    if isinstance(by_auditor, dict) and by_auditor:
+        normalized = {str(k).lower(): v for k, v in by_auditor.items()}
+        return normalized
+
+    findings = validation_event.get("findings") or []
+    auditors: dict[str, dict] = {}
+    for finding in findings:
+        key = _normalize_auditor_key(finding.get("category", ""))
+        entry = auditors.setdefault(
+            key,
+            {
+                "total": 0,
+                "critical": 0,
+                "high": 0,
+                "medium": 0,
+                "low": 0,
+                "findings": [],
+            },
+        )
+        entry["total"] += 1
+        severity = str(finding.get("severity", "low")).lower()
+        if severity in {"critical", "high", "medium", "low"}:
+            entry[severity] += 1
+        entry["findings"].append(finding)
+
+    for key, data in auditors.items():
+        summary_text = humanize_auditor_result(
+            AUDITOR_HUMANIZE_NAMES.get(key, "General Auditor"),
+            len(data.get("findings", [])),
+            data.get("findings", []),
+        )
+        data["summary"] = summary_text
+    return auditors
+
+
+def build_auditor_breakdown_markdown(validation_event: dict) -> Optional[str]:
+    auditors = _aggregate_auditors(validation_event)
+    if not auditors:
+        return None
+
+    lines: list[str] = []
+    handled = set()
+
+    def append_line(key: str):
+        data = auditors.get(key)
+        if not data:
+            return
+        handled.add(key)
+        label = AUDITOR_DISPLAY_NAMES.get(
+            key, key.replace("_", " ").title()
+        )
+        summary_text = data.get("summary")
+        if not summary_text:
+            severity_parts = []
+            for severity, label_text in SEVERITY_DISPLAY.items():
+                count = data.get(severity, 0)
+                if count:
+                    plural = "hallazgo" if count == 1 else "hallazgos"
+                    severity_parts.append(f"{count} {plural} {label_text}")
+            if severity_parts:
+                summary_text = ", ".join(severity_parts)
+            else:
+                total = data.get("total", 0)
+                summary_text = (
+                    "Sin hallazgos reportados"
+                    if total == 0
+                    else f"{total} hallazgos registrados"
+                )
+        lines.append(f"- **{label}:** {summary_text.strip()}")
+
+    for key in AUDITOR_ORDER:
+        append_line(key)
+
+    for key in auditors.keys():
+        if key not in handled:
+            append_line(key)
+
+    if not lines:
+        return None
+
+    return "### Análisis por auditor\n" + "\n".join(lines)
 
 
 class _InlineValidationReport:
@@ -184,7 +357,7 @@ Sé directo, profesional, sin emojis. Usa párrafos cortos.
             content = choice.get("message", {}).get("content", "") if isinstance(choice, dict) else ""
             logger.info("LLM content extracted", content_length=len(content) if content else 0, content_preview=content[:100] if content else "")
             if content:
-                analysis = content.strip()
+                analysis = format_auditor_markdown(content.strip())
                 return analysis
             else:
                 logger.warning("No content in LLM response", choice_keys=list(choice.keys()) if isinstance(choice, dict) else [])
@@ -868,6 +1041,10 @@ class StreamingHandler:
                     elif summary_error_message:
                         content += f"⚠️ {summary_error_message}\n\n"
                         content += f"---\n\n"
+
+                    auditor_breakdown_section = build_auditor_breakdown_markdown(audit_event)
+                    if auditor_breakdown_section:
+                        content += f"{auditor_breakdown_section}\n\n"
 
                     # PRIORITIZED: Critical first
                     if critical > 0:

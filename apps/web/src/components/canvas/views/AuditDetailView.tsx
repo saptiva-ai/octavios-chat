@@ -9,6 +9,38 @@ interface AuditDetailViewProps {
   className?: string;
 }
 
+const PANEL_BG = "#232B3A";
+const PANEL_SURFACE = "#1E2533";
+
+const CATEGORY_LABELS: Record<string, string> = {
+  compliance: "Cumplimiento",
+  disclaimer: "Descargos",
+  format: "Formato",
+  typography: "Tipografía",
+  typography_checker: "Tipografía",
+  grammar: "Gramática",
+  logo: "Identidad visual",
+  brand_logo: "Identidad visual",
+  color_palette: "Paleta de colores",
+  "color palette": "Paleta de colores",
+  color: "Paleta de colores",
+  colors: "Paleta de colores",
+  color_palette_checker: "Paleta de colores",
+  entity_consistency: "Consistencia de entidades",
+  semantic_consistency: "Consistencia semántica",
+  linguistic: "Lingüístico",
+  language: "Lingüístico",
+};
+
+function formatCategoryName(raw: string): string {
+  if (!raw) return "";
+  const normalized = raw.toLowerCase();
+  return (
+    CATEGORY_LABELS[normalized] ||
+    raw.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())
+  );
+}
+
 function DonutChart({
   critical,
   high,
@@ -77,7 +109,33 @@ function DonutChart({
 }
 
 export function AuditDetailView({ report, className }: AuditDetailViewProps) {
-  const categories = Object.entries(report.categories || {});
+  const categories = React.useMemo<[string, any[]][]>(() => {
+    const normalized = Object.entries(report.categories || {}).reduce<
+      Record<string, any[]>
+    >((acc, [key, value]) => {
+      acc[key.toLowerCase()] = Array.isArray(value) ? value : [];
+      return acc;
+    }, {});
+
+    const orderedKeys = [
+      "compliance",
+      "disclaimer",
+      "format",
+      "typography",
+      "grammar",
+      "logo",
+      "color_palette",
+      "entity_consistency",
+      "semantic_consistency",
+      "linguistic",
+    ];
+
+    const ordered = orderedKeys.map((key) => [key, normalized[key] || []]);
+    const extra = Object.entries(normalized).filter(
+      ([key]) => !orderedKeys.includes(key),
+    );
+    return [...ordered, ...extra];
+  }, [report.categories]);
   const rawName =
     report.metadata?.display_name ||
     report.metadata?.filename ||
@@ -114,12 +172,13 @@ export function AuditDetailView({ report, className }: AuditDetailViewProps) {
 
   return (
     <div
-      className={cn(
-        "flex h-full flex-col gap-4 bg-slate-900 text-white",
-        className,
-      )}
+      className={cn("flex h-full flex-col gap-4 text-white", className)}
+      style={{ backgroundColor: PANEL_BG }}
     >
-      <header className="flex items-start justify-between gap-3 border-b border-white/10 pb-3">
+      <header
+        className="flex items-start justify-between gap-3 border-b border-white/10 pb-3"
+        style={{ backgroundColor: PANEL_BG }}
+      >
         <div>
           <p className="text-[11px] uppercase tracking-wide text-saptiva-light/60">
             Reporte de Auditoría
@@ -141,7 +200,10 @@ export function AuditDetailView({ report, className }: AuditDetailViewProps) {
       </section>
 
       {summaryText && (
-        <section className="rounded-lg border border-white/5 bg-white/5 p-3 text-sm text-saptiva-light">
+        <section
+          className="rounded-lg border border-white/10 p-3 text-sm text-saptiva-light"
+          style={{ backgroundColor: PANEL_SURFACE }}
+        >
           <p className="text-xs uppercase tracking-wide text-saptiva-light/60">
             Resumen ejecutivo
           </p>
@@ -149,79 +211,94 @@ export function AuditDetailView({ report, className }: AuditDetailViewProps) {
         </section>
       )}
 
-      <section className="flex-1 overflow-auto rounded-lg border border-white/5 bg-slate-950/60 p-3">
+      <section
+        className="flex-1 overflow-auto rounded-lg border border-white/10 p-3"
+        style={{ backgroundColor: PANEL_SURFACE }}
+      >
         <div className="space-y-3">
-          {categories.length === 0 && (
-            <div className="text-sm text-saptiva-light/70">Sin hallazgos.</div>
+          {categories.every(([, findings]) => !findings.length) && (
+            <div className="text-sm text-saptiva-light/70">
+              Sin hallazgos registrados.
+            </div>
           )}
           {categories.map(([cat, findings]) => (
             <details
               key={cat}
-              className="group rounded-md border border-white/5 bg-white/5 p-3"
+              className="group rounded-md border border-white/10 p-3"
+              style={{ backgroundColor: PANEL_BG }}
             >
-              <summary className="flex cursor-pointer items-center justify-between rounded-md border border-white/10 bg-slate-900/70 px-3 py-2 text-sm font-semibold list-none hover:border-saptiva/50 transition-colors">
+              <summary
+                className="flex cursor-pointer items-center justify-between rounded-md border border-white/10 px-3 py-2 text-sm font-semibold list-none hover:border-saptiva/50 transition-colors"
+                style={{ backgroundColor: PANEL_SURFACE }}
+              >
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-saptiva-light/70 transition-transform group-open:rotate-90">
                     ▸
                   </span>
-                  <span>{cat}</span>
+                  <span>{formatCategoryName(cat)}</span>
                 </div>
                 <span className="text-xs text-saptiva-light/70 flex items-center gap-1">
                   {findings.length} hallazgos
                 </span>
               </summary>
               <div className="mt-2 space-y-2 text-sm text-saptiva-light">
-                {findings.map((f, idx) => (
+                {findings.length === 0 ? (
                   <div
-                    key={`${f.id || idx}-${(f.message || "").slice(0, 20)}`}
-                    className="rounded border border-white/5 bg-slate-900/70 p-2"
+                    className="rounded border border-dashed border-white/10 p-3 text-xs text-saptiva-light/70"
+                    style={{ backgroundColor: PANEL_SURFACE }}
                   >
-                    {/*
-                      Prefer the provided message; fall back to suggestion to avoid showing "Sin descripción".
-                      This reduces noise when the backend omits message but includes a useful suggestion.
-                    */}
-                    {(() => {
-                      const message = (f.message || "").trim();
-                      const suggestion = (f.suggestion || "").trim();
-                      const description =
-                        message || suggestion || "Sin descripción";
-
-                      return (
-                        <>
-                          <div className="flex items-center justify-between text-xs uppercase tracking-tight">
-                            <span
-                              className={cn(
-                                "font-semibold",
-                                f.severity === "critical"
-                                  ? "text-red-400"
-                                  : f.severity === "high"
-                                    ? "text-orange-400"
-                                    : f.severity === "medium"
-                                      ? "text-yellow-300"
-                                      : "text-sky-300",
-                              )}
-                            >
-                              {f.severity}
-                            </span>
-                            {f.page && (
-                              <span className="text-[11px] text-saptiva-light/60">
-                                Página {f.page}
-                              </span>
-                            )}
-                          </div>
-                          <p className="mt-1 text-sm text-white">
-                            {description}
-                          </p>
-                          {suggestion && description !== suggestion && (
-                            <p className="text-xs text-saptiva-light/70">
-                              Sugerencia: {suggestion}
-                            </p>
-                          )}
-                        </>
-                      );
-                    })()}
+                    Sin hallazgos para este auditor.
                   </div>
-                ))}
+                ) : (
+                  findings.map((f, idx) => (
+                    <div
+                      key={`${f.id || idx}-${(f.message || "").slice(0, 20)}`}
+                      className="rounded border border-white/10 p-2"
+                      style={{ backgroundColor: PANEL_SURFACE }}
+                    >
+                      {(() => {
+                        const message = (f.message || "").trim();
+                        const suggestion = (f.suggestion || "").trim();
+                        const description =
+                          message || suggestion || "Sin descripción";
+
+                        return (
+                          <>
+                            <div className="flex items-center justify-between text-xs uppercase tracking-tight">
+                              <span
+                                className={cn(
+                                  "font-semibold",
+                                  f.severity === "critical"
+                                    ? "text-red-400"
+                                    : f.severity === "high"
+                                      ? "text-orange-400"
+                                      : f.severity === "medium"
+                                        ? "text-yellow-300"
+                                        : "text-sky-300",
+                                )}
+                              >
+                                {f.severity}
+                              </span>
+                              {f.page && (
+                                <span className="text-[11px] text-saptiva-light/60">
+                                  Página {f.page}
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-1 text-sm text-white">
+                              {description}
+                            </p>
+                            {suggestion && description !== suggestion && (
+                              <p className="text-xs text-saptiva-light/70">
+                                Sugerencia: {suggestion}
+                              </p>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  ))
+                )}
               </div>
             </details>
           ))}
