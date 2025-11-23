@@ -191,10 +191,17 @@ export const useChatStore = create<ChatState>()(
           set({ selectionEpoch: epoch + 1 });
         },
 
-        addMessage: (message) =>
+        addMessage: (message) => {
+          // console.log("[🔍 Zustand] addMessage called", {
+          //   messageId: message.id,
+          //   role: message.role,
+          //   currentCount: get().messages.length,
+          //   newCount: get().messages.length + 1,
+          // });
           set((state) => ({
             messages: [...state.messages, message],
-          })),
+          }));
+        },
 
         updateMessage: (messageId, updates) =>
           set((state) => ({
@@ -204,7 +211,14 @@ export const useChatStore = create<ChatState>()(
           })),
 
         clearMessages: () => set({ messages: [] }),
-        setMessages: (messages) => set({ messages }),
+        setMessages: (messages) => {
+          // console.log("[🔍 Zustand] setMessages called", {
+          //   newCount: messages.length,
+          //   currentCount: get().messages.length,
+          //   isOverwrite: true,
+          // });
+          set({ messages });
+        },
         setLoading: (loading) => set({ isLoading: loading }),
         setHydratedStatus: (chatId, status) =>
           set((state) => ({

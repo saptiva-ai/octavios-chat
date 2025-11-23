@@ -599,8 +599,17 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
       // MINIMALISMO FUNCIONAL: Archivos siempre se usan cuando están listos
       const fileIdsForBackend = fileIds;
 
+      // 🔧 FIX: Auto-enable document_analysis when files are attached
+      // If file_ids are present in payload, the LLM MUST have permission to read them
+      const hasFiles = fileIdsForBackend && fileIdsForBackend.length > 0;
+
       // Always expose create_artifact to the LLM even if not toggled explicitly
-      const toolsForPayload = { ...toolsEnabled, create_artifact: true };
+      // Auto-enable document_analysis when files are attached (prevents "📄 Documentos no encontrados")
+      const toolsForPayload = {
+        ...toolsEnabled,
+        create_artifact: true,
+        document_analysis: hasFiles || toolsEnabled.document_analysis || false,
+      };
 
       await sendOptimizedMessage(
         message,
@@ -659,11 +668,20 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
               });
             }
 
-            // Don't send temp IDs to backend - they don't exist there yet
+            // Don't send temp IDs or phantom chat IDs to backend - they don't exist there yet
+            // A "phantom chat" is a UUID from URL that doesn't exist in the database yet
             const wasTempId = currentChatId?.startsWith("temp-");
-            const chatIdForBackend = wasTempId
-              ? undefined
-              : currentChatId || undefined;
+            const isPhantomChat =
+              currentChatId && messages.length === 0 && !wasTempId;
+
+            // Send chat_id to backend only if:
+            // 1. NOT a temp ID (generated client-side)
+            // 2. NOT a phantom chat (UUID from URL with no messages loaded)
+            // CRITICAL: Use `null` instead of `undefined`
+            // - `null` serializes as "chat_id": null (backend knows to create new chat)
+            // - `undefined` removes the key entirely (causes backend validation errors)
+            const chatIdForBackend =
+              wasTempId || isPhantomChat ? null : currentChatId || null;
 
             // OBS-1: Log payload before sending to backend
             logDebug("[ChatView] payload_outbound", {
@@ -685,7 +703,6 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
               // console.log("[DEBUG] Entering streaming path");
 
               try {
-                // console.log("[DEBUG] Creating stream generator");
                 const streamGenerator = apiClient.sendChatMessageStream(
                   {
                     message: msg,
@@ -846,19 +863,30 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
               "[ChatView] ✅ Response received, clearing files immediately",
               {
                 readyFilesLength: readyFiles.length,
-                readyFiles: readyFiles.map((f) => ({
-                  file_id: f.file_id,
-                  filename: f.filename,
-                })),
+                responseChatId: response.chat_id,
+                currentChatId,
+                wasTempId,
               },
             );
 
             if (readyFiles.length > 0) {
+              // 1. Clear using the closure's effectiveChatId (usually matches currentChatId)
               clearFilesV1Attachments();
+
+              // 2. DEFENSIVE: Explicitly clear for the returned chat ID (UUID)
+              // This handles the case where files were somehow associated with the new UUID
+              if (response.chat_id) {
+                clearFilesV1Attachments(response.chat_id);
+              }
+
+              // 3. DEFENSIVE: Explicitly clear "draft" to prevent orphaned files
+              clearFilesV1Attachments("draft");
+
               logDebug(
-                "[ChatView] ✅ Cleared file attachments after successful response",
+                "[ChatView] ✅ Cleared file attachments after successful response (Aggressive Clean)",
                 {
                   clearedCount: readyFiles.length,
+                  targets: ["closure", response.chat_id, "draft"],
                 },
               );
             }
