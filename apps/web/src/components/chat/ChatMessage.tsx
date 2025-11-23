@@ -351,6 +351,15 @@ export function ChatMessage({
                   actions: (auditArtifact as any).actions || [],
                   metadata: {
                     ...((auditArtifact as any).metadata || {}),
+                    // Surface PDF report URL/attachments from message metadata if artifact lacks them
+                    report_pdf_url:
+                      (auditArtifact as any)?.metadata?.report_pdf_url ||
+                      (metadata as any)?.decision_metadata?.report_pdf_url ||
+                      (metadata as any)?.report_pdf_url,
+                    attachments:
+                      (auditArtifact as any)?.metadata?.attachments ||
+                      (metadata as any)?.decision_metadata?.attachments ||
+                      (metadata as any)?.attachments,
                     display_name: auditDisplayName,
                   },
                 }}

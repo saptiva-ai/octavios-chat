@@ -310,6 +310,11 @@ function getAuditorIcon(auditorName: string): string {
     format: "🎨",
     grammar: "✍️",
     logo: "🖼️",
+    typography: "🔤",
+    color_palette: "🌈",
+    "color palette": "🌈",
+    entity_consistency: "🔍",
+    semantic_consistency: "🧠",
   };
   return icons[auditorName.toLowerCase()] || "📄";
 }
@@ -321,6 +326,11 @@ function getAuditorLabel(auditorName: string): string {
     format: "Formato y estilos",
     grammar: "Gramática y ortografía",
     logo: "Logo e imágenes",
+    typography: "Tipografía",
+    color_palette: "Paleta de colores",
+    "color palette": "Paleta de colores",
+    entity_consistency: "Consistencia de entidades",
+    semantic_consistency: "Consistencia semántica",
   };
   return labels[auditorName.toLowerCase()] || auditorName;
 }

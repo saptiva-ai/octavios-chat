@@ -78,12 +78,15 @@ function DonutChart({
 
 export function AuditDetailView({ report, className }: AuditDetailViewProps) {
   const categories = Object.entries(report.categories || {});
-  const displayName =
+  const rawName =
     report.metadata?.display_name ||
     report.metadata?.filename ||
     (report.doc_name && /^[0-9a-fA-F-]{20,}$/.test(report.doc_name)
       ? "Documento auditado"
       : report.doc_name);
+  const displayName = rawName
+    ? rawName.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())
+    : "Documento auditado";
   const summaryText = React.useMemo(() => {
     const summary = (report.metadata as any)?.summary;
     if (!summary) return null;
@@ -99,20 +102,6 @@ export function AuditDetailView({ report, className }: AuditDetailViewProps) {
     }
     return null;
   }, [report.metadata]);
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(JSON.stringify(report, null, 2));
-  };
-
-  const handleDownload = () => {
-    const url =
-      report.metadata?.report_url ||
-      report.metadata?.pdf_url ||
-      report.metadata?.report_pdf_url;
-    if (url) {
-      window.open(url, "_blank", "noopener,noreferrer");
-    }
-  };
 
   // Defensive: ensure stats exist with default values
   const stats = report.stats || {
@@ -132,17 +121,17 @@ export function AuditDetailView({ report, className }: AuditDetailViewProps) {
     >
       <header className="flex items-start justify-between gap-3 border-b border-white/10 pb-3">
         <div>
-          <p className="text-xs uppercase tracking-wide text-saptiva-light/60">
+          <p className="text-[11px] uppercase tracking-wide text-saptiva-light/60">
             Reporte de Auditoría
           </p>
-          <h2 className="text-lg font-semibold">{displayName}</h2>
-          <p className="text-xs text-saptiva-light/60">
+          <h2 className="text-sm font-semibold text-white">{displayName}</h2>
+          <p className="text-[11px] text-saptiva-light/70">
             Policy: {report.metadata?.policy_used?.name || "N/D"}
           </p>
         </div>
       </header>
 
-      <section>
+      <section className="flex items-center justify-center py-1">
         <DonutChart
           critical={stats.critical}
           high={stats.high}
@@ -169,11 +158,15 @@ export function AuditDetailView({ report, className }: AuditDetailViewProps) {
             <details
               key={cat}
               className="group rounded-md border border-white/5 bg-white/5 p-3"
-              open
             >
-              <summary className="flex cursor-pointer items-center justify-between text-sm font-semibold">
-                <span>{cat}</span>
-                <span className="text-xs text-saptiva-light/70">
+              <summary className="flex cursor-pointer items-center justify-between rounded-md border border-white/10 bg-slate-900/70 px-3 py-2 text-sm font-semibold list-none hover:border-saptiva/50 transition-colors">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-saptiva-light/70 transition-transform group-open:rotate-90">
+                    ▸
+                  </span>
+                  <span>{cat}</span>
+                </div>
+                <span className="text-xs text-saptiva-light/70 flex items-center gap-1">
                   {findings.length} hallazgos
                 </span>
               </summary>
@@ -183,35 +176,50 @@ export function AuditDetailView({ report, className }: AuditDetailViewProps) {
                     key={`${f.id || idx}-${(f.message || "").slice(0, 20)}`}
                     className="rounded border border-white/5 bg-slate-900/70 p-2"
                   >
-                    <div className="flex items-center justify-between text-xs uppercase tracking-tight">
-                      <span
-                        className={cn(
-                          "font-semibold",
-                          f.severity === "critical"
-                            ? "text-red-400"
-                            : f.severity === "high"
-                              ? "text-orange-400"
-                              : f.severity === "medium"
-                                ? "text-yellow-300"
-                                : "text-sky-300",
-                        )}
-                      >
-                        {f.severity}
-                      </span>
-                      {f.page && (
-                        <span className="text-[11px] text-saptiva-light/60">
-                          Página {f.page}
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-1 text-sm text-white">
-                      {f.message || "Sin descripción"}
-                    </p>
-                    {f.suggestion && (
-                      <p className="text-xs text-saptiva-light/70">
-                        Sugerencia: {f.suggestion}
-                      </p>
-                    )}
+                    {/*
+                      Prefer the provided message; fall back to suggestion to avoid showing "Sin descripción".
+                      This reduces noise when the backend omits message but includes a useful suggestion.
+                    */}
+                    {(() => {
+                      const message = (f.message || "").trim();
+                      const suggestion = (f.suggestion || "").trim();
+                      const description =
+                        message || suggestion || "Sin descripción";
+
+                      return (
+                        <>
+                          <div className="flex items-center justify-between text-xs uppercase tracking-tight">
+                            <span
+                              className={cn(
+                                "font-semibold",
+                                f.severity === "critical"
+                                  ? "text-red-400"
+                                  : f.severity === "high"
+                                    ? "text-orange-400"
+                                    : f.severity === "medium"
+                                      ? "text-yellow-300"
+                                      : "text-sky-300",
+                              )}
+                            >
+                              {f.severity}
+                            </span>
+                            {f.page && (
+                              <span className="text-[11px] text-saptiva-light/60">
+                                Página {f.page}
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-1 text-sm text-white">
+                            {description}
+                          </p>
+                          {suggestion && description !== suggestion && (
+                            <p className="text-xs text-saptiva-light/70">
+                              Sugerencia: {suggestion}
+                            </p>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 ))}
               </div>
@@ -219,23 +227,6 @@ export function AuditDetailView({ report, className }: AuditDetailViewProps) {
           ))}
         </div>
       </section>
-
-      <footer className="flex gap-2">
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="flex-1 rounded-md border border-white/10 bg-white/10 px-3 py-2 text-sm font-semibold text-white hover:border-white/30"
-        >
-          Copiar JSON
-        </button>
-        <button
-          type="button"
-          onClick={handleDownload}
-          className="flex-1 rounded-md border border-saptiva px-3 py-2 text-sm font-semibold text-saptiva bg-saptiva/20 hover:bg-saptiva/30"
-        >
-          Descargar
-        </button>
-      </footer>
     </div>
   );
 }

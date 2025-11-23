@@ -183,7 +183,7 @@ health:
 		echo "$(RED)🔴 Unhealthy$(NC)"; \
 	fi
 	@printf "  $(YELLOW)🟡 MongoDB:            $(NC)"
-	@if $(COMPOSE) exec -T mongodb mongosh --eval \"db.adminCommand('ping')\" > /dev/null 2>&1; then \
+	@if $(COMPOSE) exec -T mongodb mongosh --eval 'db.adminCommand("ping")' > /dev/null 2>&1; then \
 		echo "$(GREEN)🟢 Connected$(NC)"; \
 	else \
 		echo "$(RED)🔴 Disconnected$(NC)"; \
