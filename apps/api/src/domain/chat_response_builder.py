@@ -135,12 +135,12 @@ class ChatResponseBuilder:
             else None
         )
         if audit_artifact_local:
-            concise = (
+            # Use the sanitized content (semantic summary) when an audit artifact is present
+            self.with_message(
                 result.sanitized_content
-                if result.sanitized_content and len(result.sanitized_content) < 300
-                else "He generado el reporte de auditoría. Puedes ver los detalles a continuación."
+                or "He generado el reporte de auditoría. Puedes ver los detalles a continuación.",
+                sanitized=True,
             )
-            self.with_message(concise, sanitized=True)
         else:
             self.with_message(result.sanitized_content, sanitized=True)
         self.with_message_id(result.metadata.assistant_message_id or "")
