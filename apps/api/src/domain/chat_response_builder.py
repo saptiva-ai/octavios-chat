@@ -10,6 +10,8 @@ from datetime import datetime
 from fastapi.responses import JSONResponse
 
 from .chat_context import ChatProcessingResult, MessageMetadata
+from ..schemas.audit import AuditReportResponse
+from ..services.audit_utils import summarize_audit_for_message
 
 
 class ChatResponseBuilder:
@@ -134,8 +136,28 @@ class ChatResponseBuilder:
             if result.metadata and result.metadata.decision_metadata
             else None
         )
+
+        audit_summary_msg = None
         if audit_artifact_local:
-            # Use the sanitized content (semantic summary) when an audit artifact is present
+            try:
+                artifact_obj = AuditReportResponse.model_validate(
+                    audit_artifact_local
+                )
+                audit_summary_msg = summarize_audit_for_message(
+                    doc_name=artifact_obj.doc_name or "el documento",
+                    artifact=artifact_obj,
+                    summary_raw=artifact_obj.metadata.get("summary")
+                    if artifact_obj.metadata
+                    else None,
+                )
+            except Exception:
+                audit_summary_msg = None
+
+        if audit_summary_msg:
+            # Prefer semantic summary built from the artifact (top findings + next steps)
+            self.with_message(audit_summary_msg, sanitized=True)
+        elif audit_artifact_local:
+            # Fallback: if artifact exists but summary couldn't be built, keep existing sanitized content or a generic message
             self.with_message(
                 result.sanitized_content
                 or "He generado el reporte de auditoría. Puedes ver los detalles a continuación.",
