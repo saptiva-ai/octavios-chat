@@ -107,6 +107,23 @@ export function useOptimizedChat(options: UseOptimizedChatOptions = {}) {
   // Función para actualizar contenido de streaming de forma optimizada
   const updateStreamingContent = useCallback(
     (messageId: string, newContent: string) => {
+      const extractDisplayContent = (raw: string) => {
+        if (typeof raw !== "string") return raw as unknown as string;
+        const trimmed = raw.trim();
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (parsed && typeof parsed === "object" && parsed.content) {
+              return String(parsed.content);
+            }
+          } catch {
+            // ignore parse errors, fallback to raw
+          }
+        }
+        return raw;
+      };
+
+      const displayContent = extractDisplayContent(newContent);
       const now = Date.now();
       const timeSinceLastUpdate = now - lastUpdateTime.current;
       const THROTTLE_MS = 50;
@@ -124,7 +141,7 @@ export function useOptimizedChat(options: UseOptimizedChatOptions = {}) {
         // Actualizar inmediatamente
         flushSync(() => {
           updateMessage(messageId, {
-            content: newContent,
+            content: displayContent,
             status: "streaming",
             isStreaming: true,
           });
@@ -151,7 +168,9 @@ export function useOptimizedChat(options: UseOptimizedChatOptions = {}) {
               if (pendingUpdate.current) {
                 flushSync(() => {
                   updateMessage(pendingUpdate.current!.messageId, {
-                    content: pendingUpdate.current!.content,
+                    content: extractDisplayContent(
+                      pendingUpdate.current!.content,
+                    ),
                     status: "streaming",
                     isStreaming: true,
                   });
