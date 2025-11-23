@@ -8,6 +8,7 @@ from typing import List, Optional, Dict, Any, ClassVar
 from uuid import uuid4
 
 from beanie import Document, Indexed, Link
+from pymongo import IndexModel, ASCENDING
 from pydantic import Field, BaseModel, ConfigDict
 
 from .user import User
@@ -187,6 +188,12 @@ class ChatSession(Document):
             #     "partialFilterExpression": {"state": "draft"},
             #     "name": "unique_draft_per_user"
             # }
+            IndexModel(
+                [("updated_at", ASCENDING)],
+                expireAfterSeconds=3600,
+                partialFilterExpression={"state": "draft", "message_count": 0},
+                name="ttl_cleanup_drafts"
+            ),
         ]
 
     def __str__(self) -> str:

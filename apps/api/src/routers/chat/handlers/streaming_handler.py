@@ -1101,10 +1101,12 @@ class StreamingHandler:
 
                 # ANTI-EMPTY-RESPONSE: Ensure we never persist or emit an empty response
                 if not full_response:
-                    # Determine the most likely scenario
+                    has_documents = bool(context.document_ids)
+
+                    # Determine the most likely scenario using the in-memory document list on context
                     if doc_warnings:
                         scenario = EmptyResponseScenario.DOCS_PROCESSING
-                    elif context.document_ids and len(context.document_ids) > 0:
+                    elif has_documents:
                         scenario = EmptyResponseScenario.DOCS_NOT_FOUND
                     else:
                         scenario = EmptyResponseScenario.STREAM_NO_CHUNKS

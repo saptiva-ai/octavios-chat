@@ -86,6 +86,17 @@ class ExcelAnalyzerTool(Tool):
         elif str(doc.user_id) != str(user_id):
             raise PermissionError(f"User {user_id} not authorized to analyze document {doc_id}")
 
+        # Database Latency Handling:
+        # We trust user ownership over conversation consistency due to eventual consistency.
+        session_id = context.get("session_id") if context else None
+        if session_id and doc.conversation_id and str(doc.conversation_id) != str(session_id):
+            logger.warning(
+                "ExcelAnalyzer: Database latency detected - conversation_id mismatch (allowing access)",
+                doc_id=doc_id,
+                doc_conversation_id=str(doc.conversation_id),
+                current_session_id=str(session_id)
+            )
+
         if doc.content_type not in [
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             "application/vnd.ms-excel",
