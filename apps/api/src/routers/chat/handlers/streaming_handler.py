@@ -524,6 +524,7 @@ class StreamingHandler:
 
         accumulated_content = []
         last_job_id = None  # Track job_id from validation_complete event
+        validation_complete_event = None  # Capture full audit report
 
         try:
             # Stream validation progress
@@ -570,7 +571,8 @@ class StreamingHandler:
                     accumulated_content.append(content)
 
                 elif event_type == "validation_complete":
-                    # Capture job_id for metadata
+                    # Capture full audit report for artifact
+                    validation_complete_event = audit_event
                     last_job_id = audit_event.get("job_id")
 
                     summary = audit_event.get("summary", {})
@@ -616,15 +618,40 @@ class StreamingHandler:
                 }
             )
 
+            # Build audit artifact from validation_complete event
+            audit_artifact = None
+            if validation_complete_event:
+                audit_artifact = {
+                    "type": "audit_report_ui",
+                    "metadata": {
+                        "display_name": document.filename,
+                        "filename": document.filename,
+                    },
+                    "stats": {
+                        "critical": validation_complete_event.get("summary", {}).get("findings_by_severity", {}).get("critical", 0),
+                        "high": validation_complete_event.get("summary", {}).get("findings_by_severity", {}).get("high", 0),
+                        "medium": validation_complete_event.get("summary", {}).get("findings_by_severity", {}).get("medium", 0),
+                        "low": validation_complete_event.get("summary", {}).get("findings_by_severity", {}).get("low", 0),
+                        "total": validation_complete_event.get("summary", {}).get("total_findings", 0),
+                    },
+                    "payload": validation_complete_event,
+                }
+
             # Yield done event
+            done_data = {
+                "message_id": str(assistant_message.id),
+                "content": full_content,
+                "model": context.model,
+                "chat_id": str(chat_session.id),
+            }
+
+            # Include artifact if audit completed successfully
+            if audit_artifact:
+                done_data["artifact"] = audit_artifact
+
             yield {
                 "event": "done",
-                "data": json.dumps({
-                    "message_id": str(assistant_message.id),
-                    "content": full_content,
-                    "model": context.model,
-                    "chat_id": str(chat_session.id),
-                })
+                "data": json.dumps(done_data)
             }
 
         except Exception as exc:

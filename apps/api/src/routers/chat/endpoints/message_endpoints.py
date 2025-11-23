@@ -99,24 +99,26 @@ async def send_chat_message(
     # )
 
     if getattr(request, 'stream', False):
-        if has_documents or is_audit_command:
-            # Force non-streaming for document-based queries or audit commands
+        if has_documents:
+            # Force non-streaming for document-based queries
+            # (until Qdrant RAG streaming is fully operational)
             logger.info(
                 "Forcing non-streaming mode",
-                reason="attached_documents" if has_documents else "audit_command",
-                file_ids=request.file_ids if has_documents else [],
-                message_preview=request.message[:50] if is_audit_command else None,
+                reason="attached_documents",
+                file_ids=request.file_ids,
                 user_id=user_id
             )
             request.stream = False
+
+        # Check Accept header for SSE streaming (applies to audit AND regular messages)
+        accept_header = http_request.headers.get("accept", "")
+        if "text/event-stream" in accept_header:
+            streaming_handler = StreamingHandler(settings)
+            return EventSourceResponse(
+                streaming_handler.handle_stream(request, user_id, background_tasks),
+                media_type="text/event-stream"
+            )
         else:
-            accept_header = http_request.headers.get("accept", "")
-            if "text/event-stream" in accept_header:
-                streaming_handler = StreamingHandler(settings)
-                return EventSourceResponse(
-                    streaming_handler.handle_stream(request, user_id, background_tasks),
-                    media_type="text/event-stream"
-                )
             # If the client did not request SSE, fall back to non-streaming JSON
             request.stream = False
 
