@@ -114,6 +114,15 @@ export function AuditDetailView({ report, className }: AuditDetailViewProps) {
     }
   };
 
+  // Defensive: ensure stats exist with default values
+  const stats = report.stats || {
+    critical: 0,
+    high: 0,
+    medium: 0,
+    low: 0,
+    total: 0,
+  };
+
   return (
     <div
       className={cn(
@@ -135,10 +144,10 @@ export function AuditDetailView({ report, className }: AuditDetailViewProps) {
 
       <section>
         <DonutChart
-          critical={report.stats.critical}
-          high={report.stats.high}
-          medium={report.stats.medium}
-          low={report.stats.low}
+          critical={stats.critical}
+          high={stats.high}
+          medium={stats.medium}
+          low={stats.low}
         />
       </section>
 
