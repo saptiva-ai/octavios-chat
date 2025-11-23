@@ -66,7 +66,12 @@ export function useFiles(
   hasMessages?: boolean,
 ): UseFilesReturn {
   const apiClient = useApiClient();
-  const filesStore = useFilesStore();
+
+  // MVP-LOCK: Use selectors to prevent unnecessary re-renders
+  const byChat = useFilesStore((state) => state.byChat);
+  const addToChat = useFilesStore((state) => state.addToChat);
+  const removeFromChat = useFilesStore((state) => state.removeFromChat);
+  const clearForChat = useFilesStore((state) => state.clearForChat);
 
   // Use "draft" as fallback when no chatId is provided
   const effectiveChatId = chatId || "draft";
@@ -84,60 +89,32 @@ export function useFiles(
     filename: string;
   } | null>(null);
 
-  // MVP-LOCK: Initialize attachments from persistent store
-  const [attachments, setAttachments] = useState<FileAttachment[]>([]);
+  // MVP-LOCK: Select attachments directly from store
+  const storedAttachments = byChat[effectiveChatId] ?? [];
+
+  // MVP-LOCK: Firewall logic to prevent historical files from appearing in composer
+  const attachments = useMemo(() => {
+    // 🛡️ FIREWALL DE HISTORIAL: Detectar si es un chat existente (histórico) CON mensajes
+    const isExistingChat =
+      effectiveChatId &&
+      effectiveChatId !== "draft" &&
+      !effectiveChatId.startsWith("temp-") &&
+      !effectiveChatId.startsWith("creating") &&
+      hasMessages === true;
+
+    if (isExistingChat) {
+      return []; // 🚫 Empty input for existing chats
+    }
+
+    return storedAttachments;
+  }, [effectiveChatId, hasMessages, storedAttachments]);
+
   const lastReadyFile = useMemo(() => {
     const ready = attachments.filter(
       (attachment) => attachment.status === "READY",
     );
     return ready.length > 0 ? ready[ready.length - 1] : null;
   }, [attachments]);
-
-  // MVP-LOCK: Initialize and sync with persistent store when chatId changes
-  useEffect(() => {
-    // 🛡️ FIREWALL DE HISTORIAL: Detectar si es un chat existente (histórico) CON mensajes
-    // Los chats históricos NO deben pre-cargar archivos en el input del compositor.
-    // Los archivos ya enviados deben verse en el historial de mensajes, no en el input.
-    const isExistingChat =
-      effectiveChatId &&
-      effectiveChatId !== "draft" &&
-      !effectiveChatId.startsWith("temp-") &&
-      !effectiveChatId.startsWith("creating") &&
-      hasMessages === true; // ← CLAVE: solo bloquear si tiene mensajes
-
-    if (isExistingChat) {
-      logDebug(
-        "[useFiles] 🛡️ FIREWALL: Existing chat with messages detected. Blocking attachment restoration.",
-        {
-          chatId: effectiveChatId,
-          hasMessages,
-          reason:
-            "Historical chats should not pre-populate the input composer with old files",
-          hint: "Files from history are visible in message list, not in the input area",
-        },
-      );
-
-      // Asegurar que el input esté limpio para chats históricos
-      setAttachments([]);
-      return; // 🚫 Early exit: NO cargar archivos del store para chats existentes
-    }
-
-    // ✅ Cargar archivos para: draft, temp-, creating, o chats nuevos sin mensajes
-    const storedAttachments = filesStore.getForChat(effectiveChatId);
-    setAttachments(storedAttachments);
-
-    logDebug("[useFiles] 📂 Loaded attachments from store", {
-      chatId: effectiveChatId,
-      count: storedAttachments.length,
-      hasMessages: hasMessages || false,
-      isDraft: effectiveChatId === "draft",
-      files: storedAttachments.map((f) => ({
-        file_id: f.file_id,
-        filename: f.filename,
-        status: f.status,
-      })),
-    });
-  }, [effectiveChatId, filesStore, hasMessages]);
 
   // Cleanup SSE connection on unmount
   useEffect(() => {
@@ -159,27 +136,25 @@ export function useFiles(
   // MVP-LOCK: Sync with persistent store
   const addAttachment = useCallback(
     (attachment: FileAttachment) => {
-      setAttachments((prev) => [...prev, attachment]);
-      filesStore.addToChat(effectiveChatId, attachment);
+      addToChat(effectiveChatId, attachment);
       logDebug("[useFiles] Added attachment to store", {
         chatId: effectiveChatId,
         file_id: attachment.file_id,
       });
     },
-    [effectiveChatId, filesStore],
+    [effectiveChatId, addToChat],
   );
 
   // MVP-LOCK: Sync with persistent store
   const removeAttachment = useCallback(
     (fileId: string) => {
-      setAttachments((prev) => prev.filter((a) => a.file_id !== fileId));
-      filesStore.removeFromChat(effectiveChatId, fileId);
+      removeFromChat(effectiveChatId, fileId);
       logDebug("[useFiles] Removed attachment from store", {
         chatId: effectiveChatId,
         file_id: fileId,
       });
     },
-    [effectiveChatId, filesStore],
+    [effectiveChatId, removeFromChat],
   );
 
   // MVP-LOCK: Sync with persistent store
@@ -196,16 +171,13 @@ export function useFiles(
         chatIdType: targetChatId === "draft" ? "draft" : "uuid",
       });
 
-      // Clear React state
-      setAttachments([]);
-
       // Clear from Zustand store (will auto-persist to localStorage)
-      filesStore.clearForChat(targetChatId);
+      clearForChat(targetChatId);
 
       // Also clear "draft" if we're clearing a real chat ID
       // This prevents orphaned attachments when transitioning draft → UUID
       if (targetChatId !== "draft") {
-        filesStore.clearForChat("draft");
+        clearForChat("draft");
         logDebug("[useFiles] Also cleared draft attachments", {
           primaryChatId: targetChatId,
         });
@@ -213,10 +185,9 @@ export function useFiles(
 
       logDebug("[useFiles] ✅ Cleared attachments from store", {
         clearedChatId: targetChatId,
-        remainingInStore: filesStore.getForChat(targetChatId).length,
       });
     },
-    [effectiveChatId, filesStore, attachments],
+    [effectiveChatId, clearForChat, attachments],
   );
 
   /**
@@ -350,8 +321,8 @@ export function useFiles(
             const targetChatId = conversationId || effectiveChatId;
 
             // Remove old PROCESSING attachment and add READY one
-            filesStore.removeFromChat(targetChatId, fileId);
-            filesStore.addToChat(targetChatId, attachment);
+            removeFromChat(targetChatId, fileId);
+            addToChat(targetChatId, attachment);
 
             logDebug("[useFiles] File ready, updated in store", {
               chatId: targetChatId,
@@ -433,7 +404,7 @@ export function useFiles(
         setError("⚠️ Error al conectar para actualizaciones de progreso");
       }
     },
-    [effectiveChatId, filesStore, apiClient],
+    [effectiveChatId, addToChat, removeFromChat, apiClient],
   );
 
   /**
@@ -484,7 +455,7 @@ export function useFiles(
       };
 
       // Add to store IMMEDIATELY - user sees thumbnail instantly
-      filesStore.addToChat(targetChatId, tempAttachment);
+      addToChat(targetChatId, tempAttachment);
 
       logDebug("[useFiles] Added temporary attachment to store BEFORE fetch", {
         chatId: targetChatId,
@@ -598,7 +569,7 @@ export function useFiles(
         });
 
         // Remove temporary attachment and add real one with server-assigned file_id
-        filesStore.removeFromChat(targetChatId, tempFileId);
+        removeFromChat(targetChatId, tempFileId);
 
         logDebug(
           "[useFiles] Removed temporary attachment after server response",
@@ -626,7 +597,7 @@ export function useFiles(
             mimetype: ingestResponse.mimetype,
           };
 
-          filesStore.addToChat(targetChatId, attachment);
+          addToChat(targetChatId, attachment);
 
           logDebug("[useFiles] File immediately ready (cached)", {
             chatId: targetChatId,
@@ -661,7 +632,7 @@ export function useFiles(
         };
 
         // Add real attachment (temp already removed above)
-        filesStore.addToChat(targetChatId, processingAttachment);
+        addToChat(targetChatId, processingAttachment);
 
         logDebug("[useFiles] Added real processing attachment to store", {
           chatId: targetChatId,
@@ -682,7 +653,7 @@ export function useFiles(
         setError(errorMessage);
 
         // Remove temporary attachment on error
-        filesStore.removeFromChat(targetChatId, tempFileId);
+        removeFromChat(targetChatId, tempFileId);
 
         logError("[useFiles] Upload failed, removed temporary attachment", {
           filename: file.name,
@@ -700,7 +671,8 @@ export function useFiles(
       apiClient,
       checkClientRateLimit,
       trackUpload,
-      filesStore,
+      addToChat,
+      removeFromChat,
       effectiveChatId,
       connectToSSE,
     ],

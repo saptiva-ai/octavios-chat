@@ -94,6 +94,145 @@ class SessionContextManager:
         )
 
     @staticmethod
+    async def adopt_orphaned_files(
+        file_ids: List[str],
+        session_id: str,
+        user_id: str
+    ) -> int:
+        """
+        Adopt orphaned files by linking them to the new session (AGGRESSIVE UPDATE).
+
+        This handles the case where files were uploaded before the session
+        was created (e.g., in a "phantom chat" with temporary UUID or draft mode).
+
+        CRITICAL: This method uses AGGRESSIVE ADOPTION strategy:
+        - Files are adopted based ONLY on file_id + user_id match
+        - Ignores existing conversation_id (could be phantom UUID, None, or other)
+        - This is safe because we validate ownership before update
+
+        Args:
+            file_ids: List of file IDs to adopt
+            session_id: New session ID to link files to
+            user_id: User ID for ownership validation
+
+        Returns:
+            Number of files successfully adopted
+        """
+        if not file_ids:
+            return 0
+
+        from ..models.document import Document
+        from bson import ObjectId
+
+        # Convert file_ids to ObjectId for MongoDB query
+        try:
+            object_ids = [ObjectId(fid) for fid in file_ids]
+        except Exception as e:
+            logger.error(
+                "Failed to convert file_ids to ObjectId",
+                file_ids=file_ids,
+                error=str(e)
+            )
+            return 0
+
+        # 🚨 AGGRESSIVE ADOPTION QUERY
+        # Filter ONLY by file_id + user_id (security)
+        # DO NOT filter by conversation_id (it could be phantom UUID)
+        query = {
+            "_id": {"$in": object_ids},
+            "user_id": user_id
+        }
+
+        update = {
+            "$set": {
+                "conversation_id": session_id,
+                "updated_at": datetime.utcnow()
+            }
+        }
+
+        try:
+            # Execute bulk update (much faster than one-by-one)
+            # ✅ FIX: Use Beanie's get_motor_collection() method
+            # This is the correct way to access the underlying Motor collection
+            collection = await Document.get_motor_collection()
+
+            result = await collection.update_many(
+                query,
+                update
+            )
+
+            adopted_count = result.modified_count
+
+            logger.info(
+                "🔒 [AGGRESSIVE ADOPTION] Files adopted with bulk update",
+                session_id=session_id,
+                matched_count=result.matched_count,
+                modified_count=result.modified_count,
+                total_requested=len(file_ids),
+                file_ids=file_ids
+            )
+
+            # Verify adoption succeeded for critical files
+            if result.matched_count < len(file_ids):
+                logger.warning(
+                    "⚠️ Some files not found or ownership mismatch",
+                    requested=len(file_ids),
+                    matched=result.matched_count,
+                    missing_count=len(file_ids) - result.matched_count
+                )
+
+            # Log individual file statuses for debugging
+            for file_id in file_ids:
+                try:
+                    doc = await Document.get(file_id)
+                    if doc:
+                        if str(doc.user_id) != user_id:
+                            logger.warning(
+                                "File adoption skipped: ownership mismatch",
+                                file_id=file_id,
+                                expected_user=user_id,
+                                actual_user=str(doc.user_id)
+                            )
+                        elif doc.conversation_id == session_id:
+                            logger.info(
+                                "🔒 File adoption verified",
+                                file_id=file_id,
+                                session_id=session_id,
+                                filename=doc.filename
+                            )
+                        else:
+                            logger.error(
+                                "🚨 File adoption FAILED verification",
+                                file_id=file_id,
+                                expected_conversation_id=session_id,
+                                actual_conversation_id=doc.conversation_id
+                            )
+                    else:
+                        logger.warning(
+                            "File not found during verification",
+                            file_id=file_id
+                        )
+                except Exception as e:
+                    logger.warning(
+                        "File verification error",
+                        file_id=file_id,
+                        error=str(e)
+                    )
+
+            return adopted_count
+
+        except Exception as e:
+            logger.error(
+                "Bulk file adoption failed",
+                session_id=session_id,
+                file_ids=file_ids,
+                error=str(e),
+                exc_type=type(e).__name__,
+                exc_info=True
+            )
+            return 0
+
+    @staticmethod
     async def update_session_files(
         chat_session: ChatSessionModel,
         new_file_ids: List[str],
@@ -143,10 +282,11 @@ class SessionContextManager:
 
         This method:
         1. Normalizes request file IDs
-        2. Determines current files (request vs session)
-        3. Waits for documents to be ready
-        4. Updates session if files changed
-        5. Logs context for observability
+        2. **IMMEDIATELY adopts orphaned files** (CRITICAL for race condition prevention)
+        3. Determines current files (request vs session)
+        4. Waits for documents to be ready
+        5. Updates session if files changed
+        6. Logs context for observability
 
         Args:
             chat_session: ChatSession model instance
@@ -163,18 +303,41 @@ class SessionContextManager:
             request_file_ids
         )
 
-        # 2. Get session files
+        # 2. 🚨 CRITICAL: Adopt orphaned files IMMEDIATELY
+        # This MUST happen BEFORE any tool invocation to prevent race condition
+        # Files uploaded before session creation need conversation_id set NOW
+        if normalized_request_files and chat_session.id:
+            logger.info(
+                "🔒 [RACE CONDITION FIX] Adopting orphaned files IMMEDIATELY",
+                session_id=str(chat_session.id),
+                file_count=len(normalized_request_files),
+                nonce=request_id[:8]
+            )
+            adopted_count = await SessionContextManager.adopt_orphaned_files(
+                file_ids=normalized_request_files,
+                session_id=str(chat_session.id),
+                user_id=user_id
+            )
+            logger.info(
+                "🔒 [RACE CONDITION FIX] File adoption completed",
+                session_id=str(chat_session.id),
+                adopted_count=adopted_count,
+                total_files=len(normalized_request_files),
+                nonce=request_id[:8]
+            )
+
+        # 3. Get session files
         session_file_ids = list(
             getattr(chat_session, 'attached_file_ids', []) or []
         )
 
-        # 3. Determine current files
+        # 4. Determine current files
         current_file_ids = SessionContextManager.determine_current_files(
             normalized_request_files,
             session_file_ids
         )
 
-        # 4. Log for observability
+        # 5. Log for observability
         logger.info(
             "Session context prepared",
             request_file_ids_count=len(normalized_request_files),
@@ -184,14 +347,14 @@ class SessionContextManager:
             nonce=request_id[:8]
         )
 
-        # 5. Wait for documents to be ready
+        # 6. Wait for documents to be ready
         await SessionContextManager.wait_for_files_ready(
             current_file_ids,
             user_id,
             redis_cache
         )
 
-        # 6. Update session if files changed
+        # 7. Update session if files changed
         await SessionContextManager.update_session_files(
             chat_session,
             normalized_request_files,

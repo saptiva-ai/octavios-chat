@@ -25,12 +25,13 @@ from sse_starlette.sse import EventSourceResponse
 from ....core.config import get_settings, Settings
 from ....core.redis_cache import get_redis_cache
 from ....core.telemetry import trace_span, increment_llm_timeout
-from ....core.constants import AUDIT_COMMAND_PREFIX
+from ....core.constants import AUDIT_COMMAND_PREFIX, TOOL_NAME_AUDIT
 from ....schemas.chat import ChatRequest, ChatResponse
 from ....schemas.common import ApiResponse
 from ....services.chat_service import ChatService
 from ....services.chat_helpers import build_chat_context
 from ....services.tool_execution_service import ToolExecutionService
+from ....services.session_context_manager import SessionContextManager
 from ....domain import ChatContext, ChatResponseBuilder
 from ....domain.message_handlers import create_handler_chain
 from ..handlers import StreamingHandler
@@ -78,6 +79,14 @@ async def send_chat_message(
 
     # Check if message is an audit command
     is_audit_command = request.message.strip().startswith(AUDIT_COMMAND_PREFIX)
+
+    # AUTO-ENABLE AUDIT TOOL for audit commands
+    # This ensures the tool runs even if the frontend didn't explicitly enable it
+    if is_audit_command:
+        if request.tools_enabled is None:
+            request.tools_enabled = {}
+        request.tools_enabled[TOOL_NAME_AUDIT] = True
+        logger.info(f"Auto-enabled {TOOL_NAME_AUDIT} tool for audit command", user_id=user_id)
 
     # logger.info(
     #     "🔍 [DOCUMENT DEBUG] Checking for documents",
@@ -156,25 +165,45 @@ async def send_chat_message(
             request_id=context.request_id
         )
 
-        # Update context with resolved file IDs
-        if current_file_ids:
-            context = ChatContext(
-                user_id=context.user_id,
-                request_id=context.request_id,
-                timestamp=context.timestamp,
-                chat_id=context.chat_id,
-                session_id=context.session_id,
-                message=context.message,
-                context=context.context,
-                document_ids=current_file_ids,
-                tool_results={},  # Will be populated below
-                model=context.model,
-                tools_enabled=context.tools_enabled,
-                stream=context.stream,
-                temperature=context.temperature,
-                max_tokens=context.max_tokens,
-                kill_switch_active=context.kill_switch_active
+        # 🚨 CRITICAL FIX: Prevent Stale Read after file adoption
+        # Even though we just adopted files and committed to DB, MongoDB read replicas
+        # may not reflect the write yet (eventual consistency).
+        # SOLUTION: Use request_file_ids directly (in-memory) instead of trusting DB
+        effective_document_ids = current_file_ids  # Start with what DB says
+
+        if request_file_ids and len(request_file_ids) > 0:
+            # FORCE MERGE: Ensure files from request are ALWAYS in context
+            # This bypasses DB latency/stale reads
+            effective_document_ids = list(set(effective_document_ids + request_file_ids))
+
+            logger.info(
+                "🔒 [STALE READ FIX] Using request file_ids directly in context",
+                request_file_ids=request_file_ids,
+                db_file_ids=current_file_ids,
+                effective_file_ids=effective_document_ids,
+                nonce=context.request_id[:8]
             )
+
+        # Update context with resolved file IDs
+        # BUGFIX: Always update context, even if current_file_ids is empty list
+        # Empty list [] is falsy in Python, which prevented context update
+        context = ChatContext(
+            user_id=context.user_id,
+            request_id=context.request_id,
+            timestamp=context.timestamp,
+            chat_id=context.chat_id,
+            session_id=context.session_id,
+            message=context.message,
+            context=context.context,
+            document_ids=effective_document_ids,  # ✅ USE IN-MEMORY FORCED LIST
+            tool_results={},  # Will be populated below
+            model=context.model,
+            tools_enabled=context.tools_enabled,
+            stream=context.stream,
+            temperature=context.temperature,
+            max_tokens=context.max_tokens,
+            kill_switch_active=context.kill_switch_active
+        )
 
         # 4.5. Invoke MCP tools before LLM (NEW: Phase 2 MCP integration)
         tool_results = await ToolExecutionService.invoke_relevant_tools(context, user_id)
@@ -205,8 +234,8 @@ async def send_chat_message(
 
         # 5. Add user message
         user_message_metadata = request.metadata.copy() if request.metadata else {}
-        if current_file_ids:
-            user_message_metadata["file_ids"] = current_file_ids
+        if effective_document_ids:
+            user_message_metadata["file_ids"] = effective_document_ids
 
         user_message = await chat_service.add_user_message(
             chat_session=chat_session,
@@ -222,7 +251,7 @@ async def send_chat_message(
             user_id=user_id,
             chat_session=chat_session,
             user_message=user_message,
-            current_file_ids=current_file_ids
+            current_file_ids=effective_document_ids  # ✅ Use in-memory forced list
         )
 
         if handler_result:
@@ -239,11 +268,22 @@ async def send_chat_message(
             decision_metadata = handler_result.metadata.decision_metadata if handler_result.metadata else None
             tool_invocations = decision_metadata.get("tool_invocations", []) if decision_metadata else []
 
+            # Extract validation_report_id from tool results if present
+            validation_report_id = None
+            if tool_results:
+                for key, result in tool_results.items():
+                    # Check for audit_file result
+                    if "audit_file" in key and isinstance(result, dict):
+                        validation_report_id = result.get("validation_report_id")
+                        if validation_report_id:
+                            break
+
             logger.info(
                 "🔍 DEBUG: About to save assistant message with metadata",
                 decision_metadata=decision_metadata,
                 tool_invocations=tool_invocations,
-                has_tool_invocations=len(tool_invocations) > 0
+                has_tool_invocations=len(tool_invocations) > 0,
+                validation_report_id=validation_report_id
             )
 
             assistant_message = await chat_service.add_assistant_message(
@@ -255,7 +295,8 @@ async def send_chat_message(
                     "processing_time_ms": handler_result.processing_time_ms,
                     "tokens_used": handler_result.metadata.tokens_used if handler_result.metadata else None,
                     "decision_metadata": decision_metadata,
-                    "tool_invocations": tool_invocations  # Add tool_invocations at top level for frontend
+                    "tool_invocations": tool_invocations,  # Add tool_invocations at top level for frontend
+                    "validation_report_id": validation_report_id  # Inject validation_report_id for UI card
                 }
             )
 

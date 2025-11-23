@@ -17,6 +17,7 @@ import type {
 import type { ToolInvocation } from "@/lib/types";
 import type { FileAttachment } from "../../types/files";
 import { ArtifactCard } from "./artifact-card";
+import { parseToolCalls } from "../../lib/tool-parser";
 
 export interface ChatMessageProps {
   id?: string;
@@ -98,9 +99,17 @@ export function ChatMessage({
   const isSystem = role === "system";
   const isAssistant = role === "assistant";
 
-  const toolInvocations = Array.isArray((metadata as any)?.tool_invocations)
-    ? ((metadata as any).tool_invocations as ToolInvocation[])
-    : [];
+  // Parse inline tool calls from content
+  const { content: displayContent, toolInvocations: inlineToolInvocations } =
+    React.useMemo(() => parseToolCalls(content), [content]);
+
+  const toolInvocations = React.useMemo(() => {
+    const metadataTools = Array.isArray((metadata as any)?.tool_invocations)
+      ? ((metadata as any).tool_invocations as ToolInvocation[])
+      : [];
+    return [...metadataTools, ...inlineToolInvocations];
+  }, [metadata, inlineToolInvocations]);
+
   const artifactInvocations = toolInvocations.filter(
     (inv) =>
       inv &&
@@ -146,10 +155,10 @@ export function ChatMessage({
     metadata.validation_report_id;
 
   const handleCopy = async () => {
-    const success = await copyToClipboard(content);
+    const success = await copyToClipboard(displayContent);
     if (success) {
       setCopied(true);
-      onCopy?.(content);
+      onCopy?.(displayContent);
       setTimeout(() => setCopied(false), 2000);
     }
   };
@@ -179,7 +188,7 @@ export function ChatMessage({
     return (
       <div className="flex justify-center my-4">
         <div className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-sm">
-          {content}
+          {displayContent}
         </div>
       </div>
     );
@@ -274,12 +283,12 @@ export function ChatMessage({
           >
             {isAssistant ? (
               <StreamingMessage
-                content={content}
+                content={displayContent}
                 isStreaming={isStreaming}
                 isComplete={status === "delivered"}
               />
             ) : (
-              content
+              displayContent
             )}
           </div>
         </div>
@@ -458,7 +467,7 @@ export function ChatMessage({
                 variant="ghost"
                 size="sm"
                 onClick={() =>
-                  onViewReport(task_id, content.slice(0, 50) + "...")
+                  onViewReport(task_id, displayContent.slice(0, 50) + "...")
                 }
                 className="px-2 text-xs font-bold uppercase tracking-wide text-saptiva-light/60 hover:text-saptiva-mint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-1 focus-visible:ring-offset-surface"
                 aria-label={`Ver reporte de investigación: ${metadata?.research_task?.status}`}

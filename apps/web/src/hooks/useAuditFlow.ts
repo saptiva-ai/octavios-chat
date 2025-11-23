@@ -113,35 +113,33 @@ export function useAuditFlow(options: UseAuditFlowOptions) {
               await onSubmit();
               logDebug("[useAuditFlow] Audit triggered successfully");
 
-              // 🔧 FIX: Clear files IMMEDIATELY after successful submit with EXPLICIT chatId
-              // Pass conversationId explicitly to avoid stale closure issues
-              logDebug(
-                "[useAuditFlow] Clearing files after successful audit submit",
-                {
-                  conversationId,
-                },
-              );
-              if (clearFiles) {
-                clearFiles(conversationId);
-                logDebug(
-                  "[useAuditFlow] ✅ Files cleared successfully after audit",
-                );
-              }
+              // ⚠️ REGRESSION FIX: DO NOT clear files here!
+              // The cleanup happens in sendStandardMessage AFTER the payload is sent.
+              // Clearing here empties the store BEFORE the payload reads filesV1Attachments,
+              // causing "📄 Documentos no encontrados" error.
+              //
+              // File cleanup sequence (CORRECT):
+              // 1. onSubmit() → directSubmitForAudit → onSendMessageDirect → sendStandardMessage
+              // 2. sendStandardMessage reads filesV1Attachments from store (line 573 ChatView.tsx)
+              // 3. sendStandardMessage builds payload with file_ids
+              // 4. sendStandardMessage clears files AFTER receiving response (line 857 ChatView.tsx)
+              //
+              // REMOVED CODE:
+              // if (clearFiles) {
+              //   clearFiles(conversationId);
+              // }
 
               resolve();
             } catch (err) {
               logError("[useAuditFlow] Submit failed", { error: err });
 
-              // Even on error, try to clear files to avoid stuck state
-              if (clearFiles) {
-                logDebug(
-                  "[useAuditFlow] Clearing files after error (cleanup)",
-                  {
-                    conversationId,
-                  },
-                );
-                clearFiles(conversationId);
-              }
+              // ⚠️ REGRESSION FIX: DO NOT clear files on error either!
+              // Let the error handler in sendStandardMessage handle cleanup (line 1012 ChatView.tsx)
+              //
+              // REMOVED CODE:
+              // if (clearFiles) {
+              //   clearFiles(conversationId);
+              // }
 
               resolve();
             }

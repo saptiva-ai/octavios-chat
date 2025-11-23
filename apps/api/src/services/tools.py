@@ -456,11 +456,13 @@ DEFAULT_AVAILABLE_TOOLS = {
 def normalize_tools_state(tools: Optional[Dict[str, Any]]) -> Dict[str, bool]:
     """Normalize raw tools-enabled mapping to boolean map with defaults."""
 
+    # Default map from known tools
     normalized: Dict[str, bool] = {name: False for name in DEFAULT_AVAILABLE_TOOLS.keys()}
 
     if tools:
         for name, value in tools.items():
             try:
+                # Allow any tool name, not just defaults (supports dynamic/new tools)
                 normalized[name] = bool(value)
             except Exception:
                 normalized[name] = False

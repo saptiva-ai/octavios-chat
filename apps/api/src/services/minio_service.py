@@ -148,6 +148,44 @@ class MinIOService:
             logger.error(f"MinIO download to path failed", error=str(e), bucket=bucket, key=object_name)
             raise
 
+    def materialize_document(self, object_name: str, filename: Optional[str] = None) -> tuple[str, bool]:
+        """
+        Download document to a temporary file path.
+        
+        Args:
+            object_name: MinIO object key
+            filename: Original filename (optional)
+            
+        Returns:
+            Tuple of (file_path, is_temp)
+            - file_path: Path to the materialized file
+            - is_temp: True if file should be deleted after use
+        """
+        import tempfile
+        from pathlib import Path
+        
+        suffix = Path(filename).suffix if filename else ""
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
+            tmp_path = tmp_file.name
+            
+        try:
+            # Try downloading from temp-files bucket first (most common for new uploads)
+            try:
+                self.client.fget_object(self.temp_files_bucket, object_name, tmp_path)
+                logger.info(f"Materialized document from {self.temp_files_bucket}", key=object_name, path=tmp_path)
+                return Path(tmp_path), True
+            except S3Error:
+                # Fallback to documents bucket
+                self.client.fget_object(self.documents_bucket, object_name, tmp_path)
+                logger.info(f"Materialized document from {self.documents_bucket}", key=object_name, path=tmp_path)
+                return Path(tmp_path), True
+                
+        except Exception as e:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            logger.error(f"Failed to materialize document", error=str(e), key=object_name)
+            raise
+
     def get_presigned_url(
         self,
         bucket: str,

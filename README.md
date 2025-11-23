@@ -282,9 +282,15 @@ Arquitectura reactiva moderna con React Query + Zustand, optimistic updates, y e
 
 **Stack**:
 - **React Query**: Server state management (caching, deduplicación, SWR)
-- **Zustand**: UI state (streaming, optimistic updates)
+- **Zustand**: UI state (streaming, optimistic updates) con selectores para evitar re-renders innecesarios (`useFilesStore`).
 - **Pure Functions**: Business logic (file-policies.ts)
 - **TypeScript**: Type safety end-to-end
+
+**Capacidades Optimistas**:
+- **Mensajes inmediatos**: Latencia <10ms al enviar.
+- **Archivos enriquecidos**: Previsualización instantánea con metadatos completos (nombre, tamaño, tipo) sin estado "loading".
+- **Herramientas**: Indicadores de herramientas activas visibles inmediatamente en el mensaje optimista.
+- **Status Tracking**: Feedback visual de estado "sending" sincronizado automáticamente.
 
 **Arquitectura Reactiva**:
 
@@ -379,7 +385,8 @@ flowchart TB
 1. **App Router (Next.js 14)**: Enrutamiento con Server Components, rutas dinámicas para chat, páginas de auth y proxies API que reescriben a backend.
 
 2. **Chat Interface**:
-   - **ChatView** orquesta toda la UI con handler SSE integrado
+   - **ChatView** orquesta toda la UI con handler SSE integrado y limpieza agresiva de adjuntos.
+   - **Logic**: Manejo robusto de estados de carga para chats borradores (`draft`) y temporales, evitando bloqueos de UI.
    - **Message Display**: ChatMessage con thumbnails/audit, StreamingMessage con typing real-time, FileReviewMessage y MessageAuditCard para COPILOTO_414
    - **Message Input**: CompactChatComposer con auto-submit para auditoría, PreviewAttachment con botón de audit, ThumbnailImage con fetch autenticado
    - **Content Display**: MarkdownMessage con syntax highlighting y CodeBlock con detección de lenguaje
@@ -669,6 +676,7 @@ Ejecuta health checks de contenedores, API, DB y frontend.
 4. **Extracción on-demand**: herramienta `extract_document_text` aplica el fallback pypdf → SDK → OCR antes de responder (`apps/api/src/mcp/server.py`).
 5. **Auditoría COPILOTO_414**: coordinador ejecuta auditores paralelos y agrupa hallazgos/políticas (`apps/api/src/services/validation_coordinator.py`).
 6. **Revisión visual**: panel de resultados usa pestañas, badges y MCC toggles (`apps/web/src/components/document-review/ResultTabs.tsx`).
+7. **Limpieza**: `ChatView` aplica una limpieza agresiva de adjuntos tras la respuesta exitosa, asegurando que no queden archivos huérfanos en la UI (`useFiles` con selectores).
 
 > **Nota RAG**: la versión actual no usa base de datos vectorial; el contexto se arma con texto cacheado en Redis (1 h) y truncado por presupuesto de tokens antes de llegar al LLM. El diseño para Pinecone/pgvector vive en `docs/architecture/pdf-rag-flow.md` para una futura iteración.
 

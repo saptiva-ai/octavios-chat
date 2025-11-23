@@ -231,7 +231,7 @@ async def validate_document(
         )
 
     # ========================================================================
-    # 3. Run auditors
+    # 3. Run auditors (Parallel Execution)
     # ========================================================================
 
     all_findings: List[Finding] = []
@@ -245,6 +245,9 @@ async def validate_document(
         "typography": None,
         "grammar": None,
         "logo": None,
+        "color_palette": None,
+        "entity_consistency": None,
+        "semantic_consistency": None,
     }
 
     processing_metadata = getattr(document, "processing_metadata", None) or {}
@@ -259,300 +262,152 @@ async def validate_document(
         if processing_warnings:
             summary.setdefault("processing_warnings", []).extend(processing_warnings)
 
-    # ---- Disclaimer Auditor ----
-    if enable_disclaimer:
-        try:
-            logger.info("Running disclaimer auditor", job_id=job_id)
-            disclaimer_start = time.time()
+    # Define auditor wrappers for parallel execution
+    async def run_disclaimer():
+        if enable_disclaimer:
+            try:
+                logger.info("Running disclaimer auditor", job_id=job_id)
+                start = time.time()
+                findings, audit_summary = await audit_disclaimers(
+                    fragments=fragments, client_name=client_name, config=config
+                )
+                return "disclaimer", findings, audit_summary, time.time() - start, None
+            except Exception as e:
+                logger.error("Disclaimer auditor failed", job_id=job_id, error=str(e), exc_info=True)
+                return "disclaimer", [], None, 0, str(e)
+        return "disclaimer", [], None, 0, None
 
-            disclaimer_findings, disclaimer_summary = await audit_disclaimers(
-                fragments=fragments,
-                client_name=client_name,
-                config=config,
-            )
+    async def run_format():
+        if enable_format:
+            try:
+                logger.info("Running format auditor", job_id=job_id)
+                start = time.time()
+                findings, audit_summary = await audit_format(
+                    fragments=fragments, pdf_path=pdf_path, config=config
+                )
+                return "format", findings, audit_summary, time.time() - start, None
+            except Exception as e:
+                logger.error("Format auditor failed", job_id=job_id, error=str(e), exc_info=True)
+                return "format", [], None, 0, str(e)
+        return "format", [], None, 0, None
 
-            disclaimer_duration = time.time() - disclaimer_start
+    async def run_typography():
+        typography_config = config.get("typography", {})
+        if enable_typography and typography_config.get("enabled", True):
+            try:
+                logger.info("Running typography auditor", job_id=job_id)
+                start = time.time()
+                findings, audit_summary = await audit_typography(
+                    fragments=fragments, config=typography_config
+                )
+                return "typography", findings, audit_summary, time.time() - start, None
+            except Exception as e:
+                logger.error("Typography auditor failed", job_id=job_id, error=str(e), exc_info=True)
+                return "typography", [], None, 0, str(e)
+        return "typography", [], None, 0, None
 
-            all_findings.extend(disclaimer_findings)
-            summary["auditors_run"].append("disclaimer")
-            summary["disclaimer"] = disclaimer_summary
-            summary["disclaimer_duration_ms"] = int(disclaimer_duration * 1000)
+    async def run_grammar():
+        if enable_grammar:
+            try:
+                logger.info("Running grammar auditor", job_id=job_id)
+                start = time.time()
+                findings, audit_summary = await audit_grammar(
+                    document=document, config=config
+                )
+                return "grammar", findings, audit_summary, time.time() - start, None
+            except Exception as e:
+                logger.error("Grammar auditor failed", job_id=job_id, error=str(e), exc_info=True)
+                return "grammar", [], None, 0, str(e)
+        return "grammar", [], None, 0, None
 
-            logger.info(
-                "Disclaimer auditor completed",
-                job_id=job_id,
-                findings=len(disclaimer_findings),
-                duration_ms=int(disclaimer_duration * 1000),
-            )
+    async def run_logo():
+        if enable_logo:
+            try:
+                logger.info("Running logo auditor", job_id=job_id)
+                start = time.time()
+                findings, audit_summary = await audit_logo(
+                    pdf_path=pdf_path, config=config, total_pages=document.total_pages
+                )
+                return "logo", findings, audit_summary, time.time() - start, None
+            except Exception as e:
+                logger.error("Logo auditor failed", job_id=job_id, error=str(e), exc_info=True)
+                return "logo", [], None, 0, str(e)
+        return "logo", [], None, 0, None
 
-        except Exception as exc:
-            logger.error(
-                "Disclaimer auditor failed",
-                job_id=job_id,
-                error=str(exc),
-                exc_info=True,
-            )
-            summary["disclaimer_error"] = str(exc)
+    async def run_color_palette():
+        color_config = config.get("color_palette", {})
+        if enable_color_palette and color_config.get("enabled", True):
+            try:
+                logger.info("Running color palette auditor", job_id=job_id)
+                start = time.time()
+                findings, audit_summary = await audit_color_palette(
+                    pdf_path=pdf_path, config=config
+                )
+                return "color_palette", findings, audit_summary, time.time() - start, None
+            except Exception as e:
+                logger.error("Color palette auditor failed", job_id=job_id, error=str(e), exc_info=True)
+                return "color_palette", [], None, 0, str(e)
+        return "color_palette", [], None, 0, None
 
-    # ---- Format Auditor ----
-    if enable_format:
-        try:
-            logger.info("Running format auditor", job_id=job_id)
-            format_start = time.time()
+    async def run_entity_consistency():
+        entity_config = config.get("entity_consistency", {})
+        if enable_entity_consistency and entity_config.get("enabled", True):
+            try:
+                logger.info("Running entity consistency auditor", job_id=job_id)
+                start = time.time()
+                findings, audit_summary = await audit_entity_consistency(
+                    fragments=fragments, config=config
+                )
+                return "entity_consistency", findings, audit_summary, time.time() - start, None
+            except Exception as e:
+                logger.error("Entity consistency auditor failed", job_id=job_id, error=str(e), exc_info=True)
+                return "entity_consistency", [], None, 0, str(e)
+        return "entity_consistency", [], None, 0, None
 
-            format_findings, format_summary = await audit_format(
-                fragments=fragments,
-                pdf_path=pdf_path,
-                config=config,
-            )
+    async def run_semantic_consistency():
+        semantic_config = config.get("semantic_consistency", {})
+        if enable_semantic_consistency and semantic_config.get("enabled", True):
+            try:
+                logger.info("Running semantic consistency auditor", job_id=job_id)
+                start = time.time()
+                findings, audit_summary = await audit_semantic_consistency(
+                    fragments=fragments, config=config
+                )
+                return "semantic_consistency", findings, audit_summary, time.time() - start, None
+            except Exception as e:
+                logger.error("Semantic consistency auditor failed", job_id=job_id, error=str(e), exc_info=True)
+                return "semantic_consistency", [], None, 0, str(e)
+        return "semantic_consistency", [], None, 0, None
 
-            format_duration = time.time() - format_start
-
-            all_findings.extend(format_findings)
-            summary["auditors_run"].append("format")
-            summary["format"] = format_summary
-            summary["format_duration_ms"] = int(format_duration * 1000)
-
-            logger.info(
-                "Format auditor completed",
-                job_id=job_id,
-                findings=len(format_findings),
-                duration_ms=int(format_duration * 1000),
-            )
-
-        except Exception as exc:
-            logger.error(
-                "Format auditor failed",
-                job_id=job_id,
-                error=str(exc),
-                exc_info=True,
-            )
-            summary["format_error"] = str(exc)
-
-    # ---- Typography Auditor ----
-    typography_config = config.get("typography", {})
-    logger.info(
-        "Typography auditor check",
-        job_id=job_id,
-        enable_typography=enable_typography,
-        typography_config=typography_config,
-        enabled_in_config=typography_config.get("enabled", True),
-        will_run=enable_typography and typography_config.get("enabled", True)
+    # Execute all auditors in parallel
+    import asyncio
+    results = await asyncio.gather(
+        run_disclaimer(),
+        run_format(),
+        run_typography(),
+        run_grammar(),
+        run_logo(),
+        run_color_palette(),
+        run_entity_consistency(),
+        run_semantic_consistency()
     )
-    if enable_typography and typography_config.get("enabled", True):
-        try:
-            logger.info("Running typography auditor", job_id=job_id)
-            typography_start = time.time()
 
-            typography_findings, typography_summary = await audit_typography(
-                fragments=fragments,
-                config=typography_config,
-            )
-
-            typography_duration = time.time() - typography_start
-
-            all_findings.extend(typography_findings)
-            summary["auditors_run"].append("typography")
-            summary["typography"] = typography_summary
-            summary["typography_duration_ms"] = int(typography_duration * 1000)
-
+    # Process results
+    for name, findings, audit_summary, duration, error in results:
+        if error:
+            summary[f"{name}_error"] = error
+        elif findings is not None: # Check if auditor ran (findings could be empty list)
+            all_findings.extend(findings)
+            summary["auditors_run"].append(name)
+            summary[name] = audit_summary
+            summary[f"{name}_duration_ms"] = int(duration * 1000)
+            
             logger.info(
-                "Typography auditor completed",
+                f"{name.capitalize()} auditor completed",
                 job_id=job_id,
-                findings=len(typography_findings),
-                duration_ms=int(typography_duration * 1000),
+                findings=len(findings),
+                duration_ms=int(duration * 1000),
             )
-
-        except Exception as exc:
-            logger.error(
-                "Typography auditor failed",
-                job_id=job_id,
-                error=str(exc),
-                exc_info=True,
-            )
-            summary["typography_error"] = str(exc)
-
-    # ---- Grammar Auditor ----
-    if enable_grammar:
-        try:
-            logger.info("Running grammar auditor", job_id=job_id)
-            grammar_start = time.time()
-
-            grammar_findings, grammar_summary = await audit_grammar(
-                document=document,
-                config=config,
-            )
-
-            grammar_duration = time.time() - grammar_start
-
-            all_findings.extend(grammar_findings)
-            summary["auditors_run"].append("grammar")
-            summary["grammar"] = grammar_summary
-            summary["grammar_duration_ms"] = int(grammar_duration * 1000)
-
-            logger.info(
-                "Grammar auditor completed",
-                job_id=job_id,
-                findings=len(grammar_findings),
-                duration_ms=int(grammar_duration * 1000),
-            )
-
-        except Exception as exc:
-            logger.error(
-                "Grammar auditor failed",
-                job_id=job_id,
-                error=str(exc),
-                exc_info=True,
-            )
-            summary["grammar_error"] = str(exc)
-
-    # ---- Logo Auditor ----
-    if enable_logo:
-        try:
-            logger.info("Running logo auditor", job_id=job_id)
-            logo_start = time.time()
-
-            logo_findings, logo_summary = await audit_logo(
-                pdf_path=pdf_path,
-                config=config,
-                total_pages=document.total_pages,
-            )
-
-            logo_duration = time.time() - logo_start
-
-            all_findings.extend(logo_findings)
-            summary["auditors_run"].append("logo")
-            summary["logo"] = logo_summary
-            summary["logo_duration_ms"] = int(logo_duration * 1000)
-
-            logger.info(
-                "Logo auditor completed",
-                job_id=job_id,
-                findings=len(logo_findings),
-                duration_ms=int(logo_duration * 1000),
-            )
-
-        except Exception as exc:
-            logger.error(
-                "Logo auditor failed",
-                job_id=job_id,
-                error=str(exc),
-                exc_info=True,
-            )
-            summary["logo_error"] = str(exc)
-
-    # ---- Color Palette Auditor (Phase 3) ----
-    color_palette_config = config.get("color_palette", {})
-    logger.info(
-        "Color palette auditor check",
-        job_id=job_id,
-        enable_color_palette=enable_color_palette,
-        color_palette_config=color_palette_config,
-        enabled_in_config=color_palette_config.get("enabled", True),
-        will_run=enable_color_palette and color_palette_config.get("enabled", True)
-    )
-    if enable_color_palette and color_palette_config.get("enabled", True):
-        try:
-            logger.info("Running color palette auditor", job_id=job_id)
-            color_palette_start = time.time()
-
-            color_palette_findings, color_palette_summary = await audit_color_palette(
-                pdf_path=pdf_path,
-                config=config,
-            )
-
-            color_palette_duration = time.time() - color_palette_start
-
-            all_findings.extend(color_palette_findings)
-            summary["auditors_run"].append("color_palette")
-            summary["color_palette"] = color_palette_summary
-            summary["color_palette_duration_ms"] = int(color_palette_duration * 1000)
-
-            logger.info(
-                "Color palette auditor completed",
-                job_id=job_id,
-                findings=len(color_palette_findings),
-                duration_ms=int(color_palette_duration * 1000),
-            )
-
-        except Exception as exc:
-            logger.error(
-                "Color palette auditor failed",
-                job_id=job_id,
-                error=str(exc),
-                exc_info=True,
-            )
-            summary["color_palette_error"] = str(exc)
-
-    # ---- Entity Consistency Auditor (Phase 4) ----
-    entity_consistency_config = config.get("entity_consistency", {})
-    if enable_entity_consistency and entity_consistency_config.get("enabled", True):
-        try:
-            logger.info("Running entity consistency auditor", job_id=job_id)
-            entity_consistency_start = time.time()
-
-            entity_consistency_findings, entity_consistency_summary = await audit_entity_consistency(
-                fragments=fragments,
-                config=config,
-            )
-
-            entity_consistency_duration = time.time() - entity_consistency_start
-
-            all_findings.extend(entity_consistency_findings)
-            summary["auditors_run"].append("entity_consistency")
-            summary["entity_consistency"] = entity_consistency_summary
-            summary["entity_consistency_duration_ms"] = int(entity_consistency_duration * 1000)
-
-            logger.info(
-                "Entity consistency auditor completed",
-                job_id=job_id,
-                findings=len(entity_consistency_findings),
-                duration_ms=int(entity_consistency_duration * 1000),
-            )
-
-        except Exception as exc:
-            logger.error(
-                "Entity consistency auditor failed",
-                job_id=job_id,
-                error=str(exc),
-                exc_info=True,
-            )
-            summary["entity_consistency_error"] = str(exc)
-
-    # ---- Semantic Consistency Auditor (Phase 5 - FINAL) ----
-    semantic_consistency_config = config.get("semantic_consistency", {})
-    if enable_semantic_consistency and semantic_consistency_config.get("enabled", True):
-        try:
-            logger.info("Running semantic consistency auditor", job_id=job_id)
-            semantic_consistency_start = time.time()
-
-            semantic_consistency_findings, semantic_consistency_summary = await audit_semantic_consistency(
-                fragments=fragments,
-                config=config,
-            )
-
-            semantic_consistency_duration = time.time() - semantic_consistency_start
-
-            all_findings.extend(semantic_consistency_findings)
-            summary["auditors_run"].append("semantic_consistency")
-            summary["semantic_consistency"] = semantic_consistency_summary
-            summary["semantic_consistency_duration_ms"] = int(semantic_consistency_duration * 1000)
-
-            logger.info(
-                "Semantic consistency auditor completed",
-                job_id=job_id,
-                findings=len(semantic_consistency_findings),
-                duration_ms=int(semantic_consistency_duration * 1000),
-            )
-
-        except Exception as exc:
-            logger.error(
-                "Semantic consistency auditor failed",
-                job_id=job_id,
-                error=str(exc),
-                exc_info=True,
-            )
-            summary["semantic_consistency_error"] = str(exc)
 
     # ========================================================================
     # 4. Aggregate findings and compute metrics

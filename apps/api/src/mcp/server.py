@@ -21,6 +21,7 @@ from ..services.validation_coordinator import validate_document
 from ..services.policy_manager import resolve_policy
 from ..services.minio_storage import get_minio_storage
 from ..models.document import Document
+from ..models.validation_report import ValidationReport
 
 logger = structlog.get_logger(__name__)
 
@@ -113,12 +114,35 @@ async def audit_file(
             policy_name=policy.name,
         )
 
+        # 6. Save Validation Report to DB (CRITICAL for UI persistence)
+        validation_report = ValidationReport(
+            document_id=doc_id,
+            user_id=user_id or doc.user_id,
+            job_id=report.job_id,
+            status="completed" if report.status == "done" else "error",
+            client_name=policy.client_name,
+            auditors_enabled={
+                "disclaimer": enable_disclaimer,
+                "format": enable_format,
+                "logo": enable_logo,
+            },
+            findings=[f.model_dump() for f in report.findings],
+            summary=report.summary,
+            attachments=report.attachments,
+        )
+        await validation_report.insert()
+
+        # Update document reference
+        doc.validation_report_id = str(validation_report.id)
+        await doc.save()
+
         if ctx:
             await ctx.report_progress(1.0, "Validation complete")
 
-        # 6. Format response
+        # 7. Format response
         return {
             "job_id": report.job_id,
+            "validation_report_id": str(validation_report.id),
             "status": report.status,
             "findings": [f.model_dump() for f in report.findings],
             "summary": report.summary,
