@@ -9,6 +9,7 @@ Implements Strategy Pattern to handle:
 
 import os
 import time
+import re
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List
 import structlog
@@ -284,6 +285,7 @@ class SimpleChatStrategy(ChatStrategy):
         audit_result = None
         audit_doc_id = None
         audit_doc_label = None
+        context_doc_id = context.document_ids[0] if context.document_ids else None
         if context.tool_results:
             for k, v in context.tool_results.items():
                 if str(k).startswith("audit_file") and isinstance(v, dict):
@@ -295,6 +297,11 @@ class SimpleChatStrategy(ChatStrategy):
                         or None
                     )
                     break
+
+        def _looks_like_id(val: Optional[str]) -> bool:
+            if not val:
+                return False
+            return bool(re.fullmatch(r"[0-9a-fA-F-]{12,}", str(val).strip()))
 
         if audit_result and isinstance(audit_result, dict):
             summary_raw = audit_result.get("summary")
@@ -315,11 +322,15 @@ class SimpleChatStrategy(ChatStrategy):
                             audit_doc_id = parts[-1]
                         break
 
-            if not audit_doc_label and audit_doc_id:
+            # Try fetch filename from DB if label missing or looks like an ID
+            should_lookup = (not audit_doc_label or _looks_like_id(audit_doc_label)) and (
+                audit_doc_id or context_doc_id
+            )
+            if should_lookup:
                 try:
                     from ..models.document import Document  # Lazy import to avoid cycles
 
-                    doc_obj = await Document.get(audit_doc_id)
+                    doc_obj = await Document.get(audit_doc_id or context_doc_id)
                     if doc_obj:
                         audit_doc_label = (
                             getattr(doc_obj, "filename", None)
@@ -330,7 +341,10 @@ class SimpleChatStrategy(ChatStrategy):
                     audit_doc_label = None
 
             if not audit_doc_label:
-                audit_doc_label = audit_doc_id or "Documento auditado"
+                audit_doc_label = (
+                    (audit_doc_id if not _looks_like_id(audit_doc_id) else None)
+                    or "Documento auditado"
+                )
 
             actions = ["view_full_report", "download_pdf", "copy_json"]
             artifact = build_audit_report_response(
