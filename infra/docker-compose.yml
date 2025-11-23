@@ -332,10 +332,10 @@ services:
 
     # Volume mounts for hot reload in development
     # Source code is mounted to enable immediate reflection of changes
-    # node_modules is excluded via .dockerignore to use container's version
+    # node_modules is persisted in a named volume to survive container recreation
     volumes:
       - ../apps/web:/app/apps/web
-      - /app/apps/web/node_modules
+      - web_node_modules:/app/apps/web/node_modules
       - /app/apps/web/.next
 
     depends_on:
@@ -422,6 +422,9 @@ volumes:
   qdrant_data:
     driver: local
   qdrant_snapshots:
+    driver: local
+  # Web node_modules persistence (survive container recreation)
+  web_node_modules:
     driver: local
 
 # ========================================
