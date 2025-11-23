@@ -65,24 +65,34 @@ async def generate_executive_summary(validation_event: dict, saptiva_client) -> 
     medium = findings_by_severity.get('medium', 0)
     low = findings_by_severity.get('low', 0)
 
-    # Get findings by category
+    # Get findings by category with examples
     findings = validation_event.get("findings", [])
     categories = {}
+    category_examples = {}  # Store sample findings per category
+
     for finding in findings:
         cat = finding.get("category", "Sin categoría")
         sev = finding.get("severity", "low")
         if cat not in categories:
             categories[cat] = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+            category_examples[cat] = []
         categories[cat][sev] = categories[cat].get(sev, 0) + 1
 
-    # Build context for LLM
+        # Store first 2 examples per category
+        if len(category_examples[cat]) < 2:
+            category_examples[cat].append({
+                "severity": sev,
+                "message": finding.get("message", "")[:80]
+            })
+
+    # Build detailed context for LLM
     context = f"""Hallazgos por severidad:
 - Críticos: {critical}
 - Altos: {high}
 - Medios: {medium}
 - Bajos: {low}
 
-Hallazgos por categoría:
+Hallazgos por categoría (con ejemplos):
 """
     for cat, counts in categories.items():
         if any(counts.values()):
@@ -96,36 +106,61 @@ Hallazgos por categoría:
             if counts["low"] > 0:
                 context += f"  - {counts['low']} bajos\n"
 
-    prompt = f"""Eres un analista de cumplimiento corporativo. Revisa los siguientes resultados de auditoría y genera un resumen ejecutivo de 3-4 oraciones.
+            # Add examples
+            if category_examples.get(cat):
+                context += f"  Ejemplos:\n"
+                for ex in category_examples[cat]:
+                    context += f"    [{ex['severity']}] {ex['message']}\n"
+
+    prompt = f"""Eres un analista de cumplimiento corporativo. Genera un análisis detallado pero conciso del documento auditado.
 
 {context}
 
-Tu resumen debe:
-1. Identificar la prioridad máxima (qué debe atenderse primero)
-2. Mencionar las categorías más problemáticas
-3. Dar perspectiva sobre el estado general del documento
-4. Ser directo, profesional, sin emojis
+GENERA UN ANÁLISIS CON LA SIGUIENTE ESTRUCTURA:
 
-Ejemplo de formato esperado:
-"El documento presenta 1 hallazgo crítico en Disclaimers que debe corregirse de inmediato. Se detectaron 80 problemas de formato de prioridad alta que afectan la consistencia con el manual de marca. Los aspectos de gramática y tipografía muestran únicamente sugerencias menores que pueden atenderse opcionalmente."
+1. CONTEXTO DEL DOCUMENTO (1-2 oraciones):
+   - Tipo de documento y su propósito
+
+2. HALLAZGOS PRINCIPALES (lista breve, máximo 4 puntos):
+   - Prioriza por severidad crítico > alto > medio
+   - Menciona categorías específicas y algunos ejemplos concretos
+
+3. ANÁLISIS POR AUDITOR (1 oración por auditor con hallazgos):
+   - Resume cada auditor mencionando cantidad y gravedad
+   - Da ejemplos específicos para críticos/altos
+
+4. RECOMENDACIÓN GENERAL (1 oración):
+   - Qué hacer primero
+
+Sé directo, profesional, sin emojis. Usa párrafos cortos.
 """
 
     try:
         response = await saptiva_client.chat_completion(
             model="SAPTIVA_TURBO",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=200,
+            max_tokens=500,
             temperature=0.3
         )
 
-        if response and "choices" in response and len(response["choices"]) > 0:
-            analysis = response["choices"][0]["message"]["content"].strip()
-            return analysis
+        logger.info("LLM response received", has_response=bool(response), response_type=type(response).__name__)
+
+        if response and hasattr(response, "choices") and len(response.choices) > 0:
+            choice = response.choices[0]
+            content = choice.get("message", {}).get("content", "") if isinstance(choice, dict) else ""
+            logger.info("LLM content extracted", content_length=len(content) if content else 0, content_preview=content[:100] if content else "")
+            if content:
+                analysis = content.strip()
+                return analysis
+            else:
+                logger.warning("No content in LLM response", choice_keys=list(choice.keys()) if isinstance(choice, dict) else [])
+                return None
         else:
+            logger.warning("No valid response from LLM", response_type=type(response).__name__ if response else None)
             return None
 
     except Exception as e:
-        logger.warning("Failed to generate executive summary", error=str(e))
+        logger.warning("Failed to generate executive summary", error=str(e), exc_type=type(e).__name__)
         return None
 
 
@@ -778,6 +813,8 @@ class StreamingHandler:
                         validation_event=audit_event,
                         saptiva_client=await get_saptiva_client()
                     )
+
+                    logger.info("Executive summary generated", summary_length=len(executive_summary) if executive_summary else 0, has_summary=bool(executive_summary))
 
                     if executive_summary:
                         content += f"{executive_summary}\n\n"
