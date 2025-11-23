@@ -80,13 +80,18 @@ async def send_chat_message(
     # Check if message is an audit command
     is_audit_command = request.message.strip().startswith(AUDIT_COMMAND_PREFIX)
 
-    # AUTO-ENABLE AUDIT TOOL for audit commands
-    # This ensures the tool runs even if the frontend didn't explicitly enable it
-    if is_audit_command:
-        if request.tools_enabled is None:
-            request.tools_enabled = {}
-        request.tools_enabled[TOOL_NAME_AUDIT] = True
-        logger.info(f"Auto-enabled {TOOL_NAME_AUDIT} tool for audit command", user_id=user_id)
+    # DISABLED: AUTO-ENABLE AUDIT TOOL for audit commands
+    # Reason: Creates duplicate audit executions - one via legacy non-streaming MCP tool
+    # and another via streaming handler. The streaming handler already detects audit
+    # commands and executes them properly with real-time progress + artifact rendering.
+    # Keeping this enabled causes two chat messages: one legacy (text-only) and one
+    # modern (with canvas/artifact). Solution: Let streaming handler be the single
+    # source of truth for audit execution.
+    # if is_audit_command:
+    #     if request.tools_enabled is None:
+    #         request.tools_enabled = {}
+    #     request.tools_enabled[TOOL_NAME_AUDIT] = True
+    #     logger.info(f"Auto-enabled {TOOL_NAME_AUDIT} tool for audit command", user_id=user_id)
 
     # logger.info(
     #     "🔍 [DOCUMENT DEBUG] Checking for documents",
