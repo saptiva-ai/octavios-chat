@@ -7,6 +7,7 @@ interface CanvasState {
   setArtifact: (id: string | null) => void;
   openArtifact: (type: string, data: any) => void;
   toggleSidebar: () => void;
+  reset: () => void;
 }
 
 export const useCanvasStore = create<CanvasState>((set) => ({
@@ -28,5 +29,11 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   toggleSidebar: () =>
     set((state) => ({
       isSidebarOpen: !state.isSidebarOpen,
+    })),
+  reset: () =>
+    set(() => ({
+      isSidebarOpen: false,
+      activeArtifactId: null,
+      activeArtifactData: null,
     })),
 }));

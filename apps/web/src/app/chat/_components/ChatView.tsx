@@ -134,11 +134,17 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
   });
   const isCanvasOpen = useCanvasStore((state) => state.isSidebarOpen);
   const toggleCanvas = useCanvasStore((state) => state.toggleSidebar);
+  const resetCanvas = useCanvasStore((state) => state.reset);
 
   // DEBUG: Log canvas state in ChatView
   React.useEffect(() => {
     logDebug("🏠 [ChatView] isCanvasOpen changed", { isCanvasOpen });
   }, [isCanvasOpen]);
+
+  // Close/reset canvas when switching conversations to avoid leaking artifacts across chats
+  React.useEffect(() => {
+    resetCanvas();
+  }, [resetCanvas, resolvedChatId]);
 
   // Files V1 state - MVP-LOCK: Pass chatId to persist attachments
   // FIX: Use resolvedChatId (from URL) instead of currentChatId (from async store)
