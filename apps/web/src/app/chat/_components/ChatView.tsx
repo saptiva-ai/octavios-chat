@@ -697,9 +697,9 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
               metadata_present: !!userMessageMetadata,
             });
 
-            // Streaming causes JSON blobs for audit_file; disable when auditing or with documents
-            const enableStreaming =
-              !toolsForPayload?.audit_file && documentIds.length === 0;
+            // Enable streaming to properly render audit progress and responses
+            // (Previously disabled due to JSON blobs, now fixed in streaming handler)
+            const enableStreaming = documentIds.length === 0;
 
             let response: ChatResponse | undefined;
 
