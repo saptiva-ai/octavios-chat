@@ -339,8 +339,20 @@ class ChatService:
 
             # Call Saptiva
             start_time = time.time()
+            # Ensure message payload is always string-based to avoid 400s from upstream
+            safe_messages: List[Dict[str, str]] = []
+            for msg in payload_data["messages"]:
+                content = msg.get("content", "")
+                if not isinstance(content, str):
+                    try:
+                        content = json.dumps(content, ensure_ascii=False)
+                    except Exception:
+                        content = str(content)
+                role = msg.get("role", "user")
+                safe_messages.append({"role": role, "content": content})
+
             saptiva_response = await self.saptiva_client.chat_completion(
-                messages=payload_data["messages"],
+                messages=safe_messages,
                 model=model,
                 temperature=payload_data.get("temperature", 0.7),
                 max_tokens=payload_data.get("max_tokens", 1024),
