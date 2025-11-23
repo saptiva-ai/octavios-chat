@@ -169,6 +169,10 @@ class ChatResponse(BaseModel):
     chat_id: str = Field(..., description="Chat session ID")
     message_id: str = Field(..., description="Response message ID")
     content: str = Field(..., description="Response content")
+    artifact: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Optional structured artifact (e.g., audit_report_response) for UI rendering"
+    )
     role: MessageRole = Field(default=MessageRole.ASSISTANT, description="Message role")
     model: str = Field(..., description="Model used for response")
     created_at: datetime = Field(..., description="Creation timestamp")
