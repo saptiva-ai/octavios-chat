@@ -116,35 +116,47 @@ const defaultComponents = {
       />
     );
   },
-  code: ({
-    inline,
-    className,
-    children,
-    ...props
-  }: React.HTMLAttributes<HTMLElement> & { inline?: boolean }) => {
-    // Inline code (dentro de párrafos)
-    if (inline) {
+  pre: ({ children, ...props }: React.HTMLAttributes<HTMLPreElement>) => {
+    // Extract code props from the child code element
+    // ReactMarkdown wraps block code in <pre><code>...</code></pre>
+    const codeElement = React.isValidElement(children) ? children : null;
+
+    if (
+      codeElement &&
+      (codeElement.type === "code" ||
+        codeElement.type === defaultComponents.code)
+    ) {
+      const { className, children: codeChildren } =
+        codeElement.props as React.HTMLAttributes<HTMLElement>;
+      const language = getLanguageFromClassName(className);
+      const codeString = String(codeChildren).replace(/\n$/, "");
+
       return (
-        <code
-          {...props}
-          className={cn(
-            "rounded-md bg-white/10 px-1.5 py-0.5 font-mono text-[0.85em]",
-            className,
-          )}
-        >
-          {children}
-        </code>
+        <CodeBlock code={codeString} language={language} className="my-4">
+          <CodeBlockCopyButton />
+        </CodeBlock>
       );
     }
 
-    // Bloques de código (fenced code blocks)
-    const language = getLanguageFromClassName(className);
-    const codeString = String(children).replace(/\n$/, ""); // Remove trailing newline
-
+    // Fallback for non-standard pre usage
+    return <pre {...props}>{children}</pre>;
+  },
+  code: ({
+    className,
+    children,
+    ...props
+  }: React.HTMLAttributes<HTMLElement>) => {
+    // Inline code (not wrapped in pre)
     return (
-      <CodeBlock code={codeString} language={language} className="my-4">
-        <CodeBlockCopyButton />
-      </CodeBlock>
+      <code
+        {...props}
+        className={cn(
+          "rounded-md bg-white/10 px-1.5 py-0.5 font-mono text-[0.85em]",
+          className,
+        )}
+      >
+        {children}
+      </code>
     );
   },
   blockquote: ({ className, ...props }: React.HTMLAttributes<HTMLElement>) => (

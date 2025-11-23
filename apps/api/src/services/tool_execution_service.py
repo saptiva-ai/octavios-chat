@@ -183,6 +183,16 @@ class ToolExecutionService:
             mcp_adapter = get_mcp_adapter()
             tool_map = await mcp_adapter._get_tool_map()
 
+            logger.info(
+                "🔍 [TOOL DEBUG] Checking tool execution conditions",
+                tools_enabled_keys=list(context.tools_enabled.keys()),
+                audit_tool_name=TOOL_NAME_AUDIT,
+                audit_enabled=context.tools_enabled.get(TOOL_NAME_AUDIT, False),
+                tool_map_keys=list(tool_map.keys()),
+                audit_in_map=TOOL_NAME_AUDIT in tool_map,
+                document_ids=context.document_ids
+            )
+
             # 1. Audit File Tool
             if context.tools_enabled.get(TOOL_NAME_AUDIT, False) and TOOL_NAME_AUDIT in tool_map:
                 for doc_id in context.document_ids:
@@ -193,7 +203,7 @@ class ToolExecutionService:
                         payload={
                             "doc_id": doc_id,
                             "policy_id": "auto",
-                            "user_id": user_id
+                            "user_id": user_id  # ✅ FIX: Explicit context injection for programmatic invocation
                         },
                         cache_params={"policy_id": "auto"},
                         tool_map=tool_map,

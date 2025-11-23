@@ -11,6 +11,7 @@ import { graphToMermaid } from "@/lib/utils/graph-to-mermaid";
 
 interface CanvasPanelProps {
   className?: string;
+  reportPdfUrl?: string;
 }
 
 function ArtifactSkeleton() {
@@ -38,7 +39,7 @@ function GraphFallback({ data }: { data: any }) {
   );
 }
 
-export function CanvasPanel({ className }: CanvasPanelProps) {
+export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
   const activeArtifactId = useCanvasStore((state) => state.activeArtifactId);
   const isSidebarOpen = useCanvasStore((state) => state.isSidebarOpen);
   const toggleSidebar = useCanvasStore((state) => state.toggleSidebar);
@@ -50,6 +51,14 @@ export function CanvasPanel({ className }: CanvasPanelProps) {
 
   React.useEffect(() => {
     let cancelled = false;
+
+    // If showing PDF report, don't fetch artifact
+    if (reportPdfUrl) {
+      setArtifact(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
 
     if (!activeArtifactId) {
       setArtifact(null);
@@ -92,9 +101,19 @@ export function CanvasPanel({ className }: CanvasPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [activeArtifactId]);
+  }, [activeArtifactId, reportPdfUrl]);
 
   const renderContent = () => {
+    if (reportPdfUrl) {
+      return (
+        <iframe
+          src={reportPdfUrl}
+          className="h-full w-full rounded-lg border-0 bg-white"
+          title="Audit Report"
+        />
+      );
+    }
+
     if (!activeArtifactId) {
       return (
         <div className="flex h-full items-center justify-center text-sm text-saptiva-light/70">
@@ -168,7 +187,9 @@ export function CanvasPanel({ className }: CanvasPanelProps) {
             Canvas
           </p>
           <p className="text-sm font-semibold">
-            {artifact?.title || "Sin selección"}
+            {reportPdfUrl
+              ? "Reporte de Auditoría"
+              : artifact?.title || "Sin selección"}
           </p>
         </div>
         <button
