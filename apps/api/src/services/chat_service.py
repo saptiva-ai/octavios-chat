@@ -320,6 +320,23 @@ class ChatService:
                 has_tools=metadata.get("has_tools", False)
             )
 
+            # Spy log to confirm tool/document context is reaching the LLM payload
+            try:
+                messages_dump = json.dumps(
+                    payload_data["messages"],
+                    default=str
+                )
+                logger.info(
+                    "🕵️ [LLM PROMPT SPY]",
+                    contains_findings="findings" in messages_dump,
+                    contains_analysis="Analysis Results" in messages_dump,
+                    contains_audit="audit" in messages_dump.lower(),
+                    prompt_length=len(messages_dump),
+                    tool_results_keys=list((user_context or {}).get("tool_results", {}).keys()) if user_context else []
+                )
+            except Exception:
+                logger.warning("Failed to emit LLM prompt spy log")
+
             # Call Saptiva
             start_time = time.time()
             saptiva_response = await self.saptiva_client.chat_completion(

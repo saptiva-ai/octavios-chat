@@ -15,6 +15,8 @@ from typing import List
 from datetime import datetime
 
 import structlog
+from beanie.operators import Set
+from bson import ObjectId
 
 from ..models.chat import ChatSession as ChatSessionModel
 from ..core.redis_cache import RedisCache
@@ -122,104 +124,66 @@ class SessionContextManager:
             return 0
 
         from ..models.document import Document
-        from bson import ObjectId
+        # Normalize IDs for paranoid matching (ObjectId + string IDs)
+        object_ids: List[ObjectId] = []
+        str_ids: List[str] = []
+        for fid in file_ids:
+            fid_str = str(fid)
+            str_ids.append(fid_str)
+            if ObjectId.is_valid(fid_str):
+                object_ids.append(ObjectId(fid_str))
 
-        # Convert file_ids to ObjectId for MongoDB query
-        try:
-            object_ids = [ObjectId(fid) for fid in file_ids]
-        except Exception as e:
-            logger.error(
-                "Failed to convert file_ids to ObjectId",
-                file_ids=file_ids,
-                error=str(e)
+        or_clauses = []
+        if object_ids:
+            or_clauses.append({"_id": {"$in": object_ids}})
+        if str_ids:
+            or_clauses.append({"file_id": {"$in": str_ids}})
+            or_clauses.append({"id": {"$in": str_ids}})
+
+        if not or_clauses:
+            logger.warning(
+                "No valid file IDs to adopt",
+                session_id=session_id,
+                file_ids=file_ids
             )
             return 0
 
-        # 🚨 AGGRESSIVE ADOPTION QUERY
-        # Filter ONLY by file_id + user_id (security)
-        # DO NOT filter by conversation_id (it could be phantom UUID)
-        query = {
-            "_id": {"$in": object_ids},
+        filter_query = {
+            "$or": or_clauses,
             "user_id": user_id
         }
 
-        update = {
-            "$set": {
-                "conversation_id": session_id,
-                "updated_at": datetime.utcnow()
-            }
-        }
-
         try:
-            # Execute bulk update (much faster than one-by-one)
-            # ✅ FIX: Use Beanie's get_motor_collection() method
-            # This is the correct way to access the underlying Motor collection
-            collection = await Document.get_motor_collection()
-
-            result = await collection.update_many(
-                query,
-                update
+            update_result = await Document.find_many(filter_query).update(
+                Set(
+                    {
+                        Document.conversation_id: session_id,
+                        Document.updated_at: datetime.utcnow(),
+                    }
+                )
             )
 
-            adopted_count = result.modified_count
+            modified = getattr(update_result, "modified_count", 0)
+            matched = getattr(update_result, "matched_count", None)
 
             logger.info(
-                "🔒 [AGGRESSIVE ADOPTION] Files adopted with bulk update",
+                "🔒 [AGGRESSIVE ADOPTION] Files adopted with Beanie bulk update",
                 session_id=session_id,
-                matched_count=result.matched_count,
-                modified_count=result.modified_count,
+                matched_count=matched,
+                modified_count=modified,
                 total_requested=len(file_ids),
                 file_ids=file_ids
             )
 
-            # Verify adoption succeeded for critical files
-            if result.matched_count < len(file_ids):
+            if matched is not None and matched < len(file_ids):
                 logger.warning(
                     "⚠️ Some files not found or ownership mismatch",
                     requested=len(file_ids),
-                    matched=result.matched_count,
-                    missing_count=len(file_ids) - result.matched_count
+                    matched=matched,
+                    missing_count=len(file_ids) - matched
                 )
 
-            # Log individual file statuses for debugging
-            for file_id in file_ids:
-                try:
-                    doc = await Document.get(file_id)
-                    if doc:
-                        if str(doc.user_id) != user_id:
-                            logger.warning(
-                                "File adoption skipped: ownership mismatch",
-                                file_id=file_id,
-                                expected_user=user_id,
-                                actual_user=str(doc.user_id)
-                            )
-                        elif doc.conversation_id == session_id:
-                            logger.info(
-                                "🔒 File adoption verified",
-                                file_id=file_id,
-                                session_id=session_id,
-                                filename=doc.filename
-                            )
-                        else:
-                            logger.error(
-                                "🚨 File adoption FAILED verification",
-                                file_id=file_id,
-                                expected_conversation_id=session_id,
-                                actual_conversation_id=doc.conversation_id
-                            )
-                    else:
-                        logger.warning(
-                            "File not found during verification",
-                            file_id=file_id
-                        )
-                except Exception as e:
-                    logger.warning(
-                        "File verification error",
-                        file_id=file_id,
-                        error=str(e)
-                    )
-
-            return adopted_count
+            return modified
 
         except Exception as e:
             logger.error(

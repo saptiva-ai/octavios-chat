@@ -28,7 +28,7 @@ from ...schemas.audit_message import (
 )
 from ...services.policy_manager import resolve_policy
 from ...services.validation_coordinator import validate_document
-from ...services.minio_storage import get_minio_storage
+from ...services.minio_service import minio_service
 import tempfile
 
 logger = structlog.get_logger(__name__)
@@ -176,18 +176,23 @@ async def execute_audit_file_tool(
         # 3. Get PDF path
         # ====================================================================
 
-        minio_storage = get_minio_storage()
         try:
-            pdf_data = minio_storage.get_document(doc.minio_key)
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
-                temp_file.write(pdf_data)
                 pdf_path = Path(temp_file.name)
+
+            # Always use the persisted bucket/key from the document (source of truth)
+            await minio_service.download_to_path(
+                doc.minio_bucket,
+                doc.minio_key,
+                str(pdf_path)
+            )
         except Exception as e:
             error_msg = f"Failed to get PDF from storage: {e}"
             logger.error(
                 "Audit tool: Failed to get PDF from storage",
                 doc_id=doc_id,
                 minio_key=doc.minio_key,
+                minio_bucket=doc.minio_bucket,
                 error=str(e),
             )
             return {

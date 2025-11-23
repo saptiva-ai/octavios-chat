@@ -8,18 +8,30 @@ It is designed to be loaded by the Lazy Registry or used directly by the
 ToolExecutionService.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 from pathlib import Path
 import structlog
+from pydantic import BaseModel, Field
 
 from ..protocol import ToolSpec, ToolCategory, ToolCapability
 from ..tool import Tool
 from ...services.validation_coordinator import validate_document
 from ...services.policy_manager import resolve_policy
 from ...services.minio_storage import get_minio_storage
+from ...services.minio_service import minio_service
 from ...models.document import Document, DocumentStatus
 
 logger = structlog.get_logger(__name__)
+
+
+class AuditInput(BaseModel):
+    doc_id: str = Field(..., description="ID del documento a auditar")
+    user_id: str = Field(..., description="ID del usuario propietario (obligatorio)")
+    policy_id: str = Field("auto", description="ID de la política")
+    enable_disclaimer: bool = Field(True, description="Activar auditor de disclaimers")
+    enable_format: bool = Field(True, description="Activar auditor de formato")
+    enable_logo: bool = Field(True, description="Activar auditor de logos")
+    enable_grammar: bool = Field(True, description="Activar auditor de gramática")
 
 
 class AuditFileTool(Tool):
@@ -110,12 +122,16 @@ class AuditFileTool(Tool):
         )
 
     async def validate_input(self, payload: Dict[str, Any]) -> None:
+        # Validación mínima; Pydantic hará la validación completa en execute
         if "doc_id" not in payload:
             raise ValueError("Missing required field: doc_id")
-        if not isinstance(payload["doc_id"], str):
-            raise ValueError("doc_id must be a string")
 
-    async def execute(self, payload: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def execute(
+        self,
+        payload: Union[Dict[str, Any], AuditInput, None] = None,
+        context: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
         """
         Execute the audit_file tool.
         
@@ -125,18 +141,29 @@ class AuditFileTool(Tool):
         4. Run validation coordinator.
         5. Return structured report.
         """
-        doc_id = payload["doc_id"]
-        policy_id = payload.get("policy_id", "auto")
-        
-        # Feature flags for individual auditors
-        enable_disclaimer = payload.get("enable_disclaimer", True)
-        enable_format = payload.get("enable_format", True)
-        enable_logo = payload.get("enable_logo", True)
-        enable_grammar = payload.get("enable_grammar", True)
+        # Normalize payload into Pydantic DTO (supports dict, AuditInput or kwargs)
+        base_payload: Dict[str, Any] = payload or {}
+        if kwargs:
+            base_payload = {**base_payload, **kwargs}
+        input_data = payload if isinstance(payload, AuditInput) else AuditInput(**base_payload)
 
-        # ✅ FIX: Read user_id from payload (programmatic) OR context (HTTP request)
-        # Programmatic invocations pass user_id in payload, HTTP requests use context
-        user_id = payload.get("user_id") or (context.get("user_id") if context else None)
+        # 🕵️ SPY LOG: capture raw inputs as soon as execute starts
+        logger.info(
+            "🕵️ [AUDIT TOOL START]",
+            doc_id=input_data.doc_id,
+            user_id=input_data.user_id,
+            context_keys=list(context.keys()) if context else "None",
+        )
+
+        doc_id = input_data.doc_id
+        policy_id = input_data.policy_id
+        enable_disclaimer = input_data.enable_disclaimer
+        enable_format = input_data.enable_format
+        enable_logo = input_data.enable_logo
+        enable_grammar = input_data.enable_grammar
+
+        # Programmatic invocations pass user_id en payload (obligatorio)
+        user_id = input_data.user_id or (context.get("user_id") if context else None)
 
         logger.info(
             "COPILOTO_414: Starting audit execution", 
@@ -160,18 +187,52 @@ class AuditFileTool(Tool):
             # In production, this should raise an error
             # For now, we allow it but log the issue
         elif str(doc.user_id) != str(user_id):
+            logger.warning(
+                "Permission denied: Doc Owner mismatch",
+                doc_owner=str(doc.user_id),
+                doc_owner_type=str(type(doc.user_id)),
+                req_user=str(user_id),
+                req_user_type=str(type(user_id))
+            )
             raise PermissionError(f"User {user_id} not authorized to audit document {doc_id}")
+
+        # Database Latency Handling:
+        # We trust user ownership over conversation consistency due to eventual consistency in replicas.
+        # If the doc.conversation_id hasn't updated yet, we warn but proceed if user owns the file.
+        session_id = context.get("session_id") if context else None
+        if session_id and doc.conversation_id and str(doc.conversation_id) != str(session_id):
+            logger.warning(
+                "COPILOTO_414: Database latency detected - conversation_id mismatch (allowing access)",
+                doc_id=doc_id,
+                doc_conversation_id=str(doc.conversation_id),
+                current_session_id=str(session_id)
+            )
             
         # 2. Resolve Policy
         policy = await resolve_policy(policy_id, document=doc)
         logger.info("COPILOTO_414: Policy resolved", policy_name=policy.name)
 
         # 3. Materialize File
-        minio_storage = get_minio_storage()
-        pdf_path, is_temp = minio_storage.materialize_document(doc.minio_key, filename=doc.filename)
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+            pdf_path = Path(temp_file.name)
+        is_temp = True
+
+        logger.info(
+            "⬇️ Downloading file from MinIO",
+            bucket=doc.minio_bucket,
+            key=doc.minio_key
+        )
+
+        await minio_service.download_to_path(
+            doc.minio_bucket,
+            doc.minio_key,
+            str(pdf_path)
+        )
+
+        logger.info("🔍 [AUDIT] File downloaded. Starting validation...")
 
         try:
-            # 4. Run Validation Coordinator
             report = await validate_document(
                 document=doc,
                 pdf_path=pdf_path,
@@ -179,16 +240,17 @@ class AuditFileTool(Tool):
                 enable_disclaimer=enable_disclaimer,
                 enable_format=enable_format,
                 enable_logo=enable_logo,
-                enable_grammar=enable_grammar,  # Pass grammar flag if supported
+                enable_grammar=enable_grammar,
                 policy_config=policy.to_compliance_config(),
                 policy_id=policy.id,
                 policy_name=policy.name,
             )
 
             logger.info(
-                "COPILOTO_414: Audit completed", 
-                job_id=report.job_id, 
-                findings_count=len(report.findings)
+                "✅ [AUDIT] Validation success",
+                job_id=report.job_id,
+                findings_count=len(report.findings),
+                summary_keys=list(report.summary.keys()) if getattr(report, "summary", None) else "None"
             )
 
             # 5. Construct Response
@@ -201,16 +263,14 @@ class AuditFileTool(Tool):
                 },
                 "findings": [f.model_dump() for f in report.findings],
                 "summary": report.summary,
-                # Return attachments if any (e.g. corrected PDF path, images)
                 "attachments": report.attachments,
+                "validation_report_id": str(report.job_id)
             }
 
         except Exception as e:
-            logger.error("COPILOTO_414: Audit execution failed", error=str(e), doc_id=doc_id)
-            raise RuntimeError(f"Audit execution failed: {str(e)}") from e
-            
+            logger.error("🚨 [AUDIT CRASH] Error during processing logic", error=str(e), doc_id=doc_id)
+            raise
         finally:
-            # Cleanup temp file
             if is_temp and pdf_path.exists():
                 try:
                     pdf_path.unlink()

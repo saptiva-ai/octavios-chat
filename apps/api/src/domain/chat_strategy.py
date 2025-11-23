@@ -187,10 +187,24 @@ class SimpleChatStrategy(ChatStrategy):
                 "Added tool results to context manager",
                 tool_count=len(context.tool_results),
                 user_id=context.user_id
-            )
+        )
 
         # 3. Build unified context string for LLM injection
         unified_context, unified_metadata = context_mgr.build_context_string()
+
+        # Spy log to verify tool/doc context is actually present before LLM call
+        try:
+            logger.info(
+                "🕵️ [CONTEXT INJECTION CHECK]",
+                has_unified_context=bool(unified_context),
+                contains_findings="findings" in unified_context if unified_context else False,
+                contains_analysis="Analysis Results" in unified_context if unified_context else False,
+                tool_results_keys=list(context.tool_results.keys()) if context.tool_results else [],
+                document_ids=context.document_ids
+            )
+        except Exception:
+            # Defensive: never break flow because of logging issues
+            logger.warning("Failed to emit context injection check log")
 
         logger.info(
             "Built unified context for LLM",
@@ -275,9 +289,59 @@ class SimpleChatStrategy(ChatStrategy):
         # ANTI-EMPTY-RESPONSE: Use centralized handler with contextual messages
         # Determine the most likely scenario based on available context
         if not response_content:
+            # 🛟 Synthetic fallback using audit tool results if LLM stayed silent
+            audit_result = None
+            if context.tool_results:
+                for k, v in context.tool_results.items():
+                    if str(k).startswith("audit_file"):
+                        audit_result = v
+                        break
+
+            if audit_result and isinstance(audit_result, dict):
+                logger.info(
+                    "🤖 [FALLBACK] LLM silent, generating synthetic response from tool results",
+                    tool_result_keys=list(context.tool_results.keys())
+                )
+                summary_raw = audit_result.get("summary")
+                findings = audit_result.get("findings") or []
+
+                if isinstance(summary_raw, str):
+                    summary_text = summary_raw
+                elif isinstance(summary_raw, dict):
+                    summary_text = summary_raw.get("text") or summary_raw.get("summary") or str(summary_raw)
+                else:
+                    summary_text = "Análisis completado."
+
+                lines = [
+                    "### Reporte de Auditoría (Generado Automáticamente)",
+                    "",
+                    summary_text,
+                    "",
+                    "#### Hallazgos principales"
+                ]
+
+                if findings:
+                    for f in findings:
+                        if isinstance(f, dict):
+                            msg = f.get("message") or f.get("issue") or str(f)
+                            sev = f.get("severity")
+                            prefix = f"[{sev}] " if sev else ""
+                            lines.append(f"- {prefix}{msg}")
+                        else:
+                            lines.append(f"- {f}")
+                else:
+                    lines.append("- Sin hallazgos críticos.")
+
+                response_content = "\n".join(lines)
+
+            # If still empty after synthetic fallback, keep original handler
+        if not response_content:
+            has_documents = bool(context.document_ids)
+
             if doc_warnings:
                 scenario = EmptyResponseScenario.DOCS_PROCESSING
-            elif context.document_ids and len(context.document_ids) > 0:
+            elif has_documents:
+                # Use the in-memory document list (context.document_ids) populated earlier
                 scenario = EmptyResponseScenario.DOCS_NOT_FOUND
             else:
                 scenario = EmptyResponseScenario.API_EMPTY_CONTENT
