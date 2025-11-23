@@ -304,6 +304,15 @@ class SimpleChatStrategy(ChatStrategy):
             return bool(re.fullmatch(r"[0-9a-fA-F-]{12,}", str(val).strip()))
 
         if audit_result and isinstance(audit_result, dict):
+            logger.info(
+                "🔍 [AUDIT RESULT] Inspecting tool payload",
+                audit_keys=list(audit_result.keys()),
+                filenames={
+                    "filename": audit_result.get("filename"),
+                    "audit_filename": audit_result.get("audit_filename"),
+                    "document_name": audit_result.get("document_name"),
+                },
+            )
             summary_raw = audit_result.get("summary")
             findings = audit_result.get("findings") or []
             # Extract doc label with multiple fallbacks (filename > fetched title > tool key > id)
