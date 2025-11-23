@@ -164,14 +164,6 @@ export function ChatMessage({
     (metadata as any)?.decision_metadata?.audit_artifact ||
     (metadata as any)?.audit_artifact;
 
-  // TEMP DEBUG
-  React.useEffect(() => {
-    if (auditArtifact) {
-      // eslint-disable-next-line no-console
-      console.log("Message Artifact:", auditArtifact);
-    }
-  }, [auditArtifact]);
-
   const handleCopy = async () => {
     const success = await copyToClipboard(displayContent);
     if (success) {
