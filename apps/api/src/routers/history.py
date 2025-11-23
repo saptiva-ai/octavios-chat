@@ -200,8 +200,8 @@ async def get_unified_chat_history(
     user_id = getattr(request.state, 'user_id', 'mock-user-id')
 
     try:
-        # Verify access
-        await HistoryService.get_session_with_permission_check(chat_id, user_id)
+        # Verify access and existence
+        chat_session = await HistoryService.get_session_with_permission_check(chat_id, user_id)
 
         # Parse event types filter
         event_type_filter = None
@@ -244,6 +244,24 @@ async def get_unified_chat_history(
             event_types=event_type_filter,
             use_cache=True
         )
+
+        # If no events, return empty structure instead of 404
+        if not timeline_data:
+            timeline_data = {
+                "chat_id": chat_id,
+                "events": [],
+                "total_count": 0,
+                "has_more": False,
+                "limit": limit,
+                "offset": offset,
+            }
+        else:
+            # Ensure events key exists even if empty
+            timeline_data.setdefault("events", [])
+            timeline_data.setdefault("total_count", 0)
+            timeline_data.setdefault("has_more", False)
+            timeline_data.setdefault("limit", limit)
+            timeline_data.setdefault("offset", offset)
 
         processing_time = (time.time() - start_time) * 1000
 

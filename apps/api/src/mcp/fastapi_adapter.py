@@ -396,7 +396,12 @@ class MCPFastAPIAdapter:
                     payload = {**payload, "user_id": str(current_user.id)}
 
                 # Execute tool
-                result = await self._execute_tool_impl(tool_name, tool_impl, payload)
+                result = await self._execute_tool_impl(
+                    tool_name,
+                    tool_impl,
+                    payload,
+                    context={"user_id": str(current_user.id)},
+                )
 
                 duration_ms = (time.time() - start_time) * 1000
 
@@ -1127,25 +1132,43 @@ class MCPFastAPIAdapter:
             return schema
         return self._extract_output_schema(fallback_callable)
 
-    async def _execute_tool_impl(self, tool_name: str, tool_impl, payload: dict):
+    async def _execute_tool_impl(self, tool_name: str, tool_impl, payload: dict, context: Optional[dict] = None):
         """
         Execute a tool regardless of whether FastMCP returns Tool objects or raw callables.
         """
+        import structlog
+        adapter_logger = structlog.get_logger()
+
         if tool_impl is None:
             raise ValueError(f"Tool '{tool_name}' not found")
+
+        adapter_logger.info(
+            "🔌 [ADAPTER] Attempting to invoke tool",
+            tool=tool_name,
+            payload_keys=list(payload.keys()),
+            has_context=bool(context)
+        )
 
         try:
             # FastMCP >= 2.x returns Tool/FunctionTool instances with .run()
             if hasattr(tool_impl, "run"):
-                tool_result = await tool_impl.run(payload)
-                return self._normalize_tool_result(tool_result)
+                # ✅ Invocación estándar: payload como primer argumento (FastMCP valida con Pydantic)
+                return await tool_impl.run(payload)
 
-            # Legacy callables
+            # Legacy callables (aceptan payload completo como único arg)
             if callable(tool_impl):
-                return await tool_impl(**payload)
+                return await tool_impl(payload)
 
-            raise TypeError(f"Unsupported tool type for '{tool_name}': {type(tool_impl)}")
-        except Exception:
+            raise ValueError(f"Tool {tool_name} is not executable")
+
+        except Exception as e:
+            adapter_logger.error(
+                "🚨 [ADAPTER FATAL CRASH] Tool invocation failed",
+                tool=tool_name,
+                error=str(e),
+                error_type=type(e).__name__,
+                payload=payload,
+            )
             raise
 
     def _normalize_tool_result(self, result):

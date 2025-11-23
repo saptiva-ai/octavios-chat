@@ -111,12 +111,46 @@ class ToolExecutionService:
                 cache_hit=False
             )
 
-            tool_impl = tool_map[tool_name]
-            result = await mcp_adapter._execute_tool_impl(
-                tool_name=tool_name,
-                tool_impl=tool_impl,
-                payload=payload
-            )
+            if tool_name == TOOL_NAME_AUDIT:
+                from ..mcp.tools.audit_file import AuditFileTool
+
+                logger.info(
+                    "⚡ [DIRECT BYPASS] Executing AuditFileTool directly",
+                    doc_id=doc_id,
+                    user_id=user_id
+                )
+                tool_instance = AuditFileTool()
+                result = await tool_instance.execute(
+                    {
+                        "doc_id": str(doc_id),
+                        "user_id": str(user_id),
+                        "policy_id": "auto",
+                        "enable_disclaimer": True,
+                        "enable_format": True,
+                        "enable_logo": True,
+                        "enable_grammar": True,
+                    }
+                )
+                debug_log = structlog.get_logger()
+                debug_log.info(
+                    "⚡ [BYPASS RESULT SPY]",
+                    result_type=str(type(result)),
+                    is_none=result is None,
+                    is_empty=not bool(result),
+                    preview=str(result)[:500]
+                )
+            else:
+                tool_impl = tool_map[tool_name]
+                result = await mcp_adapter._execute_tool_impl(
+                    tool_name=tool_name,
+                    tool_impl=tool_impl,
+                    payload={
+                        "doc_id": str(doc_id),
+                        "user_id": str(user_id),
+                        "policy_id": "auto"
+                    },
+                    context=None
+                )
 
             # Store in cache
             if cache:

@@ -3,10 +3,10 @@ Document model for PDF/IMG storage and metadata.
 """
 
 from datetime import datetime
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Union
 from enum import Enum
 
-from beanie import Document as BeanieDocument
+from beanie import Document as BeanieDocument, PydanticObjectId
 from pydantic import BaseModel, Field
 
 
@@ -78,7 +78,8 @@ class Document(BeanieDocument):
     ocr_language: str = Field(default="spa", description="OCR language")
 
     # Ownership
-    user_id: str = Field(..., description="Owner user ID")
+    # Allow UUID strings and ObjectId for backward compatibility with mixed storage
+    user_id: Union[str, PydanticObjectId] = Field(..., description="Owner user ID")
     conversation_id: Optional[str] = Field(None, description="Associated chat ID")
 
     # Timestamps

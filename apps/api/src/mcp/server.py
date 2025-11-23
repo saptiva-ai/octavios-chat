@@ -16,12 +16,11 @@ Integration approach:
 from typing import Optional
 from fastmcp import FastMCP, Context
 import structlog
+from pydantic import BaseModel, Field
 
-from ..services.validation_coordinator import validate_document
-from ..services.policy_manager import resolve_policy
+from .tools.audit_file import AuditFileTool
 from ..services.minio_storage import get_minio_storage
 from ..models.document import Document
-from ..models.validation_report import ValidationReport
 
 logger = structlog.get_logger(__name__)
 
@@ -37,124 +36,35 @@ mcp = FastMCP(
 # TOOL 1: audit_file - COPILOTO_414 Compliance Validation
 # ============================================================================
 
+class AuditInput(BaseModel):
+    doc_id: str = Field(..., description="ID del documento")
+    user_id: str = Field(..., description="ID del usuario propietario")
+    policy_id: str = Field("auto", description="ID de la política")
+
+
 @mcp.tool()
-async def audit_file(
-    doc_id: str,
-    policy_id: str = "auto",
-    enable_disclaimer: bool = True,
-    enable_format: bool = True,
-    enable_logo: bool = True,
-    ctx: Context = None,
-) -> dict:
+async def audit_file(args: AuditInput, ctx: Context = None) -> dict:
     """
     Validate PDF documents against COPILOTO_414 compliance policies.
-
-    Checks:
-    - Disclaimer presence and coverage (footer detection)
-    - Font, color, and number formatting (brand compliance)
-    - Logo presence, size, and position
-    - Grammar and spelling (via LanguageTool)
-
-    Args:
-        doc_id: Document ID to validate
-        policy_id: Compliance policy ("auto", "414-std", "414-strict", "banamex", "afore-xxi")
-        enable_disclaimer: Run disclaimer auditor
-        enable_format: Run format auditor
-        enable_logo: Run logo auditor
-        ctx: FastMCP context (auto-injected)
-
-    Returns:
-        Validation report with findings and summary
-
-    Example:
-        >>> result = await audit_file(doc_id="doc_123", policy_id="auto")
-        >>> print(result["summary"]["total_findings"])
     """
-    # Get user_id from context (set by auth middleware)
-    user_id = getattr(ctx, "user_id", None) if ctx else None
+    doc_id = args.doc_id
+    user_id = args.user_id
+    policy_id = args.policy_id
 
-    if ctx:
-        await ctx.info(f"Audit file tool invoked for doc_id={doc_id}, policy_id={policy_id}")
+    logger.info("🕵️ [SERVER TOOL START]", doc_id=doc_id, user_id=user_id)
 
-    logger.info("Audit file tool execution started", doc_id=doc_id, policy_id=policy_id, user_id=user_id)
-
-    # 1. Get document
-    doc = await Document.get(doc_id)
-    if not doc:
-        raise ValueError(f"Document not found: {doc_id}")
-
-    # 2. Check ownership
-    if user_id and doc.user_id != user_id:
-        raise PermissionError(f"User {user_id} not authorized to audit document {doc_id}")
-
-    # 3. Resolve policy
-    policy = await resolve_policy(policy_id, document=doc)
-
-    if ctx:
-        await ctx.info(f"Policy resolved: {policy.name} (id={policy.id})")
-
-    # 4. Get PDF file
-    minio_storage = get_minio_storage()
-    pdf_path, is_temp = minio_storage.materialize_document(doc.minio_key, filename=doc.filename)
-
-    try:
-        if ctx:
-            await ctx.report_progress(0.3, "Running validation auditors...")
-
-        # 5. Run validation
-        report = await validate_document(
-            document=doc,
-            pdf_path=pdf_path,
-            client_name=policy.client_name,
-            enable_disclaimer=enable_disclaimer,
-            enable_format=enable_format,
-            enable_logo=enable_logo,
-            policy_config=policy.to_compliance_config(),
-            policy_id=policy.id,
-            policy_name=policy.name,
-        )
-
-        # 6. Save Validation Report to DB (CRITICAL for UI persistence)
-        validation_report = ValidationReport(
-            document_id=doc_id,
-            user_id=user_id or doc.user_id,
-            job_id=report.job_id,
-            status="completed" if report.status == "done" else "error",
-            client_name=policy.client_name,
-            auditors_enabled={
-                "disclaimer": enable_disclaimer,
-                "format": enable_format,
-                "logo": enable_logo,
-            },
-            findings=[f.model_dump() for f in report.findings],
-            summary=report.summary,
-            attachments=report.attachments,
-        )
-        await validation_report.insert()
-
-        # Update document reference
-        doc.validation_report_id = str(validation_report.id)
-        await doc.save()
-
-        if ctx:
-            await ctx.report_progress(1.0, "Validation complete")
-
-        # 7. Format response
-        return {
-            "job_id": report.job_id,
-            "validation_report_id": str(validation_report.id),
-            "status": report.status,
-            "findings": [f.model_dump() for f in report.findings],
-            "summary": report.summary,
-            "attachments": report.attachments,
+    tool_instance = AuditFileTool()
+    return await tool_instance.execute(
+        {
+            "doc_id": doc_id,
+            "user_id": user_id,
+            "policy_id": policy_id,
+            "enable_disclaimer": True,
+            "enable_format": True,
+            "enable_logo": True,
+            "enable_grammar": True,
         }
-
-    finally:
-        # Cleanup temp file
-        if is_temp and pdf_path.exists():
-            pdf_path.unlink()
-            if ctx:
-                await ctx.debug(f"Cleaned up temp file: {pdf_path}")
+    )
 
 
 # ============================================================================
