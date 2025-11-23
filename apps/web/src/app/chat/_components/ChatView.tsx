@@ -989,10 +989,40 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
               response,
             });
 
+            // Defensive parsing: sometimes backend may return the whole ChatResponse as JSON string in content
+            let safeContent = response.content || "";
+            let parsedContent: any = null;
+            if (
+              typeof safeContent === "string" &&
+              safeContent.trim().startsWith("{")
+            ) {
+              try {
+                parsedContent = JSON.parse(safeContent);
+                if (parsedContent && parsedContent.content) {
+                  safeContent = parsedContent.content;
+                  // Hydrate artifacts/metadata if present in embedded payload
+                  response = {
+                    ...response,
+                    artifact: response.artifact || parsedContent.artifact,
+                    metadata: response.metadata || parsedContent.metadata,
+                    decision:
+                      (response as any).decision || parsedContent.decision,
+                  };
+                  const decisionArtifact = (parsedContent.decision || {})
+                    .audit_artifact;
+                  if (!response.artifact && decisionArtifact) {
+                    response = { ...response, artifact: decisionArtifact };
+                  }
+                }
+              } catch {
+                // keep original safeContent
+              }
+            }
+
             const assistantMessage: ChatMessage = {
               id: response.message_id || placeholderId,
               role: "assistant",
-              content: response.content || "",
+              content: safeContent,
               artifact:
                 response.artifact ||
                 (response as any)?.decision_metadata?.audit_artifact ||
