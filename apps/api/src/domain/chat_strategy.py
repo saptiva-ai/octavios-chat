@@ -279,6 +279,82 @@ class SimpleChatStrategy(ChatStrategy):
                 "🐛 [DEBUG] No choices found - response_content set to empty string"
             )
 
+        # Always attempt to build audit artifact + semantic summary when audit tool ran
+        audit_artifact = None
+        audit_result = None
+        audit_doc_id = None
+        audit_doc_label = None
+        if context.tool_results:
+            for k, v in context.tool_results.items():
+                if str(k).startswith("audit_file") and isinstance(v, dict):
+                    audit_result = v
+                    audit_doc_id = (
+                        v.get("document_id")
+                        or v.get("doc_id")
+                        or v.get("docid")
+                        or None
+                    )
+                    break
+
+        if audit_result and isinstance(audit_result, dict):
+            summary_raw = audit_result.get("summary")
+            findings = audit_result.get("findings") or []
+            # Extract doc label with multiple fallbacks (filename > fetched title > tool key > id)
+            audit_doc_label = (
+                audit_result.get("audit_filename")
+                or audit_result.get("filename")
+                or audit_result.get("file_name")
+                or audit_result.get("doc_name")
+                or audit_result.get("document_name")
+            )
+            if not audit_doc_id and context.tool_results:
+                for k in context.tool_results.keys():
+                    if str(k).startswith("audit_file"):
+                        parts = str(k).split("_", maxsplit=2)
+                        if len(parts) >= 3:
+                            audit_doc_id = parts[-1]
+                        break
+
+            if not audit_doc_label and audit_doc_id:
+                try:
+                    from ..models.document import Document  # Lazy import to avoid cycles
+
+                    doc_obj = await Document.get(audit_doc_id)
+                    if doc_obj:
+                        audit_doc_label = (
+                            getattr(doc_obj, "filename", None)
+                            or getattr(doc_obj, "title", None)
+                            or getattr(doc_obj, "display_name", None)
+                        )
+                except Exception:
+                    audit_doc_label = None
+
+            if not audit_doc_label:
+                audit_doc_label = audit_doc_id or "Documento auditado"
+
+            actions = ["view_full_report", "download_pdf", "copy_json"]
+            artifact = build_audit_report_response(
+                doc_name=audit_doc_label,
+                findings=findings,
+                summary=summary_raw,
+                actions=actions,
+                metadata={
+                    "policy_used": audit_result.get("policy_used"),
+                    "validation_report_id": audit_result.get("validation_report_id"),
+                    "job_id": audit_result.get("job_id"),
+                    "filename": audit_doc_label,
+                    "display_name": audit_doc_label,
+                },
+            )
+            audit_artifact = artifact.model_dump()
+
+            # Always use semantic summary built from audit results for consistency
+            response_content = summarize_audit_for_message(
+                doc_name=audit_doc_label,
+                artifact=artifact,
+                summary_raw=summary_raw,
+            )
+
         # If the model only returned a tool invocation, provide a minimal message
         if not response_content and tool_invocations:
             primary = tool_invocations[0].get("result", {})
@@ -289,66 +365,6 @@ class SimpleChatStrategy(ChatStrategy):
 
         # ANTI-EMPTY-RESPONSE: Use centralized handler with contextual messages
         # Determine the most likely scenario based on available context
-        audit_artifact = None
-        if not response_content:
-            # 🛟 Synthetic fallback using audit tool results if LLM stayed silent
-            audit_result = None
-            if context.tool_results:
-                for k, v in context.tool_results.items():
-                    if str(k).startswith("audit_file"):
-                        audit_result = v
-                        break
-
-            if audit_result and isinstance(audit_result, dict):
-                logger.info(
-                    "🤖 [FALLBACK] LLM silent, generating synthetic response from tool results",
-                    tool_result_keys=list(context.tool_results.keys())
-                )
-                summary_raw = audit_result.get("summary")
-                findings = audit_result.get("findings") or []
-                # Extract doc label with multiple fallbacks (filename > tool key > generic)
-                doc_label = (
-                    audit_result.get("audit_filename")
-                    or audit_result.get("filename")
-                    or audit_result.get("file_name")
-                    or audit_result.get("doc_name")
-                    or audit_result.get("document_name")
-                )
-                if not doc_label and context.tool_results:
-                    for k in context.tool_results.keys():
-                        if str(k).startswith("audit_file"):
-                            parts = str(k).split("_", maxsplit=2)
-                            if len(parts) >= 3:
-                                doc_label = parts[-1]
-                            break
-                if not doc_label:
-                    doc_label = "el documento"
-
-                # Build structured artifact
-                actions = ["view_full_report", "download_pdf", "copy_json"]
-                artifact = build_audit_report_response(
-                    doc_name=doc_label,
-                    findings=findings,
-                    summary=summary_raw,
-                    actions=actions,
-                    metadata={
-                        "policy_used": audit_result.get("policy_used"),
-                        "validation_report_id": audit_result.get("validation_report_id"),
-                        "job_id": audit_result.get("job_id"),
-                        "filename": doc_label,
-                        "display_name": doc_label,
-                    },
-                )
-                audit_artifact = artifact.model_dump()
-
-                # Rich textual response with semantic interpretation
-                response_content = summarize_audit_for_message(
-                    doc_name=doc_label,
-                    artifact=artifact,
-                    summary_raw=summary_raw,
-                )
-
-            # If still empty after synthetic fallback, keep original handler
         if not response_content:
             has_documents = bool(context.document_ids)
 
