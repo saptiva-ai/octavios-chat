@@ -12,6 +12,12 @@ interface AuditSummaryCardProps {
 
 export function AuditSummaryCard({ data, className }: AuditSummaryCardProps) {
   const openCanvas = useCanvasStore((state) => state.openArtifact);
+  const displayName =
+    data.metadata?.display_name ||
+    data.metadata?.filename ||
+    (data.doc_name && /^[0-9a-fA-F-]{20,}$/.test(data.doc_name)
+      ? "Documento auditado"
+      : data.doc_name);
 
   const stats = data?.stats || {
     critical: 0,
@@ -39,7 +45,7 @@ export function AuditSummaryCard({ data, className }: AuditSummaryCardProps) {
           <p className="text-xs uppercase tracking-wide text-saptiva-light/60">
             Reporte de Auditoría
           </p>
-          <p className="truncate text-sm font-semibold">{data.doc_name}</p>
+          <p className="truncate text-sm font-semibold">{displayName}</p>
         </div>
       </div>
 

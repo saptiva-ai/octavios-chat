@@ -195,7 +195,10 @@ export interface AuditReportResponse {
   stats: AuditStats;
   categories: Record<string, AuditFinding[]>;
   actions: string[];
-  metadata: Record<string, any>;
+  metadata: Record<string, any> & {
+    filename?: string;
+    display_name?: string;
+  };
 }
 
 // Research related types
