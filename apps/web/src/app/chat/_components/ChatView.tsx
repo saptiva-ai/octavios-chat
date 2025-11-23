@@ -993,6 +993,11 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
               id: response.message_id || placeholderId,
               role: "assistant",
               content: response.content || "",
+              artifact:
+                response.artifact ||
+                (response as any)?.decision_metadata?.audit_artifact ||
+                (response.metadata as any)?.decision_metadata?.audit_artifact ||
+                null,
               timestamp: response.created_at || new Date().toISOString(),
               model: response.model,
               tokens: response.tokens || 0,

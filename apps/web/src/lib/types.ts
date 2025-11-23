@@ -85,6 +85,7 @@ export interface ChatMessage {
   content: string;
   role: "user" | "assistant" | "system";
   kind?: ChatMessageKind;
+  artifact?: Record<string, any> | null;
   timestamp: string | Date;
   status?: ChatMessageStatus;
   model?: string;
@@ -167,6 +168,34 @@ export interface ToolInvocation {
   tool_name: string;
   arguments?: Record<string, any>;
   result?: { id: string; title?: string; type?: string };
+}
+
+// Audit report (frontend mirror of backend AuditReportResponse)
+export interface AuditStats {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  total: number;
+}
+
+export interface AuditFinding {
+  id?: string | null;
+  category: string;
+  severity: string;
+  message: string;
+  page?: number | null;
+  suggestion?: string | null;
+  rule?: string | null;
+  raw?: Record<string, any>;
+}
+
+export interface AuditReportResponse {
+  doc_name: string;
+  stats: AuditStats;
+  categories: Record<string, AuditFinding[]>;
+  actions: string[];
+  metadata: Record<string, any>;
 }
 
 // Research related types

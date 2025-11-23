@@ -83,6 +83,11 @@ class ChatResponseBuilder:
         self._data["decision"] = decision
         return self
 
+    def with_artifact(self, artifact: Dict[str, Any]) -> 'ChatResponseBuilder':
+        """Attach structured artifact (e.g., audit report) for frontend rendering."""
+        self._data["artifact"] = artifact
+        return self
+
     def with_research_task(self, task_id: str) -> 'ChatResponseBuilder':
         """Set research task ID."""
         self._data["task_id"] = task_id
@@ -123,7 +128,21 @@ class ChatResponseBuilder:
         )
 
         self.with_chat_id(result.metadata.chat_id)
-        self.with_message(result.sanitized_content, sanitized=True)
+        # If audit artifact exists, avoid dumping full markdown and use a concise message
+        audit_artifact_local = (
+            result.metadata.decision_metadata.get("audit_artifact")
+            if result.metadata and result.metadata.decision_metadata
+            else None
+        )
+        if audit_artifact_local:
+            concise = (
+                result.sanitized_content
+                if result.sanitized_content and len(result.sanitized_content) < 300
+                else "He generado el reporte de auditoría. Puedes ver los detalles a continuación."
+            )
+            self.with_message(concise, sanitized=True)
+        else:
+            self.with_message(result.sanitized_content, sanitized=True)
         self.with_message_id(result.metadata.assistant_message_id or "")
         self.with_model(result.metadata.model_used)
         self.with_latency(result.processing_time_ms)
@@ -138,14 +157,19 @@ class ChatResponseBuilder:
         if result.metadata.decision_metadata:
             self.with_decision(result.metadata.decision_metadata)
             tool_invocations = result.metadata.decision_metadata.get("tool_invocations")
+            audit_artifact = result.metadata.decision_metadata.get("audit_artifact")
         else:
             tool_invocations = None
+            audit_artifact = None
 
         if result.task_id:
             self.with_research_task(result.task_id)
 
         if result.session_title:
             self.with_session_title(result.session_title)
+
+        if audit_artifact:
+            self.with_artifact(audit_artifact)
 
         # Add processing metadata
         self.with_metadata("strategy_used", result.strategy_used)

@@ -72,6 +72,7 @@ export interface ChatResponse {
   chat_id: string;
   message_id: string;
   content: string;
+  artifact?: Record<string, any> | null;
   role: "assistant";
   model: string;
   created_at: string;
@@ -667,6 +668,19 @@ class ApiClient {
           const { done, value } = await reader.read();
 
           if (done) {
+            // If stream ends and we have buffered JSON with no events, try to parse it
+            if (buffer.trim().startsWith("{")) {
+              try {
+                const parsed = JSON.parse(buffer);
+                yield { type: "done", data: parsed as ChatResponse };
+                return;
+              } catch (finalErr) {
+                console.error(
+                  "[🔍 NON-STREAMING END] Failed to parse buffered JSON:",
+                  finalErr,
+                );
+              }
+            }
             // console.log("[🔍 SSE DEBUG] Stream done - total chunks received:", chunkCount);
             break;
           }
@@ -695,6 +709,19 @@ class ApiClient {
                 "[🔍 NON-STREAMING] Failed to parse JSON response:",
                 jsonError,
               );
+              // Fallback: treat buffer as plain content to avoid breaking the flow
+              yield {
+                type: "done",
+                data: {
+                  chat_id: "",
+                  message_id: "",
+                  content: buffer,
+                  role: "assistant",
+                  model: "",
+                  created_at: new Date().toISOString(),
+                } as ChatResponse,
+              };
+              return;
             }
           }
 

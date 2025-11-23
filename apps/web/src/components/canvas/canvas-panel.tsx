@@ -8,6 +8,7 @@ import type { ArtifactRecord } from "@/lib/types";
 import { MarkdownRenderer } from "./markdown-renderer";
 import { MermaidGraph } from "./mermaid-graph";
 import { graphToMermaid } from "@/lib/utils/graph-to-mermaid";
+import { AuditDetailView } from "./views/AuditDetailView";
 
 interface CanvasPanelProps {
   className?: string;
@@ -43,11 +44,44 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
   const activeArtifactId = useCanvasStore((state) => state.activeArtifactId);
   const isSidebarOpen = useCanvasStore((state) => state.isSidebarOpen);
   const toggleSidebar = useCanvasStore((state) => state.toggleSidebar);
+  const activeArtifactData = useCanvasStore(
+    (state) => state.activeArtifactData,
+  );
   const cacheRef = React.useRef(new Map<string, ArtifactRecord>());
 
   const [artifact, setArtifact] = React.useState<ArtifactRecord | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [width, setWidth] = React.useState<number>(480);
+  const draggingRef = React.useRef(false);
+
+  const handleMouseDown = React.useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    draggingRef.current = true;
+  }, []);
+
+  React.useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!draggingRef.current) return;
+      const viewportWidth = window.innerWidth;
+      const newWidth = Math.min(
+        Math.max(viewportWidth - e.clientX, 400),
+        Math.min(800, viewportWidth * 0.5),
+      );
+      setWidth(newWidth);
+    };
+
+    const onUp = () => {
+      draggingRef.current = false;
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, []);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -104,6 +138,13 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
   }, [activeArtifactId, reportPdfUrl]);
 
   const renderContent = () => {
+    // New path: render audit detail directly if provided by store
+    if (activeArtifactData) {
+      // Accept plain payload or wrapped {type, payload}
+      const payload = (activeArtifactData as any).payload || activeArtifactData;
+      return <AuditDetailView report={payload} />;
+    }
+
     if (reportPdfUrl) {
       return (
         <iframe
@@ -176,11 +217,17 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
   return (
     <div
       className={cn(
-        "h-full bg-[#0b1021] border-l border-white/10 text-white transition-opacity duration-200",
+        "h-full bg-[#0b1021] border-l border-white/10 text-white transition-opacity duration-200 relative",
         isSidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none",
         className,
       )}
+      style={{ width }}
     >
+      {/* Resize handle */}
+      <div
+        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/50 active:bg-primary transition-colors z-50"
+        onMouseDown={handleMouseDown}
+      />
       <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
         <div>
           <p className="text-xs uppercase tracking-wide text-saptiva-light/60">

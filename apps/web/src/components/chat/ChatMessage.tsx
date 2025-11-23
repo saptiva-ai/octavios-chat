@@ -18,6 +18,7 @@ import type { ToolInvocation } from "@/lib/types";
 import type { FileAttachment } from "../../types/files";
 import { ArtifactCard } from "./artifact-card";
 import { parseToolCalls } from "../../lib/tool-parser";
+import { AuditSummaryCard } from "./artifacts/AuditSummaryCard";
 
 export interface ChatMessageProps {
   id?: string;
@@ -64,6 +65,7 @@ export interface ChatMessageProps {
   // Additional props for UX-005
   isError?: boolean;
   latency?: number;
+  artifact?: any;
 }
 
 export function ChatMessage({
@@ -90,6 +92,7 @@ export function ChatMessage({
   className,
   isError = false,
   latency,
+  artifact,
 }: ChatMessageProps) {
   const [copied, setCopied] = React.useState(false);
 
@@ -153,6 +156,21 @@ export function ChatMessage({
     typeof metadata === "object" &&
     "validation_report_id" in metadata &&
     metadata.validation_report_id;
+
+  // Prefer artifact at message level; fallback to metadata artifact/decision metadata
+  const auditArtifact =
+    artifact ||
+    (metadata as any)?.artifact ||
+    (metadata as any)?.decision_metadata?.audit_artifact ||
+    (metadata as any)?.audit_artifact;
+
+  // TEMP DEBUG
+  React.useEffect(() => {
+    if (auditArtifact) {
+      // eslint-disable-next-line no-console
+      console.log("Message Artifact:", auditArtifact);
+    }
+  }, [auditArtifact]);
 
   const handleCopy = async () => {
     const success = await copyToClipboard(displayContent);
@@ -315,6 +333,19 @@ export function ChatMessage({
             />
           </div>
         )}
+
+        {/* Structured audit summary card when artifact is present */}
+        {isAssistant &&
+          auditArtifact &&
+          ((auditArtifact as any).type === "audit_report_ui" ||
+            !(auditArtifact as any).type) && (
+            <div className="mt-3">
+              <AuditSummaryCard
+                data={(auditArtifact as any).payload || (auditArtifact as any)}
+                className={cn(isUser ? "ml-auto max-w-lg" : "max-w-lg")}
+              />
+            </div>
+          )}
 
         {/* Artifact cards should appear after the assistant's summary (and audit card) */}
         {artifactInvocations.length > 0 && (
