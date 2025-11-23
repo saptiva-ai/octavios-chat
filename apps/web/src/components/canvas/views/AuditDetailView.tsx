@@ -84,6 +84,21 @@ export function AuditDetailView({ report, className }: AuditDetailViewProps) {
     (report.doc_name && /^[0-9a-fA-F-]{20,}$/.test(report.doc_name)
       ? "Documento auditado"
       : report.doc_name);
+  const summaryText = React.useMemo(() => {
+    const summary = (report.metadata as any)?.summary;
+    if (!summary) return null;
+    if (typeof summary === "string") return summary;
+    if (typeof summary === "object") {
+      return (
+        summary.text ||
+        summary.summary ||
+        summary.overview ||
+        summary.short ||
+        null
+      );
+    }
+    return null;
+  }, [report.metadata]);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(JSON.stringify(report, null, 2));
@@ -126,6 +141,15 @@ export function AuditDetailView({ report, className }: AuditDetailViewProps) {
           low={report.stats.low}
         />
       </section>
+
+      {summaryText && (
+        <section className="rounded-lg border border-white/5 bg-white/5 p-3 text-sm text-saptiva-light">
+          <p className="text-xs uppercase tracking-wide text-saptiva-light/60">
+            Resumen ejecutivo
+          </p>
+          <p className="mt-1 text-white leading-relaxed">{summaryText}</p>
+        </section>
+      )}
 
       <section className="flex-1 overflow-auto rounded-lg border border-white/5 bg-slate-950/60 p-3">
         <div className="space-y-3">
