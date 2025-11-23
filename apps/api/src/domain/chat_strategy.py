@@ -24,6 +24,7 @@ from ..services.empty_response_handler import (
     EmptyResponseScenario,
     ensure_non_empty_content
 )
+from ..services.audit_utils import build_audit_report_response
 from .chat_context import ChatContext, ChatProcessingResult, MessageMetadata
 
 
@@ -288,6 +289,7 @@ class SimpleChatStrategy(ChatStrategy):
 
         # ANTI-EMPTY-RESPONSE: Use centralized handler with contextual messages
         # Determine the most likely scenario based on available context
+        audit_artifact = None
         if not response_content:
             # 🛟 Synthetic fallback using audit tool results if LLM stayed silent
             audit_result = None
@@ -304,35 +306,35 @@ class SimpleChatStrategy(ChatStrategy):
                 )
                 summary_raw = audit_result.get("summary")
                 findings = audit_result.get("findings") or []
+                # Extract doc label from tool key if possible
+                doc_label = None
+                if context.tool_results:
+                    for k in context.tool_results.keys():
+                        if str(k).startswith("audit_file"):
+                            parts = str(k).split("_", maxsplit=2)
+                            if len(parts) >= 3:
+                                doc_label = parts[-1]
+                            break
+                if not doc_label:
+                    doc_label = "el documento"
 
-                if isinstance(summary_raw, str):
-                    summary_text = summary_raw
-                elif isinstance(summary_raw, dict):
-                    summary_text = summary_raw.get("text") or summary_raw.get("summary") or str(summary_raw)
-                else:
-                    summary_text = "Análisis completado."
+                # Build structured artifact
+                actions = ["view_full_report", "download_pdf", "copy_json"]
+                artifact = build_audit_report_response(
+                    doc_name=doc_label,
+                    findings=findings,
+                    summary=summary_raw,
+                    actions=actions,
+                    metadata={
+                        "policy_used": audit_result.get("policy_used"),
+                        "validation_report_id": audit_result.get("validation_report_id"),
+                        "job_id": audit_result.get("job_id"),
+                    },
+                )
+                audit_artifact = artifact.model_dump()
 
-                lines = [
-                    "### Reporte de Auditoría (Generado Automáticamente)",
-                    "",
-                    summary_text,
-                    "",
-                    "#### Hallazgos principales"
-                ]
-
-                if findings:
-                    for f in findings:
-                        if isinstance(f, dict):
-                            msg = f.get("message") or f.get("issue") or str(f)
-                            sev = f.get("severity")
-                            prefix = f"[{sev}] " if sev else ""
-                            lines.append(f"- {prefix}{msg}")
-                        else:
-                            lines.append(f"- {f}")
-                else:
-                    lines.append("- Sin hallazgos críticos.")
-
-                response_content = "\n".join(lines)
+                # Minimal textual response
+                response_content = f"He completado la auditoría de {doc_label}. Puedes ver el reporte detallado a continuación."
 
             # If still empty after synthetic fallback, keep original handler
         if not response_content:
@@ -386,6 +388,8 @@ class SimpleChatStrategy(ChatStrategy):
         # BE-PERF-1: Include context metadata (used_docs, used_chars)
         # Phase 2 MCP: Include unified context metadata (documents + tools)
         decision_metadata = coordinated_response.get("decision") or {}
+        if audit_artifact:
+            decision_metadata["audit_artifact"] = audit_artifact
         if doc_warnings:
             decision_metadata["document_warnings"] = doc_warnings
         if context_metadata:
