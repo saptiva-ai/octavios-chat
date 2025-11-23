@@ -660,6 +660,23 @@ class ApiClient {
       let buffer = "";
       let currentEvent = "";
       let chunkCount = 0;
+      const extractJsonCandidate = (raw: string) => {
+        const firstBrace = raw.indexOf("{");
+        if (firstBrace === -1) return null;
+        let depth = 0;
+        for (let i = firstBrace; i < raw.length; i++) {
+          const char = raw[i];
+          if (char === "{") {
+            depth++;
+          } else if (char === "}") {
+            depth--;
+            if (depth === 0) {
+              return raw.slice(firstBrace, i + 1);
+            }
+          }
+        }
+        return null;
+      };
 
       // console.log("[🔍 SSE DEBUG] Starting to read SSE stream");
 
@@ -669,9 +686,11 @@ class ApiClient {
 
           if (done) {
             // If stream ends and we have buffered JSON with no events, try to parse it
-            if (buffer.trim().startsWith("{")) {
+            const candidate =
+              extractJsonCandidate(buffer.trim()) || buffer.trim();
+            if (candidate && candidate.startsWith("{")) {
               try {
-                const parsed = JSON.parse(buffer);
+                const parsed = JSON.parse(candidate);
                 yield { type: "done", data: parsed as ChatResponse };
                 return;
               } catch (finalErr) {
@@ -700,7 +719,8 @@ class ApiClient {
           ) {
             // console.log("[🔍 NON-STREAMING DETECTED] Backend sent JSON response, parsing as ChatResponse");
             try {
-              const jsonResponse = JSON.parse(buffer);
+              const candidate = extractJsonCandidate(buffer) || buffer;
+              const jsonResponse = JSON.parse(candidate);
               // console.log("[🔍 NON-STREAMING] Parsed response:", jsonResponse);
               yield { type: "done", data: jsonResponse as ChatResponse };
               return; // Exit early - no more chunks expected
