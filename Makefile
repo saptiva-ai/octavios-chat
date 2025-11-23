@@ -343,10 +343,7 @@ db-restore:
 
 create-demo-user:
 	@echo "📝 Creating demo user..."
-	@$(COMPOSE) exec -T \
-		-e MONGODB_URI="$(MONGODB_URL)" \
-		-e MONGODB_DB_NAME="$(MONGODB_DATABASE)" \
-		api python scripts/create_demo_user.py
+	@$(COMPOSE) exec -T api sh -c 'MONGODB_URI="$$MONGODB_URL" MONGODB_DB_NAME="$$MONGODB_DATABASE" python scripts/create_demo_user.py'
 
 verify:
 	@$(MAKE) health
