@@ -469,7 +469,8 @@ class StreamingHandler:
                 try:
                     pdf_path, is_temp = minio_storage.materialize_document(
                         document.minio_key,
-                        filename=document.filename
+                        filename=document.filename,
+                        bucket=document.minio_bucket
                     )
                 except Exception as storage_exc:
                     logger.error(
