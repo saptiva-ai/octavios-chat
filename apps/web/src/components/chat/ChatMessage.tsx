@@ -163,6 +163,10 @@ export function ChatMessage({
     (metadata as any)?.artifact ||
     (metadata as any)?.decision_metadata?.audit_artifact ||
     (metadata as any)?.audit_artifact;
+  const auditDisplayName =
+    (auditArtifact as any)?.metadata?.display_name ||
+    (auditArtifact as any)?.metadata?.filename ||
+    (auditArtifact as any)?.doc_name;
 
   const handleCopy = async () => {
     const success = await copyToClipboard(displayContent);
@@ -333,7 +337,15 @@ export function ChatMessage({
             !(auditArtifact as any).type) && (
             <div className="mt-3">
               <AuditSummaryCard
-                data={(auditArtifact as any).payload || (auditArtifact as any)}
+                data={{
+                  ...((auditArtifact as any).payload || (auditArtifact as any)),
+                  metadata: {
+                    ...((auditArtifact as any).payload?.metadata ||
+                      (auditArtifact as any).metadata ||
+                      {}),
+                    display_name: auditDisplayName,
+                  },
+                }}
                 className={cn(isUser ? "ml-auto max-w-lg" : "max-w-lg")}
               />
             </div>
