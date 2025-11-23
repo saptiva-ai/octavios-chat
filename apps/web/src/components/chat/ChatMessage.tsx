@@ -338,11 +338,19 @@ export function ChatMessage({
             <div className="mt-3">
               <AuditSummaryCard
                 data={{
-                  ...((auditArtifact as any).payload || (auditArtifact as any)),
+                  // Use artifact root directly (it now has complete AuditReportResponse structure)
+                  doc_name: (auditArtifact as any).doc_name || "",
+                  stats: (auditArtifact as any).stats || {
+                    critical: 0,
+                    high: 0,
+                    medium: 0,
+                    low: 0,
+                    total: 0,
+                  },
+                  categories: (auditArtifact as any).categories || {},
+                  actions: (auditArtifact as any).actions || [],
                   metadata: {
-                    ...((auditArtifact as any).payload?.metadata ||
-                      (auditArtifact as any).metadata ||
-                      {}),
+                    ...((auditArtifact as any).metadata || {}),
                     display_name: auditDisplayName,
                   },
                 }}

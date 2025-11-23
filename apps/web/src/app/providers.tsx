@@ -2,6 +2,7 @@
 
 import { ReactNode, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { CanvasProvider } from "@/context/CanvasContext";
 
 /**
  * React Query configuration for the application
@@ -28,6 +29,8 @@ export function Providers({ children }: { children: ReactNode }) {
   );
 
   return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>
+      <CanvasProvider>{children}</CanvasProvider>
+    </QueryClientProvider>
   );
 }

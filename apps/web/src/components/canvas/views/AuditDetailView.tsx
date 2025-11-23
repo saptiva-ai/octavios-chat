@@ -180,7 +180,7 @@ export function AuditDetailView({ report, className }: AuditDetailViewProps) {
               <div className="mt-2 space-y-2 text-sm text-saptiva-light">
                 {findings.map((f, idx) => (
                   <div
-                    key={`${f.id || idx}-${f.message.slice(0, 20)}`}
+                    key={`${f.id || idx}-${(f.message || "").slice(0, 20)}`}
                     className="rounded border border-white/5 bg-slate-900/70 p-2"
                   >
                     <div className="flex items-center justify-between text-xs uppercase tracking-tight">
@@ -204,7 +204,9 @@ export function AuditDetailView({ report, className }: AuditDetailViewProps) {
                         </span>
                       )}
                     </div>
-                    <p className="mt-1 text-sm text-white">{f.message}</p>
+                    <p className="mt-1 text-sm text-white">
+                      {f.message || "Sin descripción"}
+                    </p>
                     {f.suggestion && (
                       <p className="text-xs text-saptiva-light/70">
                         Sugerencia: {f.suggestion}

@@ -46,6 +46,187 @@ from ....services.empty_response_handler import (
 logger = structlog.get_logger(__name__)
 
 
+async def generate_executive_summary(validation_event: dict, saptiva_client) -> str:
+    """
+    Generate executive summary using Saptiva Turbo based on all audit findings.
+
+    Args:
+        validation_event: The validation_complete event with all findings
+        saptiva_client: Saptiva API client
+
+    Returns:
+        Executive summary with prioritized recommendations
+    """
+    summary = validation_event.get("summary", {})
+    findings_by_severity = summary.get("findings_by_severity", {})
+
+    critical = findings_by_severity.get('critical', 0)
+    high = findings_by_severity.get('high', 0)
+    medium = findings_by_severity.get('medium', 0)
+    low = findings_by_severity.get('low', 0)
+
+    # Get findings by category
+    findings = validation_event.get("findings", [])
+    categories = {}
+    for finding in findings:
+        cat = finding.get("category", "Sin categoría")
+        sev = finding.get("severity", "low")
+        if cat not in categories:
+            categories[cat] = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+        categories[cat][sev] = categories[cat].get(sev, 0) + 1
+
+    # Build context for LLM
+    context = f"""Hallazgos por severidad:
+- Críticos: {critical}
+- Altos: {high}
+- Medios: {medium}
+- Bajos: {low}
+
+Hallazgos por categoría:
+"""
+    for cat, counts in categories.items():
+        if any(counts.values()):
+            context += f"\n{cat}:\n"
+            if counts["critical"] > 0:
+                context += f"  - {counts['critical']} críticos\n"
+            if counts["high"] > 0:
+                context += f"  - {counts['high']} altos\n"
+            if counts["medium"] > 0:
+                context += f"  - {counts['medium']} medios\n"
+            if counts["low"] > 0:
+                context += f"  - {counts['low']} bajos\n"
+
+    prompt = f"""Eres un analista de cumplimiento corporativo. Revisa los siguientes resultados de auditoría y genera un resumen ejecutivo de 3-4 oraciones.
+
+{context}
+
+Tu resumen debe:
+1. Identificar la prioridad máxima (qué debe atenderse primero)
+2. Mencionar las categorías más problemáticas
+3. Dar perspectiva sobre el estado general del documento
+4. Ser directo, profesional, sin emojis
+
+Ejemplo de formato esperado:
+"El documento presenta 1 hallazgo crítico en Disclaimers que debe corregirse de inmediato. Se detectaron 80 problemas de formato de prioridad alta que afectan la consistencia con el manual de marca. Los aspectos de gramática y tipografía muestran únicamente sugerencias menores que pueden atenderse opcionalmente."
+"""
+
+    try:
+        response = await saptiva_client.chat_completion(
+            model="SAPTIVA_TURBO",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=200,
+            temperature=0.3
+        )
+
+        if response and "choices" in response and len(response["choices"]) > 0:
+            analysis = response["choices"][0]["message"]["content"].strip()
+            return analysis
+        else:
+            return None
+
+    except Exception as e:
+        logger.warning("Failed to generate executive summary", error=str(e))
+        return None
+
+
+def generate_document_summary(filename: str, page_count: int, extracted_text: str = "") -> str:
+    """
+    Generate executive summary of the document based on filename and content.
+
+    Args:
+        filename: Document filename
+        page_count: Number of pages
+        extracted_text: Extracted text from document (optional)
+
+    Returns:
+        Formatted executive summary string
+    """
+    # Infer document type from filename patterns
+    doc_type = "Documento corporativo"
+    if any(kw in filename.lower() for kw in ["presentacion", "presentation", "pitch"]):
+        doc_type = "Presentación corporativa"
+    elif any(kw in filename.lower() for kw in ["prospecto", "prospectus"]):
+        doc_type = "Prospecto financiero"
+    elif any(kw in filename.lower() for kw in ["reporte", "report", "informe"]):
+        doc_type = "Reporte ejecutivo"
+    elif any(kw in filename.lower() for kw in ["proceso", "process", "procedimiento"]):
+        doc_type = "Documento de proceso"
+    elif any(kw in filename.lower() for kw in ["politica", "policy", "manual"]):
+        doc_type = "Documento normativo"
+    elif any(kw in filename.lower() for kw in ["uso", "guia", "guide"]):
+        doc_type = "Guía de uso"
+
+    # Extract potential topic from filename
+    topic = "No especificado"
+    if "valoracion" in filename.lower():
+        topic = "Proceso de valoración de activos"
+    elif "ia" in filename.lower() or "ai" in filename.lower():
+        topic = "Inteligencia Artificial y uso de tecnología"
+    elif "inversion" in filename.lower():
+        topic = "Estrategia de inversión"
+    elif "riesgo" in filename.lower():
+        topic = "Gestión de riesgos"
+
+    summary = f"📄 **{doc_type}** • {page_count} páginas\n"
+    summary += f"_{topic}_\n\n"
+
+    return summary
+
+
+def humanize_auditor_result(auditor_name: str, findings_count: int, findings: list) -> str:
+    """
+    Generate human-readable interpretation of auditor results.
+
+    Args:
+        auditor_name: Name of the auditor (e.g., "Grammar Auditor")
+        findings_count: Number of findings
+        findings: List of finding dictionaries with 'severity' key
+
+    Returns:
+        Human-readable summary string
+    """
+    if findings_count == 0:
+        no_issues_messages = {
+            "Grammar Auditor": "No se detectaron errores ortográficos ni gramaticales. El texto está impecable.",
+            "Format Auditor": "El formato del documento cumple perfectamente con los estándares.",
+            "Logo Auditor": "Los logos están correctamente posicionados y con la calidad esperada.",
+            "Color Palette Auditor": "La paleta de colores está bien aplicada en todo el documento.",
+            "Disclaimer Auditor": "Todos los disclaimers requeridos están presentes y correctos.",
+            "Typography Auditor": "La tipografía cumple con las especificaciones del manual de marca.",
+            "Entity Consistency Auditor": "Las entidades están nombradas de forma consistente en todo el documento.",
+            "Semantic Consistency Auditor": "El contenido mantiene coherencia semántica en todas las secciones.",
+        }
+        return no_issues_messages.get(auditor_name, f"No se encontraron problemas en {auditor_name}.")
+
+    # Count by severity
+    severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    for finding in findings:
+        severity = finding.get("severity", "low").lower()
+        if severity in severity_counts:
+            severity_counts[severity] += 1
+
+    # Build interpretation based on severity distribution
+    critical = severity_counts["critical"]
+    high = severity_counts["high"]
+    medium = severity_counts["medium"]
+    low = severity_counts["low"]
+
+    if critical > 0:
+        level = "🔴 Crítico"
+        interpretation = f"Se encontraron {critical} {'problema' if critical == 1 else 'problemas'} {'crítico' if critical == 1 else 'críticos'} que requieren atención inmediata"
+    elif high > 0:
+        level = "🟠 Alto"
+        interpretation = f"Hay {high} {'hallazgo' if high == 1 else 'hallazgos'} de prioridad alta que deben corregirse"
+    elif medium > 0:
+        level = "🟡 Medio"
+        interpretation = f"Se detectaron {medium} {'aspecto' if medium == 1 else 'aspectos'} a mejorar de prioridad media"
+    else:
+        level = "🟢 Bajo"
+        interpretation = f"Solo {low} {'detalle' if low == 1 else 'detalles'} menores detectados"
+
+    return f"{level} - {interpretation}"
+
+
 def calculate_dynamic_max_tokens(
     messages: list[dict],
     model_limit: int = 8192,
@@ -526,6 +707,7 @@ class StreamingHandler:
         accumulated_content = []
         last_job_id = None  # Track job_id from validation_complete event
         validation_complete_event = None  # Capture full audit report
+        progress_line_index = None  # Track which line has the progress indicator
 
         try:
             # Stream validation progress
@@ -548,23 +730,26 @@ class StreamingHandler:
                 event_type = audit_event.get("type")
 
                 if event_type == "validation_start":
-                    content = f"🔍 **Iniciando auditoría de {audit_event['filename']}**\n\n"
-                    content += f"Total de auditores: {audit_event['total_auditors']}\n\n"
+                    content = f"🔍 Analizando **{audit_event['filename']}**\n\n"
                     accumulated_content.append(content)
 
                 elif event_type == "fragments_extracted":
-                    content = f"✅ Fragmentos extraídos: {audit_event['fragments_count']} ({audit_event['duration_ms']}ms)\n\n"
-                    accumulated_content.append(content)
+                    # Generate executive summary after extraction
+                    # Get page count from fragments_count (number of pages extracted)
+                    page_count = audit_event.get('fragments_count', 0)
+                    summary = generate_document_summary(
+                        filename=audit_event.get('filename', document.filename),
+                        page_count=page_count
+                    )
+                    accumulated_content.append(summary)
 
                 elif event_type == "auditor_start":
-                    content = f"⏳ **[{audit_event['current']}/{audit_event['total_auditors']}] {audit_event['auditor_name']}**\n"
-                    accumulated_content.append(content)
+                    # Skip progress messages - audit is fast enough
+                    continue
 
                 elif event_type == "auditor_complete":
-                    findings_count = len(audit_event.get("findings", []))
-                    duration = audit_event.get("duration_ms", 0)
-                    content = f"✅ Completado - {findings_count} hallazgos ({duration}ms)\n\n"
-                    accumulated_content.append(content)
+                    # Skip progress messages - audit is fast enough
+                    continue
 
                 elif event_type == "auditor_error":
                     error = audit_event.get("error", "Error desconocido")
@@ -579,20 +764,49 @@ class StreamingHandler:
                     summary = audit_event.get("summary", {})
                     total_findings = summary.get("total_findings", 0)
                     duration = audit_event.get("duration_ms", 0)
-
-                    content = f"\n---\n\n"
-                    content += f"## 📊 Resumen de Auditoría\n\n"
-                    content += f"**Total de hallazgos:** {total_findings}\n"
-                    content += f"**Duración total:** {duration}ms\n\n"
-
                     findings_by_severity = summary.get("findings_by_severity", {})
-                    content += f"**Por severidad:**\n"
-                    content += f"- 🔴 Crítico: {findings_by_severity.get('critical', 0)}\n"
-                    content += f"- 🟠 Alto: {findings_by_severity.get('high', 0)}\n"
-                    content += f"- 🟡 Medio: {findings_by_severity.get('medium', 0)}\n"
-                    content += f"- 🟢 Bajo: {findings_by_severity.get('low', 0)}\n\n"
 
-                    content += f"**Job ID:** `{last_job_id}`\n"
+                    critical = findings_by_severity.get('critical', 0)
+                    high = findings_by_severity.get('high', 0)
+                    medium = findings_by_severity.get('medium', 0)
+                    low = findings_by_severity.get('low', 0)
+
+                    # Generate AI-powered executive summary
+                    content = f"**Resultado de Auditoría**\n\n"
+
+                    executive_summary = await generate_executive_summary(
+                        validation_event=audit_event,
+                        saptiva_client=await get_saptiva_client()
+                    )
+
+                    if executive_summary:
+                        content += f"{executive_summary}\n\n"
+                        content += f"---\n\n"
+
+                    # PRIORITIZED: Critical first
+                    if critical > 0:
+                        content += f"⚠️ **ATENCIÓN:** {critical} {'problema crítico' if critical == 1 else 'problemas críticos'} {'detectado' if critical == 1 else 'detectados'}\n"
+                        content += f"_Corrección obligatoria antes de publicar_\n\n"
+
+                    # PRIORITIZED: High priority second
+                    if high > 0:
+                        content += f"📝 **{high} recomendación{'' if high == 1 else 'es'}** de prioridad alta\n"
+                        content += f"_Se sugiere revisar para cumplir estándares corporativos_\n\n"
+
+                    # PRIORITIZED: Medium and Low together
+                    if medium > 0 or low > 0:
+                        suggestions_count = medium + low
+                        content += f"✓ **{suggestions_count} sugerencia{'' if suggestions_count == 1 else 's'}** opcional{'' if suggestions_count == 1 else 'es'}\n"
+                        content += f"_Mejoras de estilo y calidad_\n\n"
+
+                    # Perfect document
+                    if total_findings == 0:
+                        content += f"✅ **Documento aprobado**\n"
+                        content += f"_Cumple con todos los estándares de calidad_\n\n"
+
+                    # Footer with meta info
+                    content += f"---\n"
+                    content += f"_Análisis completado • {duration}ms_\n"
 
                     accumulated_content.append(content)
 
@@ -605,7 +819,43 @@ class StreamingHandler:
                     })
                 }
 
-            # Save final response
+            # Build audit artifact from validation_complete event FIRST
+            audit_artifact = None
+            if validation_complete_event:
+                # Transform findings list into categories dict (grouped by category)
+                findings_list = validation_complete_event.get("findings", [])
+                categories = {}
+                for finding in findings_list:
+                    category = finding.get("category", "Sin categoría")
+                    if category not in categories:
+                        categories[category] = []
+                    categories[category].append(finding)
+
+                # Build complete AuditReportResponse structure
+                audit_artifact = {
+                    "type": "audit_report_ui",
+                    "doc_name": document.filename,
+                    "metadata": {
+                        "display_name": document.filename,
+                        "filename": document.filename,
+                        "policy_used": {
+                            "id": validation_complete_event.get("policy_id"),
+                            "name": validation_complete_event.get("policy_name", "N/D"),
+                        },
+                    },
+                    "stats": {
+                        "critical": validation_complete_event.get("summary", {}).get("findings_by_severity", {}).get("critical", 0),
+                        "high": validation_complete_event.get("summary", {}).get("findings_by_severity", {}).get("high", 0),
+                        "medium": validation_complete_event.get("summary", {}).get("findings_by_severity", {}).get("medium", 0),
+                        "low": validation_complete_event.get("summary", {}).get("findings_by_severity", {}).get("low", 0),
+                        "total": validation_complete_event.get("summary", {}).get("total_findings", 0),
+                    },
+                    "categories": categories,
+                    "actions": [],  # Could be populated with recommended actions in the future
+                    "payload": validation_complete_event,  # Keep full event for reference
+                }
+
+            # Save final response with artifact in metadata
             full_content = "".join(accumulated_content)
             assistant_message = await chat_service.add_assistant_message(
                 chat_session=chat_session,
@@ -616,27 +866,9 @@ class StreamingHandler:
                     "document_id": str(document.id),
                     "filename": document.filename,
                     "job_id": last_job_id,
+                    "artifact": audit_artifact,  # Include artifact in metadata for persistence
                 }
             )
-
-            # Build audit artifact from validation_complete event
-            audit_artifact = None
-            if validation_complete_event:
-                audit_artifact = {
-                    "type": "audit_report_ui",
-                    "metadata": {
-                        "display_name": document.filename,
-                        "filename": document.filename,
-                    },
-                    "stats": {
-                        "critical": validation_complete_event.get("summary", {}).get("findings_by_severity", {}).get("critical", 0),
-                        "high": validation_complete_event.get("summary", {}).get("findings_by_severity", {}).get("high", 0),
-                        "medium": validation_complete_event.get("summary", {}).get("findings_by_severity", {}).get("medium", 0),
-                        "low": validation_complete_event.get("summary", {}).get("findings_by_severity", {}).get("low", 0),
-                        "total": validation_complete_event.get("summary", {}).get("total_findings", 0),
-                    },
-                    "payload": validation_complete_event,
-                }
 
             # Yield done event
             done_data = {
