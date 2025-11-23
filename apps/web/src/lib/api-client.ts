@@ -620,6 +620,21 @@ class ApiClient {
       });
 
       if (!response.ok) {
+        if (
+          (response.status === 401 || response.status === 403) &&
+          logoutHandler
+        ) {
+          const reason =
+            response.status === 401 ? "token_expired" : "token_invalid";
+          logWarn("Streaming request unauthorized, forcing logout", {
+            status: response.status,
+            reason,
+            url,
+          });
+          setTimeout(() => {
+            logoutHandler?.({ reason });
+          }, 100);
+        }
         // 🚨 ENHANCED ERROR LOGGING: Capture full error details from backend
         const errorText = await response.text();
 

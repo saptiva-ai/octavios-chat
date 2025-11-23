@@ -78,9 +78,10 @@ export function AuditSummaryCard({ data, className }: AuditSummaryCardProps) {
   return (
     <div
       className={cn(
-        "rounded-lg border border-white/10 bg-slate-900/80 p-4 hover:border-saptiva/50 transition-all duration-200 text-white",
+        "rounded-lg border border-white/10 p-4 hover:border-saptiva/50 transition-all duration-200 text-white",
         className,
       )}
+      style={{ backgroundColor: "#232B3A" }}
     >
       {/* Header */}
       <div className="flex items-start gap-3 mb-3">
