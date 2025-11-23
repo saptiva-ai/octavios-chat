@@ -322,15 +322,17 @@ class SimpleChatStrategy(ChatStrategy):
                             audit_doc_id = parts[-1]
                         break
 
+            # Fill audit_doc_id from context if missing
+            if not audit_doc_id and context_doc_id:
+                audit_doc_id = context_doc_id
+
             # Try fetch filename from DB if label missing or looks like an ID
-            should_lookup = (not audit_doc_label or _looks_like_id(audit_doc_label)) and (
-                audit_doc_id or context_doc_id
-            )
+            should_lookup = (not audit_doc_label or _looks_like_id(audit_doc_label)) and audit_doc_id
             if should_lookup:
                 try:
                     from ..models.document import Document  # Lazy import to avoid cycles
 
-                    doc_obj = await Document.get(audit_doc_id or context_doc_id)
+                    doc_obj = await Document.get(audit_doc_id)
                     if doc_obj:
                         audit_doc_label = (
                             getattr(doc_obj, "filename", None)
@@ -356,6 +358,7 @@ class SimpleChatStrategy(ChatStrategy):
                     "policy_used": audit_result.get("policy_used"),
                     "validation_report_id": audit_result.get("validation_report_id"),
                     "job_id": audit_result.get("job_id"),
+                    "document_id": audit_doc_id,
                     "filename": audit_doc_label,
                     "display_name": audit_doc_label,
                 },
