@@ -4,13 +4,18 @@ import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCanvas } from "@/context/CanvasContext";
 import { AuditDetailView } from "@/components/canvas/views/AuditDetailView";
+import {
+  ClipboardDocumentListIcon,
+  ArrowDownTrayIcon,
+  XMarkIcon,
+} from "@heroicons/react/24/outline";
 
 const MIN_WIDTH = 350;
 const MAX_WIDTH = 800;
 const DEFAULT_WIDTH = 400;
 
 export function ResizableCanvas() {
-  const { isOpen, content, closeCanvas } = useCanvas();
+  const { isOpen, content, closeCanvas, reportPdfUrl } = useCanvas();
   const [width, setWidth] = React.useState<number>(DEFAULT_WIDTH);
   const [isDragging, setIsDragging] = React.useState(false);
 
@@ -60,6 +65,64 @@ export function ResizableCanvas() {
     setWidth(targetWidth);
   }, []);
 
+  const handleCopy = React.useCallback(async () => {
+    if (!content) return;
+    const json = JSON.stringify(content, null, 2);
+    await navigator.clipboard.writeText(json);
+  }, [content]);
+
+  const handleDownload = React.useCallback(() => {
+    if (!content) return;
+
+    // Extract a usable validation_report_id for on-demand download fallback
+    const reportId =
+      (content.metadata as any)?.decision_metadata?.validation_report_id ||
+      (content.metadata as any)?.validation_report_id ||
+      (content as any)?.payload?.validation_report_id;
+
+    const url =
+      reportPdfUrl ||
+      // Prefer generated PDF attachment if present (metadata)
+      (content.metadata as any)?.attachments?.full_report_pdf?.url ||
+      (content.metadata as any)?.attachments?.full_report_pdf?.presigned_url ||
+      (content.metadata as any)?.attachments?.report_pdf_url ||
+      content.metadata?.report_pdf_url ||
+      content.metadata?.report_url ||
+      content.metadata?.pdf_url ||
+      // Fallback to payload attachments if metadata is missing
+      (content as any)?.payload?.attachments?.full_report_pdf?.url ||
+      (content as any)?.payload?.attachments?.full_report_pdf?.presigned_url ||
+      (content as any)?.payload?.attachments?.report_pdf_url ||
+      (content as any)?.payload?.report_pdf_url ||
+      // Legacy on-demand endpoint if we only have the report id
+      (reportId
+        ? `${(
+            process.env.NEXT_PUBLIC_API_URL ||
+            (typeof window !== "undefined" ? window.location.origin : "")
+          ).replace(/\/$/, "")}/api/reports/audit/${reportId}/download`
+        : null);
+
+    if (url) {
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    const filename =
+      content.metadata?.display_name ||
+      content.metadata?.filename ||
+      content.doc_name ||
+      "reporte-auditoria";
+
+    const blob = new Blob([JSON.stringify(content, null, 2)], {
+      type: "application/json",
+    });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `${filename}.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 3000);
+  }, [content]);
+
   // Attach global mouse listeners when dragging
   React.useEffect(() => {
     if (isDragging) {
@@ -106,15 +169,34 @@ export function ResizableCanvas() {
           />
 
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-            <h2 className="text-lg font-semibold text-white">Canvas</h2>
-            <button
-              onClick={closeCanvas}
-              className="rounded-md p-2 hover:bg-white/10 transition-colors text-xl"
-              aria-label="Cerrar canvas"
-            >
-              ✕
-            </button>
+          <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-white/10">
+            <h2 className="text-sm font-semibold text-white">
+              Panel de hallazgos
+            </h2>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handleCopy}
+                className="flex items-center justify-center rounded-md border border-white/10 bg-white/5 p-1.5 text-xs font-semibold text-white hover:border-white/30 hover:bg-white/10 transition-colors"
+                aria-label="Copiar JSON"
+              >
+                <ClipboardDocumentListIcon className="h-4 w-4" />
+              </button>
+              <button
+                onClick={handleDownload}
+                className="flex items-center justify-center rounded-md border border-white/10 bg-white/5 p-1.5 text-xs font-semibold text-white hover:border-white/30 hover:bg-white/10 transition-colors"
+                aria-label="Descargar"
+              >
+                <ArrowDownTrayIcon className="h-4 w-4" />
+              </button>
+              <button
+                onClick={closeCanvas}
+                className="flex items-center justify-center rounded-md border border-white/10 bg-white/5 p-1.5 text-xs font-semibold text-white hover:border-white/30 hover:bg-white/10 transition-colors"
+                aria-label="Cerrar"
+                title="Cerrar"
+              >
+                <XMarkIcon className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           {/* Content */}

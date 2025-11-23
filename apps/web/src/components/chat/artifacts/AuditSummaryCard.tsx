@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useParams } from "next/navigation";
 import { useCanvas } from "@/context/CanvasContext";
 import type { AuditReportResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -11,6 +12,8 @@ interface AuditSummaryCardProps {
 }
 
 export function AuditSummaryCard({ data, className }: AuditSummaryCardProps) {
+  const params = useParams();
+  const chatId = params?.chatId as string | undefined;
   const { openCanvas } = useCanvas();
   const displayName =
     data.metadata?.display_name ||
@@ -27,7 +30,18 @@ export function AuditSummaryCard({ data, className }: AuditSummaryCardProps) {
   };
 
   const handleOpen = () => {
-    openCanvas(data, "overview");
+    const meta: any = data.metadata || {};
+    openCanvas(data, {
+      tab: "overview",
+      sessionId: chatId,
+      reportPdfUrl:
+        meta?.attachments?.full_report_pdf?.url ||
+        meta?.attachments?.full_report_pdf?.presigned_url ||
+        meta?.attachments?.report_pdf_url ||
+        meta?.report_pdf_url ||
+        meta?.report_url ||
+        meta?.pdf_url,
+    });
   };
 
   // Generate business-oriented status message

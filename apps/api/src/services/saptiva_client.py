@@ -247,6 +247,10 @@ class SaptivaClient:
 
         # Validar API key
         if self.mock_mode:
+            if self.mock_reason == "missing_api_key":
+                raise RuntimeError(
+                    "SAPTIVA API no está configurada (falta SAPTIVA_API_KEY/SAPTIVA_BASE_URL)."
+                )
             return self._generate_mock_response(messages, model)
 
         if not self.api_key:

@@ -749,7 +749,12 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                     updateStreamingContent(placeholderId, accumulatedContent);
                   } else if (event.type === "done") {
                     // console.log("[🔍 STREAMING DEBUG] Done event - has content:", !!event.data.content, "accumulated:", accumulatedContent.length);
-                    response = event.data;
+                    response = {
+                      ...event.data,
+                      // Ensure metadata from SSE is preserved for downstream (report_pdf_url, attachments, artifact)
+                      metadata:
+                        event.data?.metadata || (response as any)?.metadata,
+                    } as ChatResponse;
                   } else if (event.type === "error") {
                     // Handle both string and object error formats
                     const errorMsg =
@@ -774,6 +779,7 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                     role: "assistant" as const,
                     model: metaData?.model || backendModelId,
                     created_at: new Date().toISOString(),
+                    metadata: (response as any)?.metadata || metaData || {},
                   };
                 }
 
