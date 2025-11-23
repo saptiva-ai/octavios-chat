@@ -4,6 +4,7 @@ import { Providers } from "./providers";
 import { ToasterProvider } from "../components/providers/ToasterProvider";
 import { SyncProvider } from "../components/providers/SyncProvider";
 import { SessionExpiredToast } from "../components/ui/SessionExpiredToast";
+import { ResizableCanvas } from "../components/ui/ResizableCanvas";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -35,6 +36,7 @@ export default function RootLayout({
           <ToasterProvider />
           <SyncProvider />
           <SessionExpiredToast />
+          <ResizableCanvas />
         </Providers>
       </body>
     </html>
