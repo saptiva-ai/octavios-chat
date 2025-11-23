@@ -24,7 +24,7 @@ from ..services.empty_response_handler import (
     EmptyResponseScenario,
     ensure_non_empty_content
 )
-from ..services.audit_utils import build_audit_report_response
+from ..services.audit_utils import build_audit_report_response, summarize_audit_for_message
 from .chat_context import ChatContext, ChatProcessingResult, MessageMetadata
 
 
@@ -306,9 +306,15 @@ class SimpleChatStrategy(ChatStrategy):
                 )
                 summary_raw = audit_result.get("summary")
                 findings = audit_result.get("findings") or []
-                # Extract doc label from tool key if possible
-                doc_label = None
-                if context.tool_results:
+                # Extract doc label with multiple fallbacks (filename > tool key > generic)
+                doc_label = (
+                    audit_result.get("audit_filename")
+                    or audit_result.get("filename")
+                    or audit_result.get("file_name")
+                    or audit_result.get("doc_name")
+                    or audit_result.get("document_name")
+                )
+                if not doc_label and context.tool_results:
                     for k in context.tool_results.keys():
                         if str(k).startswith("audit_file"):
                             parts = str(k).split("_", maxsplit=2)
@@ -333,8 +339,12 @@ class SimpleChatStrategy(ChatStrategy):
                 )
                 audit_artifact = artifact.model_dump()
 
-                # Minimal textual response
-                response_content = f"He completado la auditoría de {doc_label}. Puedes ver el reporte detallado a continuación."
+                # Rich textual response with semantic interpretation
+                response_content = summarize_audit_for_message(
+                    doc_name=doc_label,
+                    artifact=artifact,
+                    summary_raw=summary_raw,
+                )
 
             # If still empty after synthetic fallback, keep original handler
         if not response_content:

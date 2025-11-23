@@ -103,3 +103,79 @@ def build_audit_report_response(
 
     return resp
 
+
+def _extract_summary_text(summary: Optional[Any]) -> Optional[str]:
+    """
+    Normalize summary payload (string or dict) into displayable text.
+    """
+    if summary is None:
+        return None
+    if isinstance(summary, str):
+        return summary.strip()
+    if isinstance(summary, dict):
+        for key in ("text", "summary", "overview", "short"):
+            if summary.get(key):
+                return str(summary[key]).strip()
+    return None
+
+
+def summarize_audit_for_message(
+    doc_name: str,
+    artifact: AuditReportResponse,
+    summary_raw: Optional[Any] = None,
+    max_findings: int = 3,
+) -> str:
+    """
+    Build a concise, human-readable summary for chat messages using audit results.
+    """
+    summary_text = _extract_summary_text(summary_raw) or _extract_summary_text(
+        artifact.metadata.get("summary") if artifact.metadata else None
+    )
+
+    severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    severity_label = {
+        "critical": "Crítico",
+        "high": "Alto",
+        "medium": "Medio",
+        "low": "Bajo",
+    }
+
+    all_findings: List[AuditFinding] = []
+    for findings in artifact.categories.values():
+        all_findings.extend(findings)
+
+    all_findings.sort(
+        key=lambda f: (
+            severity_order.get(str(f.severity).lower(), 99),
+            (f.page or 0),
+        )
+    )
+    top_findings = all_findings[:max_findings]
+
+    lines: List[str] = [
+        f"He revisado {doc_name} y encontré algunos puntos importantes que necesitan atención:",
+    ]
+
+    if summary_text:
+        clipped = summary_text if len(summary_text) <= 320 else summary_text[:317] + "..."
+        lines.append(f"- {clipped}")
+
+    if top_findings:
+        lines.append("Principales focos:")
+        for finding in top_findings:
+            sev = severity_label.get(str(finding.severity).lower(), "Info")
+            msg = finding.message.strip()
+            msg = msg if len(msg) <= 220 else msg[:217] + "..."
+            lines.append(f"- [{sev}] {msg}")
+
+    stats = artifact.stats
+    lines.append(
+        f"Resumen de hallazgos: {stats.critical} crítico, {stats.high} alto, {stats.medium} medio, {stats.low} bajo."
+    )
+    lines.append("¿Qué sigue?")
+    lines.append(
+        "👉 Revisa el reporte detallado en el panel lateral para ver exactamente qué ajustar."
+    )
+    lines.append("👉 Descarga el reporte con todas las ubicaciones y sugerencias.")
+
+    return "\n".join(lines)
