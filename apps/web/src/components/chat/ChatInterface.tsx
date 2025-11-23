@@ -63,6 +63,7 @@ interface ChatInterfaceProps {
   filesV1Attachments?: FileAttachment[];
   onAddFilesV1Attachment?: (attachment: FileAttachment) => void;
   onRemoveFilesV1Attachment?: (fileId: string) => void;
+  onClearFilesV1Attachments?: (overrideChatId?: string) => void;
   lastReadyFile?: LastReadyFile | null;
   // Copiloto 414: Audit progress callback
   onStartAudit?: (fileId: string, filename: string) => void;
@@ -180,7 +181,7 @@ export function ChatInterface({
   );
 
   // React Query: Optimistic updates for message sending
-  const sendMessage = useSendMessage(currentChatId);
+  const sendMessage = useSendMessage(currentChatId ?? null);
 
   React.useEffect(() => {
     if (!toolVisibilityLoaded) {

@@ -5,7 +5,7 @@
 # Original: 2624 lines → Consolidated: ~150 lines (94% reduction)
 # ============================================================================ 
 
-.PHONY: help setup dev stop restart clean logs shell test deploy db health install install-web
+.PHONY: help setup dev stop restart clean logs shell test deploy db health install install-web env-check env-info env-strict
 
 # --- CONFIGURATION ---
 ifneq (,$(wildcard envs/.env))
@@ -37,6 +37,7 @@ help:
 	@echo ""
 	@echo "$(CYAN)🚀 Lifecycle:$(NC)"
 	@echo "  $(YELLOW)make setup$(NC)              - Initial project setup (interactive)"
+	@echo "  $(YELLOW)make env-check$(NC)          - Validate environment variables"
 	@echo "  $(YELLOW)make dev$(NC)                - Start development environment (hot reload)"
 	@echo "  $(YELLOW)make stop$(NC)               - Stop all services"
 	@echo "  $(YELLOW)make restart [S=api]$(NC)    - Restart all services or specific one"
@@ -53,10 +54,6 @@ help:
 	@echo "  $(YELLOW)make test T=web$(NC)         - Run Web tests"
 	@echo "  $(YELLOW)make test T=mcp$(NC)         - Run MCP tests"
 	@echo "  $(YELLOW)make test T=e2e$(NC)         - Run E2E tests"
-	@echo "  $(YELLOW)make test-rag$(NC)           - Test RAG ingestion pipeline"
-	@echo "  $(YELLOW)make test-semantic$(NC)      - Test semantic search with Qdrant"
-	@echo "  $(YELLOW)make analyze-chunks$(NC)     - Analyze chunk optimization & recommendations"
-	@echo "  $(YELLOW)make test-lifecycle$(NC)     - Test resource lifecycle management"
 	@echo "  $(YELLOW)make test-local [FILE=...]$(NC) - Run API tests locally with .venv"
 	@echo ""
 	@echo "$(CYAN)💾 Database:$(NC)"
@@ -74,6 +71,16 @@ help:
 	@echo "  $(YELLOW)make clean-deep$(NC)         - Remove containers, volumes, and data"
 	@echo ""
 	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@echo "$(CYAN)📋 Critical Environment Variables:$(NC)"
+	@echo "  $(YELLOW)SAPTIVA_API_KEY$(NC)         - SAPTIVA LLM API key (required)"
+	@echo "  $(YELLOW)JWT_SECRET_KEY$(NC)          - JWT signing key (32+ chars, required)"
+	@echo "  $(YELLOW)MONGODB_URL$(NC)             - MongoDB connection string (required)"
+	@echo "  $(YELLOW)REDIS_URL$(NC)               - Redis connection string (required)"
+	@echo "  $(YELLOW)MINIO_ENDPOINT$(NC)          - MinIO S3 endpoint (required)"
+	@echo ""
+	@echo "  Run $(YELLOW)make env-check$(NC) for full validation or $(YELLOW)make env-info$(NC) for details"
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 
 # ============================================================================ 
 # LIFECYCLE
@@ -85,8 +92,25 @@ setup:
 	@./scripts/interactive-env-setup.sh development
 	@echo "$(GREEN)✅ Setup complete. Run 'make dev' to start.$(NC)"
 
+env-check:
+	@echo "$(YELLOW)🔍 Validating environment variables...$(NC)"
+	@chmod +x scripts/env-checker.sh
+	@./scripts/env-checker.sh warn
+
+env-info:
+	@echo "$(YELLOW)📋 Environment variables information...$(NC)"
+	@chmod +x scripts/env-checker.sh
+	@./scripts/env-checker.sh info
+
+env-strict:
+	@echo "$(YELLOW)🔒 Strict environment validation...$(NC)"
+	@chmod +x scripts/env-checker.sh
+	@./scripts/env-checker.sh strict
+
 dev:
 	@echo "$(YELLOW)🟡 Starting development environment...$(NC)"
+	@echo ""
+	@$(MAKE) --no-print-directory env-check || { echo "$(RED)❌ Environment validation failed. Run 'make setup' to fix.$(NC)"; exit 1; }
 	@echo ""
 	@$(COMPOSE) up -d
 	@echo ""
@@ -207,25 +231,7 @@ else
 	@./scripts/test-runner.sh all
 endif
 
-test-rag:
-	@echo "$(YELLOW)🧪 Testing RAG ingestion pipeline...$(NC)"
-	@chmod +x scripts/test-rag-wrapper.sh
-	@./scripts/test-rag-wrapper.sh
 
-test-semantic:
-	@echo "$(YELLOW)🧠 Testing semantic search with Qdrant...$(NC)"
-	@chmod +x scripts/test-rag-wrapper.sh
-	@PYTHONPATH=. scripts/test-rag-wrapper.sh python scripts/test-semantic-search.py
-
-analyze-chunks:
-	@echo "$(YELLOW)📊 Analyzing chunk optimization...$(NC)"
-	@chmod +x scripts/test-rag-wrapper.sh
-	@PYTHONPATH=. scripts/test-rag-wrapper.sh python scripts/analyze-chunk-optimization.py
-
-test-lifecycle:
-	@echo "$(YELLOW)♻️  Testing resource lifecycle management...$(NC)"
-	@chmod +x scripts/test-rag-wrapper.sh
-	@PYTHONPATH=. scripts/test-rag-wrapper.sh python scripts/test-resource-lifecycle.py
 
 test-local:
 	@echo "$(YELLOW)🧪 Running tests locally with .venv...$(NC)"

@@ -175,12 +175,6 @@ export const useHistoryStore = create<HistoryState>()(
           });
           logDebug("Chat session renamed", { chatId, newTitle });
 
-          // Wait briefly for MongoDB to persist the change
-          await new Promise((resolve) => setTimeout(resolve, 200));
-
-          // Reload sessions from backend to ensure consistency
-          await get().loadChatSessions();
-
           // Broadcast to other tabs
           getSyncInstance().broadcast("session_renamed", { chatId });
         } catch (error) {
@@ -245,12 +239,6 @@ export const useHistoryStore = create<HistoryState>()(
             chatId,
             pinned: newPinnedState,
           });
-
-          // Wait briefly for MongoDB to persist
-          await new Promise((resolve) => setTimeout(resolve, 200));
-
-          // Reload sessions
-          await get().loadChatSessions();
 
           // Broadcast to other tabs
           getSyncInstance().broadcast("session_pinned", { chatId });

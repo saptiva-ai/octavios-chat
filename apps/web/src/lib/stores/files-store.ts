@@ -57,14 +57,19 @@ export const useFilesStore = create<FilesStoreState>()(
         }),
 
       removeFromChat: (chatId, fileId) =>
-        set((state) => ({
-          byChat: {
-            ...state.byChat,
-            [chatId]: (state.byChat[chatId] ?? []).filter(
-              (f) => f.file_id !== fileId,
-            ),
-          },
-        })),
+        set((state) => {
+          const initialFiles = state.byChat[chatId] ?? [];
+          const filteredFiles = initialFiles.filter(
+            (f) => f.file_id !== fileId,
+          );
+
+          return {
+            byChat: {
+              ...state.byChat,
+              [chatId]: filteredFiles,
+            },
+          };
+        }),
 
       clearForChat: (chatId) =>
         set((state) => ({
