@@ -78,6 +78,12 @@ function DonutChart({
 
 export function AuditDetailView({ report, className }: AuditDetailViewProps) {
   const categories = Object.entries(report.categories || {});
+  const displayName =
+    report.metadata?.display_name ||
+    report.metadata?.filename ||
+    (report.doc_name && /^[0-9a-fA-F-]{20,}$/.test(report.doc_name)
+      ? "Documento auditado"
+      : report.doc_name);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(JSON.stringify(report, null, 2));
@@ -105,7 +111,7 @@ export function AuditDetailView({ report, className }: AuditDetailViewProps) {
           <p className="text-xs uppercase tracking-wide text-saptiva-light/60">
             Reporte de Auditoría
           </p>
-          <h2 className="text-lg font-semibold">{report.doc_name}</h2>
+          <h2 className="text-lg font-semibold">{displayName}</h2>
           <p className="text-xs text-saptiva-light/60">
             Policy: {report.metadata?.policy_used?.name || "N/D"}
           </p>

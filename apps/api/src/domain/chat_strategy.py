@@ -335,6 +335,8 @@ class SimpleChatStrategy(ChatStrategy):
                         "policy_used": audit_result.get("policy_used"),
                         "validation_report_id": audit_result.get("validation_report_id"),
                         "job_id": audit_result.get("job_id"),
+                        "filename": doc_label,
+                        "display_name": doc_label,
                     },
                 )
                 audit_artifact = artifact.model_dump()
