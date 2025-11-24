@@ -246,11 +246,94 @@ flowchart TB
 - **Ingesta segura**: archivos se guardan en disco temporal con límites de tamaño y "reaper" (`apps/api/src/services/storage.py`).
 - **Persistencia primaria**: objetos se escriben en MinIO con rutas por usuario/chat y metadatos (`apps/api/src/services/minio_storage.py`).
 - **Cache de texto**: Redis almacena extractos 1h y valida ownership antes de usarlos en prompts (`apps/api/src/services/document_service.py`).
-- **RAG sin vector DB**: no usamos base vectorial; el contexto se arma con fragmentos curados desde Redis (hasta `MAX_TOTAL_DOC_CHARS`) mediante `DocumentService.extract_content_for_rag_from_cache`, lo que simplifica el despliegue y mantiene control del prompt.
+- **RAG con Qdrant Vector DB**: Sistema completo de búsqueda semántica usando Qdrant como base de datos vectorial (`apps/api/src/services/qdrant_service.py`):
+  - **Embeddings**: Modelo `paraphrase-multilingual-MiniLM-L12-v2` (384 dimensiones) para generación de embeddings
+  - **Chunking inteligente**: 500 tokens por chunk con 100 tokens de overlap (20%) para preservar contexto
+  - **Búsqueda semántica**: Cosine similarity con threshold configurable (0.7 por defecto)
+  - **Aislamiento de contexto**: Filtrado obligatorio por `session_id` para prevenir fugas de información entre conversaciones
+  - **Estrategias adaptativas**: `SemanticSearchStrategy` y `OverviewStrategy` para diferentes tipos de consultas
+  - **Herramienta MCP**: `get_segments` (`apps/api/src/mcp/tools/get_segments.py`) expone búsqueda semántica como herramienta productiva
+  - **Orquestación**: `AdaptiveRetrievalOrchestrator` selecciona estrategia óptima según tipo de query
 
 ### Cumplimiento COPILOTO_414
 - Coordinador async que ejecuta auditores de disclaimer, formato, tipografía, color, logo, gramática y consistencia (`apps/api/src/services/validation_coordinator.py`).
 - Las políticas se resuelven dinámicamente y cada hallazgo se serializa a `ValidationReport` (Mongo + MinIO).
+
+### Integración Audit File + Canvas (OpenCanvas)
+
+Sistema de auditoría con visualización en canvas lateral inspirado en OpenCanvas de OpenAI. Permite ejecutar auditorías COPILOTO_414 y visualizar resultados técnicos detallados sin saturar el chat.
+
+**Flujo de Auditoría con Canvas**:
+
+1. **Trigger**: Usuario escribe `"Auditar archivo: filename.pdf"` en el chat
+2. **Handler**: `AuditCommandHandler` (`apps/api/src/domain/audit_handler.py`) intercepta el comando usando Chain of Responsibility
+3. **Ejecución**: Se ejecuta `validate_document()` con 8 auditores paralelos (disclaimer, format, typography, grammar, logo, color, entity, semantic)
+4. **Generación Dual de Contenido**:
+   - **Human Summary** (para chat): Resumen conversacional y no técnico generado por `generate_human_summary()` (`apps/api/src/services/summary_formatter.py`)
+   - **Technical Report** (para canvas): Reporte técnico completo en Markdown generado por `format_executive_summary_as_markdown()`
+5. **Creación de Artifact**: Se crea un `Artifact` (modelo Beanie) con tipo `MARKDOWN` conteniendo el reporte técnico completo
+6. **Metadata Injection**: El handler incluye `tool_invocations` con `create_artifact` en `decision_metadata` (línea 215-224)
+7. **Frontend Detection**: El componente `ChatMessage` detecta `tool_invocations` en metadata y extrae `artifact.id`
+8. **Canvas Rendering**:
+   - `CanvasContext` (`apps/web/src/context/CanvasContext.tsx`) gestiona estado del canvas
+   - `CanvasPanel` (`apps/web/src/components/canvas/canvas-panel.tsx`) renderiza el artifact usando `MarkdownRenderer`
+   - `AuditDetailView` muestra el reporte técnico completo con tabs, badges de severidad y descarga de PDF
+
+**Separación de Contenidos (Dual Summary)**:
+
+| Ubicación | Contenido | Propósito | Formato |
+|-----------|-----------|-----------|---------|
+| **Chat** | Human Summary | Resumen amigable, no técnico, conversacional | Texto plano con emoji |
+| **Canvas** | Technical Report | Reporte detallado con findings, severidades, páginas | Markdown estructurado |
+
+**Arquitectura de Artifacts**:
+
+```python
+# apps/api/src/models/artifact.py
+class Artifact(Document):
+    id: str                          # UUID
+    user_id: str                     # Owner
+    chat_session_id: Optional[str]   # Associated chat
+    title: str                       # "Reporte de Auditoría: filename.pdf"
+    type: ArtifactType              # MARKDOWN | CODE | GRAPH
+    content: Union[str, Dict]        # Technical report (Markdown)
+    versions: List[ArtifactVersion] # Version history
+```
+
+**Beneficios del Canvas**:
+
+- ✅ **Experiencia de usuario limpia**: Chat muestra solo resumen ejecutivo, canvas muestra detalles técnicos
+- ✅ **Contexto preservado**: Canvas permanece abierto mientras el usuario navega el chat
+- ✅ **Ownership por chat**: Canvas se cierra automáticamente al cambiar de conversación (líneas 47-65 CanvasContext)
+- ✅ **Versionado**: Los artifacts mantienen historial de versiones para iteraciones
+- ✅ **Extensibilidad**: El sistema de artifacts soporta markdown, código y gráficos (preparado para futuras expansiones)
+
+**Ejemplo de Tool Invocation**:
+
+```json
+{
+  "decision_metadata": {
+    "audit": true,
+    "validation_report_id": "report-uuid",
+    "tool_invocations": [
+      {
+        "tool_name": "create_artifact",
+        "result": {
+          "id": "artifact-uuid",
+          "title": "Reporte de Auditoría: document.pdf",
+          "type": "markdown"
+        }
+      }
+    ]
+  }
+}
+```
+
+**Referencias de código**:
+- Backend Handler: `apps/api/src/domain/audit_handler.py:168-176` (creación artifact)
+- Frontend Context: `apps/web/src/context/CanvasContext.tsx`
+- Canvas Panel: `apps/web/src/components/canvas/canvas-panel.tsx`
+- Summary Formatter: `apps/api/src/services/summary_formatter.py`
 
 ### Model Context Protocol (MCP)
 - Servidor FastMCP único con 5 herramientas productivas (`apps/api/src/mcp/server.py`).
@@ -607,6 +690,70 @@ sequenceDiagram
 
 Funcionamiento: se sigue un pipeline en etapas (Upload → Persistencia → Cache → Auditoría). Cada componente aplica validaciones específicas (Dropzone verifica tipos, Storage aplica límites, ValidationCoordinator ejecuta auditores configurables) y usa patrones como Strategy + Orchestrator para combinar hallazgos antes de devolverlos a la UI.
 
+### Flujo de Audit Command + Canvas
+
+Secuencia completa desde el comando "Auditar archivo:" hasta la renderización dual (chat + canvas).
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'actorBorder': '#4b5563','actorBkg': '#f9fafb','actorTextColor': '#111111','signalColor': '#4b5563','signalTextColor': '#111111','activationBorderColor': '#4b5563','activationBkgColor': '#d1d5db','sequenceNumberColor': '#4b5563'}}}%%
+sequenceDiagram
+    participant User as Usuario
+    participant Chat as ChatView
+    participant API as POST /api/chat
+    participant Handler as AuditCommandHandler
+    participant Coordinator as ValidationCoordinator
+    participant MinIO as MinIO Storage
+    participant Formatter as SummaryFormatter
+    participant ArtifactDB as Artifact Model
+    participant Canvas as Canvas Panel
+
+    User->>Chat: "Auditar archivo: doc.pdf"
+    Chat->>API: POST con mensaje + file_ids
+    API->>Handler: can_handle() → True
+    Handler->>Handler: _find_target_document()
+    Handler->>MinIO: materialize_document()
+    MinIO-->>Handler: pdf_path
+    Handler->>Coordinator: validate_document(8 auditores)
+    Coordinator-->>Handler: ValidationReport
+
+    Note over Handler,Formatter: Generación Dual de Contenido
+    Handler->>Formatter: generate_human_summary()
+    Formatter-->>Handler: "✅ Auditoría completada..."
+    Handler->>Formatter: format_executive_summary_as_markdown()
+    Formatter-->>Handler: Technical Report (Markdown)
+
+    Handler->>ArtifactDB: Artifact.insert()
+    ArtifactDB-->>Handler: artifact.id
+
+    Handler-->>API: ChatProcessingResult {<br/>  content: human_summary,<br/>  metadata: {<br/>    tool_invocations: [{<br/>      tool_name: "create_artifact",<br/>      result: {id, title, type}<br/>    }]<br/>  }<br/>}
+
+    API-->>Chat: Response with metadata
+
+    Note over Chat,Canvas: Frontend Detection & Rendering
+    Chat->>Chat: Detecta tool_invocations
+    Chat->>Chat: Renderiza human_summary
+    Chat->>Canvas: openCanvas(artifact_id)
+    Canvas->>ArtifactDB: GET /api/artifacts/{id}
+    ArtifactDB-->>Canvas: {content: technical_report}
+    Canvas->>Canvas: MarkdownRenderer(technical_report)
+    Canvas-->>User: Panel lateral con reporte técnico
+```
+
+**Flujo explicado**:
+
+1. **Detección**: `AuditCommandHandler.can_handle()` detecta comando "Auditar archivo:" usando Chain of Responsibility
+2. **Materialización**: Documento se descarga de MinIO si no existe localmente
+3. **Validación**: `ValidationCoordinator` ejecuta 8 auditores en paralelo (disclaimer, format, typography, grammar, logo, color, entity, semantic)
+4. **Generación Dual**:
+   - `generate_human_summary()`: Resumen conversacional para chat (sin jerga técnica)
+   - `format_executive_summary_as_markdown()`: Reporte técnico completo para canvas
+5. **Persistencia**: Se crea `Artifact` con el reporte técnico y se guarda en MongoDB
+6. **Metadata Injection**: `tool_invocations` con `create_artifact` se incluye en `decision_metadata`
+7. **Frontend Detection**: `ChatMessage` detecta `tool_invocations` y extrae `artifact.id`
+8. **Canvas Rendering**: `CanvasPanel` obtiene el artifact y renderiza el contenido técnico usando `MarkdownRenderer`
+
+**Resultado**: Usuario ve resumen amigable en el chat y detalles técnicos completos en el panel lateral sin saturar la conversación.
+
 ### Lazy loading MCP (descubrimiento → invocación)
 
 Flujo HTTP que sigue el frontend para descubrir, cargar e invocar herramientas MCP sin cargar todo el contexto.
@@ -672,13 +819,15 @@ Ejecuta health checks de contenedores, API, DB y frontend.
 ## Flujo de documentos y auditoría
 1. **Upload**: dropzone valida tipo/tamaño y envía multi-part (`apps/web/src/components/document-review/FileDropzone.tsx`).
 2. **Persistencia**: FastAPI guarda streaming en disco, mueve a MinIO y almacena metadatos en Mongo (`apps/api/src/services/storage.py`, `apps/api/src/services/minio_storage.py`).
-3. **Cache + OCR**: texto se guarda en Redis; si el PDF carece de texto se usan páginas OCR guardadas (`apps/api/src/services/document_service.py`).
-4. **Extracción on-demand**: herramienta `extract_document_text` aplica el fallback pypdf → SDK → OCR antes de responder (`apps/api/src/mcp/server.py`).
-5. **Auditoría COPILOTO_414**: coordinador ejecuta auditores paralelos y agrupa hallazgos/políticas (`apps/api/src/services/validation_coordinator.py`).
-6. **Revisión visual**: panel de resultados usa pestañas, badges y MCC toggles (`apps/web/src/components/document-review/ResultTabs.tsx`).
-7. **Limpieza**: `ChatView` aplica una limpieza agresiva de adjuntos tras la respuesta exitosa, asegurando que no queden archivos huérfanos en la UI (`useFiles` con selectores).
+3. **Cache + Embeddings**: texto se guarda en Redis (1h TTL); chunks se convierten a embeddings y se almacenan en Qdrant para búsqueda semántica (`apps/api/src/services/document_processing_service.py`).
+4. **Extracción RAG**: herramienta `get_segments` usa búsqueda semántica en Qdrant para recuperar chunks relevantes según la query del usuario (`apps/api/src/mcp/tools/get_segments.py`).
+5. **Auditoría via Chat Command**: comando "Auditar archivo: filename.pdf" ejecuta `AuditCommandHandler` con 8 auditores paralelos vía `ValidationCoordinator` (`apps/api/src/domain/audit_handler.py`, `apps/api/src/services/validation_coordinator.py`).
+6. **Generación Dual de Contenido**: se genera resumen humano para chat y reporte técnico para canvas (`apps/api/src/services/summary_formatter.py`).
+7. **Artifact Creation**: reporte técnico se persiste como `Artifact` con metadata `tool_invocations` para detección frontend (`apps/api/src/domain/audit_handler.py:168-176`).
+8. **Canvas Rendering**: `CanvasPanel` detecta artifact en metadata y renderiza el reporte técnico en panel lateral resizable (`apps/web/src/components/canvas/canvas-panel.tsx`).
+9. **Limpieza**: `ChatView` aplica una limpieza agresiva de adjuntos tras la respuesta exitosa, asegurando que no queden archivos huérfanos en la UI (`useFiles` con selectores).
 
-> **Nota RAG**: la versión actual no usa base de datos vectorial; el contexto se arma con texto cacheado en Redis (1 h) y truncado por presupuesto de tokens antes de llegar al LLM. El diseño para Pinecone/pgvector vive en `docs/architecture/pdf-rag-flow.md` para una futura iteración.
+> **Nota RAG**: Sistema completo con Qdrant vector DB (embeddings 384-dim usando `paraphrase-multilingual-MiniLM-L12-v2`, cosine similarity con threshold 0.7, chunking inteligente con 500 tokens/chunk y 100 tokens overlap para preservar contexto). Ver configuración detallada en `docs/RAG_CONFIGURATION.md`.
 
 ## Herramientas MCP
 | Herramienta | Categoría | Descripción | Entrada principal |
