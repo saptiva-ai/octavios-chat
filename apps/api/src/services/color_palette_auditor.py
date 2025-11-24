@@ -1,5 +1,5 @@
 """
-Color Palette Auditor for COPILOTO_414.
+Color Palette Auditor for Document Audit.
 
 Validates strict color palette compliance:
 - All colors must match corporate palette (with tolerance)

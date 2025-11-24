@@ -1,7 +1,7 @@
 """
 Advanced metrics and monitoring API endpoints.
 
-Provides comprehensive observability for Copilotos Bridge including:
+Provides comprehensive observability for Octavios Chat including:
 - Prometheus metrics for requests, errors, and performance
 - Deep Research specific metrics
 - System health and status

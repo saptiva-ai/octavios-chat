@@ -49,7 +49,7 @@ run_tests() {
 }
 
 printf '╔══════════════════════════════════════════════════════════════╗\n'
-printf '║         COPILOTOS BRIDGE - API TEST SUITE                    ║\n'
+printf '║         Octavios Chat - API TEST SUITE                    ║\n'
 printf '╚══════════════════════════════════════════════════════════════╝\n\n'
 
 run_tests "Tests Unitarios - Prompt Registry" "tests/test_prompt_registry.py"

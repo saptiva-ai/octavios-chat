@@ -47,7 +47,7 @@ def export_to_txt(secrets_dict: dict, output_file: str):
 
     # Crear contenido del archivo
     content = f"""# ========================================
-# COPILOTOS BRIDGE - PRODUCTION SECRETS
+# Octavios Chat - PRODUCTION SECRETS
 # ========================================
 #
 # ⚠️  CRITICAL SECURITY NOTICE:
@@ -116,7 +116,7 @@ GRAFANA_ADMIN_PASSWORD={secrets_dict['GRAFANA_ADMIN_PASSWORD']}
 
 def main():
     """Main function."""
-    print("🔐 Copilotos Bridge - Password Export Tool")
+    print("🔐 Octavios Chat - Password Export Tool")
     print("=" * 60)
     print()
 

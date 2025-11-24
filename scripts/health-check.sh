@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================================
-# COMPREHENSIVE HEALTH CHECK SCRIPT FOR COPILOTOS BRIDGE
+# COMPREHENSIVE HEALTH CHECK SCRIPT FOR Octavios Chat
 # ============================================================================
 
 set -e
@@ -122,9 +122,9 @@ check_prometheus_targets() {
         # Check if our API is being scraped
         local targets_response=$(curl -s --max-time $TIMEOUT "$PROMETHEUS_URL/api/v1/targets")
         if echo "$targets_response" | grep -q "octavios-api"; then
-            print_success "Copilotos API target found in Prometheus"
+            print_success "Octavios API target found in Prometheus"
         else
-            print_warning "Copilotos API target not found in Prometheus"
+            print_warning "Octavios API target not found in Prometheus"
         fi
     else
         print_warning "Prometheus not accessible at $PROMETHEUS_URL"
@@ -173,7 +173,7 @@ get_metrics_summary() {
 # ============================================================================
 
 main() {
-    echo "▸ Copilotos Bridge Health Check"
+    echo "▸ Octavios Chat Health Check"
     echo "=================================="
     echo "API URL: $API_BASE_URL"
     echo "Web URL: $WEB_BASE_URL"

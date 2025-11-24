@@ -374,9 +374,9 @@ test.describe('Files V1 - Metrics Verification', () => {
     const metricsText = await response.text();
 
     // Verify key metrics are present
-    expect(metricsText).toContain('copilotos_pdf_ingest_seconds');
-    expect(metricsText).toContain('copilotos_pdf_ingest_errors_total');
-    expect(metricsText).toContain('copilotos_tool_invocations_total');
+    expect(metricsText).toContain('octavios_pdf_ingest_seconds');
+    expect(metricsText).toContain('octavios_pdf_ingest_errors_total');
+    expect(metricsText).toContain('octavios_tool_invocations_total');
 
     console.log('✓ File ingestion metrics present in /api/metrics');
   });

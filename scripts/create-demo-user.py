@@ -95,7 +95,7 @@ async def create_demo_user():
 
 async def main():
     """Main function"""
-    print("🚀 Creating demo user for Copilotos Bridge...")
+    print("🚀 Creating demo user for Octavios Chat...")
     print("=" * 50)
 
     success = await create_demo_user()

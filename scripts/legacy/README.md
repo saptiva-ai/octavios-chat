@@ -34,7 +34,7 @@ Configure your production environment in `envs/.env.prod`:
 
 ```bash
 PROD_SERVER_HOST=user@server-ip
-PROD_DEPLOY_PATH=/opt/copilotos-bridge
+PROD_DEPLOY_PATH=/opt/octavios-bridge
 REGISTRY_URL=ghcr.io/username/repo
 REGISTRY_USER=username
 ```

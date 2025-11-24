@@ -1,5 +1,5 @@
 """
-Compliance auditor for Copiloto 414.
+Compliance auditor for Document Audit.
 
 Validates documents against compliance rules:
 - Disclaimer presence and coverage (per-page)

@@ -1,5 +1,5 @@
 /**
- * Types for Copiloto 414 - Document Validation System
+ * Types for Document Audit - Document Validation System
  *
  * These types mirror the backend schemas defined in apps/api/src/schemas/review.py
  */

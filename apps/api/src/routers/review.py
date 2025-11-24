@@ -430,7 +430,7 @@ async def validate_document_414(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Validate document against Copiloto 414 compliance rules.
+    Validate document against Document Audit compliance rules.
 
     **V2 UPDATE**: Now supports policy-based validation with auto-detection
 

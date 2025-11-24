@@ -18,7 +18,7 @@ export function CacheClearButton() {
       if (typeof window !== 'undefined') {
         const keys = Object.keys(localStorage)
         keys.forEach(key => {
-          if (key.includes('copilotos') || key.includes('auth') || key.includes('chat')) {
+          if (key.includes('octavios') || key.includes('auth') || key.includes('chat')) {
             localStorage.removeItem(key)
           }
         })

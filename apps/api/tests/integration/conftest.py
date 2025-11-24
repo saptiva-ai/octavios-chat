@@ -32,7 +32,7 @@ if not is_running_in_docker():
     if "MONGODB_USER" in os.environ and "MONGODB_PASSWORD" in os.environ:
         mongo_user = os.environ["MONGODB_USER"]
         mongo_pass = os.environ["MONGODB_PASSWORD"]
-        mongo_db = os.environ.get("MONGODB_DATABASE", "copilotos")
+        mongo_db = os.environ.get("MONGODB_DATABASE", "octavios")
         os.environ["MONGODB_URL"] = f"mongodb://{mongo_user}:{mongo_pass}@localhost:27018/{mongo_db}?authSource=admin"
 
     # Set REDIS_URL with password, pointing to host-mapped port

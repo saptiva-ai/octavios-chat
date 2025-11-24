@@ -129,7 +129,7 @@ const DocumentReviewIcon = ({ className }: IconProps) => (
   </svg>
 );
 
-// FileSearch icon (Audit File - Copiloto 414)
+// FileSearch icon (Audit File - Document Audit)
 // DEPRECATED: Audit functionality is now integrated into file attachment cards
 // const AuditFileIcon = ({ className }: IconProps) => (
 //   <svg

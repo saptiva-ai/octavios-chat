@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # ============================================================================
-# TEST RUNNER SCRIPT FOR COPILOTOS BRIDGE
+# TEST RUNNER SCRIPT FOR Octavios Chat
 # ============================================================================
 
 set -e  # Exit on any error
 
-echo "▸ Running Copilotos Bridge Test Suite"
+echo "▸ Running Octavios Chat Test Suite"
 echo "========================================"
 
 # Status symbols for logs

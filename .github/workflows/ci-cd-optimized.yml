@@ -149,9 +149,9 @@ jobs:
         ports:
           - 27018:27017
         env:
-          MONGO_INITDB_ROOT_USERNAME: copilotos_user
+          MONGO_INITDB_ROOT_USERNAME: octavios_user
           MONGO_INITDB_ROOT_PASSWORD: test_password
-          MONGO_INITDB_DATABASE: copilotos
+          MONGO_INITDB_DATABASE: octavios
         options: >-
           --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'"
           --health-interval 10s
@@ -196,9 +196,9 @@ jobs:
       - name: Configure environment for tests
         run: |
           cat > ../../envs/.env << EOF
-          MONGODB_USER=copilotos_user
+          MONGODB_USER=octavios_user
           MONGODB_PASSWORD=test_password
-          MONGODB_DATABASE=copilotos
+          MONGODB_DATABASE=octavios
           JWT_SECRET_KEY=$(openssl rand -base64 64)
           SECRET_KEY=$(openssl rand -hex 32)
           JWT_ACCESS_TOKEN_EXPIRE_MINUTES=60
@@ -284,9 +284,9 @@ jobs:
           target: production
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/copilotos-bridge/api:${{ steps.tags.outputs.VERSION }}
-            ghcr.io/${{ github.repository_owner }}/copilotos-bridge/api:${{ steps.tags.outputs.GIT_SHA }}
-            ghcr.io/${{ github.repository_owner }}/copilotos-bridge/api:latest
+            ghcr.io/${{ github.repository_owner }}/octavios-bridge/api:${{ steps.tags.outputs.VERSION }}
+            ghcr.io/${{ github.repository_owner }}/octavios-bridge/api:${{ steps.tags.outputs.GIT_SHA }}
+            ghcr.io/${{ github.repository_owner }}/octavios-bridge/api:latest
           build-args: |
             TORCH_CPU_INDEX_URL=https://download.pytorch.org/whl/cpu
           labels: |
@@ -319,9 +319,9 @@ jobs:
           target: runner
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/copilotos-bridge/web:${{ steps.tags.outputs.VERSION }}
-            ghcr.io/${{ github.repository_owner }}/copilotos-bridge/web:${{ steps.tags.outputs.GIT_SHA }}
-            ghcr.io/${{ github.repository_owner }}/copilotos-bridge/web:latest
+            ghcr.io/${{ github.repository_owner }}/octavios-bridge/web:${{ steps.tags.outputs.VERSION }}
+            ghcr.io/${{ github.repository_owner }}/octavios-bridge/web:${{ steps.tags.outputs.GIT_SHA }}
+            ghcr.io/${{ github.repository_owner }}/octavios-bridge/web:latest
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -356,10 +356,10 @@ jobs:
 
       - name: Pull pre-built images
         run: |
-          docker pull ghcr.io/${{ github.repository_owner }}/copilotos-bridge/api:latest
-          docker pull ghcr.io/${{ github.repository_owner }}/copilotos-bridge/web:latest
-          docker tag ghcr.io/${{ github.repository_owner }}/copilotos-bridge/api:latest copilotos-api:latest
-          docker tag ghcr.io/${{ github.repository_owner }}/copilotos-bridge/web:latest copilotos-web:latest
+          docker pull ghcr.io/${{ github.repository_owner }}/octavios-bridge/api:latest
+          docker pull ghcr.io/${{ github.repository_owner }}/octavios-bridge/web:latest
+          docker tag ghcr.io/${{ github.repository_owner }}/octavios-bridge/api:latest octavios-api:latest
+          docker tag ghcr.io/${{ github.repository_owner }}/octavios-bridge/web:latest octavios-web:latest
 
       - name: Create environment file for CI
         run: |
@@ -423,9 +423,9 @@ jobs:
   #     - name: Create environment file for CI
   #       run: |
   #         cp envs/.env.local.example envs/.env || true
-  #         echo "MONGODB_USER=copilotos_user" >> envs/.env
+  #         echo "MONGODB_USER=octavios_user" >> envs/.env
   #         echo "MONGODB_PASSWORD=test_password" >> envs/.env
-  #         echo "MONGODB_DATABASE=copilotos" >> envs/.env
+  #         echo "MONGODB_DATABASE=octavios" >> envs/.env
   #         echo "REDIS_PASSWORD=test_password" >> envs/.env
   #         echo "JWT_SECRET_KEY=$(openssl rand -base64 64)" >> envs/.env
   #         echo "SECRET_KEY=test-secret-key" >> envs/.env

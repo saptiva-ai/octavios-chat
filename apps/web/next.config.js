@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  transpilePackages: ['@copilotos/shared'],
+  transpilePackages: ['@octavios/shared'],
   output: 'standalone',
   trailingSlash: false,
   // Use default .next directory - volume is mounted there in Docker

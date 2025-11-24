@@ -928,7 +928,7 @@ class ApiClient {
     }
   }
 
-  // Copiloto 414 - Document Audit endpoints
+  // Document Audit - Document Audit endpoints
   async auditDocument(
     documentId: string,
     options: {
@@ -1078,7 +1078,7 @@ class ApiClient {
   }
 
   /**
-   * Get validation report for a document (Copiloto 414)
+   * Get validation report for a document (Document Audit)
    *
    * Fetches the most recent validation report if the document has been audited.
    *

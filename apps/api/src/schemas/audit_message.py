@@ -1,5 +1,5 @@
 """
-Audit Message Schemas for Copiloto 414 Chat Integration.
+Audit Message Schemas for Document Audit Chat Integration.
 
 Defines the structure of audit results when posted as chat messages.
 """
@@ -39,7 +39,7 @@ class Evidence(BaseModel):
 
 
 class Finding(BaseModel):
-    """Validation finding surfaced by Copiloto 414 auditors."""
+    """Validation finding surfaced by Document Audit auditors."""
 
     id: str = Field(..., description="Unique finding identifier")
     category: Category = Field(..., description="Finding category")

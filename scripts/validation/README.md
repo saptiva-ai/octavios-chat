@@ -69,9 +69,9 @@ El script ejecuta los siguientes tests:
 ### 8. **Métricas Prometheus**
 - ✅ Endpoint `/api/metrics` disponible
 - ✅ Métricas de files presentes:
-  - `copilotos_pdf_ingest_seconds{phase}`
-  - `copilotos_pdf_ingest_errors_total{code}`
-  - `copilotos_tool_invocations_total{tool}`
+  - `octavios_pdf_ingest_seconds{phase}`
+  - `octavios_pdf_ingest_errors_total{code}`
+  - `octavios_tool_invocations_total{tool}`
 
 ### 9. **Idempotencia**
 - ✅ Mismo `Idempotency-Key` devuelve mismo `file_id`
@@ -119,7 +119,7 @@ docker-compose ps
 docker-compose up -d
 
 # Ver logs
-docker-compose logs -f copilotos-api
+docker-compose logs -f octavios-api
 ```
 
 ### Error: No se pudo obtener token

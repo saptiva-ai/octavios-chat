@@ -1,5 +1,5 @@
 {
-  "name": "@copilotos/shared",
+  "name": "@octavios/shared",
   "version": "0.1.0",
   "description": "Shared types and schemas for Copilot OS",
   "main": "dist/index.js",

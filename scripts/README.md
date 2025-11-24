@@ -362,7 +362,7 @@ When adding a new script:
 
 Scripts respect these environment variables:
 
-- `COMPOSE_PROJECT_NAME` - Docker Compose project name (default: `copilotos`)
+- `COMPOSE_PROJECT_NAME` - Docker Compose project name (default: `octavios`)
 - `MONGODB_URL` - MongoDB connection string
 - `REDIS_URL` - Redis connection string
 - `SAPTIVA_API_KEY` - Saptiva API key

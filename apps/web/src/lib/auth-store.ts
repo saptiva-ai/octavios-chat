@@ -46,7 +46,7 @@ interface AuthActions {
   updateTokens: (accessToken: string, expiresIn: number) => void;
 }
 
-const AUTH_STORAGE_KEY = "copilotos-auth-state";
+const AUTH_STORAGE_KEY = "octavios-auth-state";
 const ONE_MINUTE_MS = 60_000;
 
 type AuthStore = AuthState & AuthActions;

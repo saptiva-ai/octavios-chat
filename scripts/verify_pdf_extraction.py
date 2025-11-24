@@ -47,12 +47,10 @@ async def test_pdf_extraction():
     pdf_path = Path("packages/tests-e2e/tests/data/pdf/sample_scanned.pdf")
     
     if not pdf_path.exists():
-        print(f"PDF not found at {pdf_path}")
-        # Try absolute path
-        pdf_path = Path("/home/jazielflo/Proyects/octavios-chat-capital414/packages/tests-e2e/tests/data/pdf/sample_scanned.pdf")
+        pdf_path = Path(__file__).resolve().parent.parent / "packages/tests-e2e/tests/data/pdf/sample_scanned.pdf"
         if not pdf_path.exists():
-             print(f"PDF still not found at {pdf_path}")
-             return
+            print(f"PDF not found at {pdf_path}")
+            return
 
     print(f"Testing with file: {pdf_path}")
     

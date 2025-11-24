@@ -1,7 +1,7 @@
 /**
  * FileAttachmentList - Audit Toggle Test
  *
- * COPILOTO_414: Verifies that the audit toggle:
+ * Document Audit: Verifies that the audit toggle:
  * - Appears only for READY files
  * - Calls onAudit callback when activated
  * - Shows correct accessibility attributes

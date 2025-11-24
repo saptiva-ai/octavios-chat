@@ -48,7 +48,7 @@ echo -e "${GREEN}✓${NC} Nginx del sistema detectado (/etc/nginx)"
 echo ""
 
 # ============================================================================
-# 2. BUSCAR CONFIGURACIÓN DE COPILOTOS.SAPTIVA.COM
+# 2. BUSCAR CONFIGURACIÓN DEL DOMINIO DE PRODUCCIÓN
 # ============================================================================
 echo "Buscando configuración de octavios.saptiva.com..."
 

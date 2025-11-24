@@ -1,5 +1,5 @@
 #!/bin/bash
-# Quick diagnostic script for troubleshooting Copilotos Bridge issues
+# Quick diagnostic script for troubleshooting Octavios Chat issues
 # Usage: ./scripts/quick-diagnostic.sh
 
 set -e
@@ -14,7 +14,7 @@ NC=""
 PROJECT_NAME=${COMPOSE_PROJECT_NAME:-octavios}
 
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BLUE}Copilotos Bridge Quick Diagnostic${NC}"
+echo -e "${BLUE}Octavios Chat Quick Diagnostic${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 

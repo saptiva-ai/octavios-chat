@@ -42,7 +42,7 @@ If you have the tests mounted in the container:
 
 ```bash
 # From project root
-docker exec copilotos-api python -m pytest tests/unit/test_file_metadata.py -v
+docker exec octavios-api python -m pytest tests/unit/test_file_metadata.py -v
 ```
 
 ### Option 2: Local Environment
@@ -167,5 +167,5 @@ After tests pass:
 
 ```bash
 # Check logs for validation
-docker logs copilotos-api -f | grep -E "(Validated file metadata|validation failed)"
+docker logs octavios-api -f | grep -E "(Validated file metadata|validation failed)"
 ```

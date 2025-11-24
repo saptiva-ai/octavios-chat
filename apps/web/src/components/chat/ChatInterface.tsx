@@ -65,7 +65,7 @@ interface ChatInterfaceProps {
   onRemoveFilesV1Attachment?: (fileId: string) => void;
   onClearFilesV1Attachments?: (overrideChatId?: string) => void;
   lastReadyFile?: LastReadyFile | null;
-  // Copiloto 414: Audit progress callback
+  // Document Audit: Audit progress callback
   onStartAudit?: (fileId: string, filename: string) => void;
   onAuditError?: (fileId: string, reason?: string) => void;
 }
@@ -96,7 +96,7 @@ export function ChatInterface({
   onAddFilesV1Attachment,
   onRemoveFilesV1Attachment,
   lastReadyFile,
-  // Copiloto 414: Audit progress callback
+  // Document Audit: Audit progress callback
   onStartAudit,
   onAuditError,
 }: ChatInterfaceProps) {
@@ -520,7 +520,7 @@ export function ChatInterface({
                 lastReadyFile={lastReadyFile}
                 conversationId={currentChatId || undefined}
                 featureFlags={featureFlags}
-                // Copiloto 414: Audit progress callback
+                // Document Audit: Audit progress callback
                 onStartAudit={onStartAudit}
                 onAuditError={onAuditError}
               />
@@ -591,7 +591,7 @@ export function ChatInterface({
               lastReadyFile={lastReadyFile}
               conversationId={currentChatId || undefined}
               featureFlags={featureFlags}
-              // Copiloto 414: Audit progress callback
+              // Document Audit: Audit progress callback
               onStartAudit={onStartAudit}
               onAuditError={onAuditError}
             />

@@ -162,7 +162,7 @@ async def verify_redis_cache(file_id: str) -> bool:
     print_step(f"Verifying Redis cache for file: {file_id}", "info")
 
     # Run redis-cli command in docker
-    cmd = f'docker exec copilotos-redis redis-cli GET "doc:text:{file_id}"'
+    cmd = f'docker exec octavios-redis redis-cli GET "doc:text:{file_id}"'
 
     import subprocess
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)

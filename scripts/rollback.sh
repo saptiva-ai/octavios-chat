@@ -1,6 +1,6 @@
 #!/bin/bash
 # ========================================
-# COPILOTOS BRIDGE - QUICK ROLLBACK
+# Octavios Chat - QUICK ROLLBACK
 # ========================================
 # Fast rollback to previous or specific version
 #

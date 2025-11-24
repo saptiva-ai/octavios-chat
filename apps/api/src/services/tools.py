@@ -261,7 +261,7 @@ DEFAULT_AVAILABLE_TOOLS = {
     # === Document Tools (MCP) ===
     "audit_file": {
         "name": "audit_file",
-        "description": "Validar documentos PDF contra políticas de compliance COPILOTO_414 (disclaimers, formato, logos, gramática)",
+        "description": "Validar documentos PDF contra políticas de compliance Document Audit (disclaimers, formato, logos, gramática)",
         "parameters": {
             "type": "object",
             "properties": {

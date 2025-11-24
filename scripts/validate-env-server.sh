@@ -13,7 +13,7 @@
 set -e
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🔍 AUDITORÍA DE CONFIGURACIÓN - Copilotos Bridge"
+echo "🔍 AUDITORÍA DE CONFIGURACIÓN - Octavios Chat"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Detectar si estamos en el directorio correcto

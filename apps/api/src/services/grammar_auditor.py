@@ -1,5 +1,5 @@
 """
-Grammar auditor for Copiloto 414.
+Grammar auditor for Document Audit.
 
 Runs LanguageTool on document pages to detect spelling and grammar issues.
 """

@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================================
-# Migración Segura de Producción: copilotos → octavios
+# Migración Segura de Producción: octavios → octavios
 # ============================================================================
 # Este script migra los contenedores de producción preservando TODOS los datos
 # Estrategia: Recrear contenedores app, mantener volúmenes de datos intactos
@@ -15,7 +15,7 @@
 #
 # ROLLBACK (si algo falla):
 #   docker compose -f infra/docker-compose.yml --env-file envs/.env.prod down
-#   docker start copilotos-prod-web copilotos-prod-api copilotos-prod-redis copilotos-prod-mongodb
+#   docker start octavios-prod-web octavios-prod-api octavios-prod-redis octavios-prod-mongodb
 # ============================================================================
 
 set -euo pipefail
@@ -79,8 +79,8 @@ check_prerequisites() {
     fi
 
     # Check running containers
-    if ! docker ps --format '{{.Names}}' | grep -q "copilotos-prod"; then
-        log_warning "No se encontraron contenedores 'copilotos-prod' corriendo"
+    if ! docker ps --format '{{.Names}}' | grep -q "octavios-prod"; then
+        log_warning "No se encontraron contenedores 'octavios-prod' corriendo"
         read -p "¿Continuar de todas formas? (y/N): " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -119,18 +119,18 @@ verify_backups() {
 show_current_state() {
     log_info "Estado actual de contenedores:"
     echo ""
-    docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -E "NAME|copilotos"
+    docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -E "NAME|octavios"
     echo ""
 }
 
 confirm_migration() {
     echo ""
     log_warning "============================================"
-    log_warning "  MIGRACIÓN DE PRODUCCIÓN: copilotos → octavios"
+    log_warning "  MIGRACIÓN DE PRODUCCIÓN: octavios → octavios"
     log_warning "============================================"
     echo ""
     log_info "Este script realizará:"
-    echo "  1. Detener contenedores actuales (copilotos-prod-*)"
+    echo "  1. Detener contenedores actuales (octavios-prod-*)"
     echo "  2. Recrear con nuevos nombres (octavios-prod-*)"
     echo "  3. Mantener TODOS los datos intactos (volúmenes no se tocan)"
     echo "  4. Downtime estimado: 2-3 minutos"
@@ -153,13 +153,13 @@ stop_old_containers() {
     log_info "Paso 1/4: Deteniendo contenedores antiguos..."
 
     # Stop pero NO remove (permite rollback rápido)
-    docker stop copilotos-prod-web copilotos-prod-api 2>/dev/null || true
+    docker stop octavios-prod-web octavios-prod-api 2>/dev/null || true
 
     # Dar tiempo para conexiones activas
     sleep 2
 
     # Stop databases (serán reutilizados por nombres de volumen)
-    docker stop copilotos-prod-mongodb copilotos-prod-redis 2>/dev/null || true
+    docker stop octavios-prod-mongodb octavios-prod-redis 2>/dev/null || true
 
     log_success "Contenedores antiguos detenidos (no eliminados, rollback posible)"
 }
@@ -260,35 +260,35 @@ show_rollback_instructions() {
     echo "  docker compose -f infra/docker-compose.yml --env-file envs/.env.prod down"
     echo ""
     echo "  # Reiniciar contenedores antiguos"
-    echo "  docker start copilotos-prod-mongodb"
-    echo "  docker start copilotos-prod-redis"
-    echo "  docker start copilotos-prod-api"
-    echo "  docker start copilotos-prod-web"
+    echo "  docker start octavios-prod-mongodb"
+    echo "  docker start octavios-prod-redis"
+    echo "  docker start octavios-prod-api"
+    echo "  docker start octavios-prod-web"
     echo ""
     log_info "Los contenedores antiguos NO fueron eliminados para permitir rollback"
 }
 
 cleanup_old_containers() {
     echo ""
-    read -p "¿Eliminar contenedores antiguos (copilotos-prod-*)? (y/N): " -n 1 -r
+    read -p "¿Eliminar contenedores antiguos (octavios-prod-*)? (y/N): " -n 1 -r
     echo
 
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         log_info "Eliminando contenedores antiguos..."
-        docker rm -f copilotos-prod-web copilotos-prod-api \
-                     copilotos-prod-mongodb copilotos-prod-redis 2>/dev/null || true
+        docker rm -f octavios-prod-web octavios-prod-api \
+                     octavios-prod-mongodb octavios-prod-redis 2>/dev/null || true
         log_success "Contenedores antiguos eliminados"
     else
         log_info "Contenedores antiguos conservados para rollback"
         log_info "Para eliminarlos más tarde:"
-        echo "  docker rm -f copilotos-prod-web copilotos-prod-api copilotos-prod-mongodb copilotos-prod-redis"
+        echo "  docker rm -f octavios-prod-web octavios-prod-api octavios-prod-mongodb octavios-prod-redis"
     fi
 }
 
 main() {
     echo ""
     log_info "============================================"
-    log_info "  Migración Segura: copilotos → octavios"
+    log_info "  Migración Segura: octavios → octavios"
     log_info "============================================"
     echo ""
 

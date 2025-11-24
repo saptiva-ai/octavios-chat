@@ -1,5 +1,5 @@
 """
-Entity Consistency Auditor for COPILOTO_414.
+Entity Consistency Auditor for Document Audit.
 
 Validates entity consistency across document:
 - Client name variations (fuzzy matching)

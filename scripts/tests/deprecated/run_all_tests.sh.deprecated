@@ -19,7 +19,7 @@ NC=""
 
 # Banner
 echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${CYAN}║     COPILOTOS BRIDGE - SUITE COMPLETA DE TESTS              ║${NC}"
+echo -e "${CYAN}║     Octavios Chat - SUITE COMPLETA DE TESTS              ║${NC}"
 echo -e "${CYAN}║              Backend + Frontend                              ║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""

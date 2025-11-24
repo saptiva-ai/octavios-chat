@@ -73,7 +73,7 @@ else
 fi
 
 echo "╔═══════════════════════════════════════════════════════════════╗"
-echo "║  ▸ Copilotos Bridge - Push to Docker Registry               ║"
+echo "║  ▸ Octavios Chat - Push to Docker Registry               ║"
 echo "╚═══════════════════════════════════════════════════════════════╝"
 echo ""
 echo "▸ Registry:  $REGISTRY_URL"

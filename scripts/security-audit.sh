@@ -1,11 +1,11 @@
 #!/bin/bash
 # ==============================================
-# Security Audit Script for Copilotos Bridge
+# Security Audit Script for Octavios Chat
 # ==============================================
 
 set -e
 
-echo "⛨ Security Audit - Copilotos Bridge"
+echo "⛨ Security Audit - Octavios Chat"
 echo "===================================="
 
 # Status symbols for logs

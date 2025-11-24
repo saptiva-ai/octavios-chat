@@ -37,7 +37,7 @@ def check_prompt_registry():
 
     try:
         result = subprocess.run(
-            ["docker", "exec", "octavios-chat-capital414-api",
+            ["docker", "exec", "octavios-chat-api",
              "cat", "/app/prompts/registry.yaml"],
             capture_output=True,
             text=True,
@@ -81,7 +81,7 @@ def check_document_extraction(token: str, filename: str):
     try:
         # Search for the document in MongoDB via API
         result = subprocess.run(
-            ["docker", "exec", "octavios-chat-capital414-api", "python", "-c", f"""
+            ["docker", "exec", "octavios-chat-api", "python", "-c", f"""
 from pymongo import MongoClient
 import json
 
@@ -169,7 +169,7 @@ def check_rag_context_in_logs():
 
     try:
         result = subprocess.run(
-            ["docker", "logs", "octavios-chat-capital414-api", "--tail", "500"],
+            ["docker", "logs", "octavios-chat-api", "--tail", "500"],
             capture_output=True,
             text=True,
             timeout=5
