@@ -130,10 +130,12 @@ export function AuditDetailView({ report, className }: AuditDetailViewProps) {
       "linguistic",
     ];
 
-    const ordered = orderedKeys.map((key) => [key, normalized[key] || []]);
+    const ordered = orderedKeys.map(
+      (key) => [key, normalized[key] || []] as [string, any[]],
+    );
     const extra = Object.entries(normalized).filter(
       ([key]) => !orderedKeys.includes(key),
-    );
+    ) as [string, any[]][];
     return [...ordered, ...extra];
   }, [report.categories]);
   const rawName =
