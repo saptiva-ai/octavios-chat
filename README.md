@@ -649,7 +649,7 @@ make setup-quick   # valores por defecto (CI/CD)
 ### 2. Levantar entorno
 ```bash
 make dev
-# Usa docker compose -p octavios-chat-capital414 (contenedores: octavios-chat-capital414-api, -web, etc.)
+# Usa docker compose -p octavios-chat (contenedores: octavios-chat-api, -web, etc.)
 ```
 Servicios:
 - Frontend http://localhost:3000
@@ -711,9 +711,9 @@ El proyecto se valida principalmente desde el `Makefile`, lo que encapsula entor
 |---------|---------|----------|
 | `make test-all` | Full suite (Docker) | Ejecuta `test-api` + `test-web` + `test-sh` dentro de contenedores; ideal antes de PR. |
 | `make test` | Alias rápido | Invoca `test-api` + `test-web` + `test-sh` manteniendo los contenedores ya levantados. |
-| `make test-api` | API (contenedor `octavios-chat-capital414-api`) | Corre `pytest` con cobertura; acepta `FILE=...` y `ARGS=...` para casos específicos. |
+| `make test-api` | API (contenedor `octavios-chat-api`) | Corre `pytest` con cobertura; acepta `FILE=...` y `ARGS=...` para casos específicos. |
 | `make test-unit-host` | API (host/.venv) | Ejecuta pytest desde `.venv`, útil cuando no quieres depender de Docker. |
-| `make test-web` | Frontend | Lanza `pnpm test` en el contenedor `octavios-chat-capital414-web`; soporta `FILE` y `ARGS`. |
+| `make test-web` | Frontend | Lanza `pnpm test` en el contenedor `octavios-chat-web`; soporta `FILE` y `ARGS`. |
 | `make test-e2e` | Playwright | Corre la carpeta `tests/` usando la stack en marcha (`make dev`). |
 | `make test-mcp` | MCP | Suite dedicada (unit + integration); ver variantes `test-mcp-lazy`, `test-mcp-marker`, `test-mcp-diff`. |
 | `make lint` / `make lint-fix` | Calidad | Ruff + ESLint; `lint-fix` aplica autofixes seguros. |
@@ -754,7 +754,7 @@ El proyecto se valida principalmente desde el `Makefile`, lo que encapsula entor
    make shell-api  # (opcional) si quieres entrar al contenedor api
    ```
 2. **Backend (pytest)**  
-   - Contenedores: `make test-api` (usa `octavios-chat-capital414-api`) o `make test` para correr API + web en un solo paso.  
+   - Contenedores: `make test-api` (usa `octavios-chat-api`) o `make test` para correr API + web en un solo paso.  
    - Host/.venv: `make test-unit-host ARGS="-k streaming"` cuando necesites debugear sin Docker.  
    - Casos MCP: `make test-mcp`, `make test-mcp-lazy` o `make test-mcp-integration`.
 3. **Frontend (jest)**  
@@ -842,7 +842,7 @@ Referencias rápidas para navegar código:
 - `apps/api/src/routers/chat` contiene los endpoints REST/SSE; cada handler llama a estrategias en `apps/api/src/domain/message_handlers`.
 - `apps/api/src/mcp` se divide en `tool.py` (contratos), `lazy_routes.py` (discover/load/invoke) y `tools/*` (implementaciones concretas).
 - `apps/web/src/lib` concentra stores Zustand, clientes HTTP/MCP y hooks reutilizables (imperativo revisar aquí antes de duplicar lógica en componentes).
-- `infra/docker-compose*.yml` define perfiles y nombres de contenedor (`octavios-chat-capital414-*`) usados por el Makefile.
+- `infra/docker-compose*.yml` define perfiles y nombres de contenedor (`octavios-chat-*`) usados por el Makefile.
 
 Tips rápidos:
 - Variables y comandos centrales viven en el `Makefile`, por lo que la mayoría de los flujos (setup, dev, verify, debug) son accesibles vía `make`.
