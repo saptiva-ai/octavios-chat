@@ -46,8 +46,6 @@ export function parseToolCalls(content: string): ParsedToolContent {
 
         toolInvocations.push({
           tool_name: parsed.name,
-          tool_call_id: `call-${Date.now()}`,
-          state: "completed",
           result,
         });
       }

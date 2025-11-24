@@ -337,14 +337,16 @@ function Header({
               </p>
             )}
             <div className="flex flex-wrap gap-1 pt-1 text-[11px] font-semibold">
-              {badges?.map((b) => (
-                <span
-                  key={b.label}
-                  className={cn("rounded-full px-2 py-1", b.color)}
-                >
-                  {b.value} {b.label}
-                </span>
-              ))}
+              {badges?.map(
+                (b: { label: string; value: number; color: string }) => (
+                  <span
+                    key={b.label}
+                    className={cn("rounded-full px-2 py-1", b.color)}
+                  >
+                    {b.value} {b.label}
+                  </span>
+                ),
+              )}
             </div>
           </>
         )}

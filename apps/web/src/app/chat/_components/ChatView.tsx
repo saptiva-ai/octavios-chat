@@ -1040,32 +1040,36 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
               }
             }
 
+            // At this point response is guaranteed to exist from the try-catch above
+            const safeResponse = response!;
+
             const assistantMessage: ChatMessage = {
-              id: response.message_id || placeholderId,
+              id: safeResponse.message_id || placeholderId,
               role: "assistant",
               content: safeContent,
               artifact:
-                response.artifact ||
-                (response as any)?.decision_metadata?.audit_artifact ||
-                (response.metadata as any)?.decision_metadata?.audit_artifact ||
+                safeResponse.artifact ||
+                (safeResponse as any)?.decision_metadata?.audit_artifact ||
+                (safeResponse.metadata as any)?.decision_metadata
+                  ?.audit_artifact ||
                 null,
-              timestamp: response.created_at || new Date().toISOString(),
-              model: response.model,
-              tokens: response.tokens || 0,
-              latency: response.latency_ms || 0,
+              timestamp: safeResponse.created_at || new Date().toISOString(),
+              model: safeResponse.model,
+              tokens: safeResponse.tokens || 0,
+              latency: safeResponse.latency_ms || 0,
               status: "delivered",
               isStreaming: false,
-              task_id: response.task_id,
-              metadata: response.metadata, // Include audit metadata (report_pdf_url, etc.)
+              task_id: safeResponse.task_id,
+              metadata: safeResponse.metadata, // Include audit metadata (report_pdf_url, etc.)
             };
 
             // Extract report PDF URL from audit metadata
-            if (response.metadata?.decision_metadata?.report_pdf_url) {
+            if (safeResponse.metadata?.decision_metadata?.report_pdf_url) {
               setCurrentReportPdfUrl(
-                response.metadata.decision_metadata.report_pdf_url,
+                safeResponse.metadata.decision_metadata.report_pdf_url,
               );
               logDebug("[ChatView] Audit report PDF URL extracted", {
-                url: response.metadata.decision_metadata.report_pdf_url,
+                url: safeResponse.metadata.decision_metadata.report_pdf_url,
               });
             }
 
