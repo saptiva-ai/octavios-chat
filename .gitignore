@@ -340,3 +340,13 @@ tests/MENSAJE_*.md
 tests/CODIGO_FUENTE_README.md
 tests/codigo_fuente_pdf_to_markdown.py
 tests/INSTRUCCIONES_ENVIO_FRANCISCO.txt
+
+# Production audit reports - CRITICAL: Contains sensitive production data
+audit-report-production.md
+audit-report-production.json
+audit-report-*.json
+audit-report-*.md
+
+# Debug tools with production credentials
+debug_tool.py
+*debug_tool*.py
