@@ -202,7 +202,7 @@ capital414-chat_qdrant_snapshots   (NEW - backups)
 ```bash
 # Already done in docker-compose.yml
 # Verify on server:
-ssh jf@34.172.67.93 'grep COMPOSE_PROJECT_NAME /home/jf/capital414-chat/envs/.env'
+ssh jf@server.example.com 'grep COMPOSE_PROJECT_NAME /home/jf/capital414-chat/envs/.env'
 ```
 
 ### 2. Backup Data
@@ -220,7 +220,7 @@ ssh jf@34.172.67.93 'grep COMPOSE_PROJECT_NAME /home/jf/capital414-chat/envs/.en
 ### 4. Post-Deploy Verification
 ```bash
 # Verify container names
-ssh jf@34.172.67.93 'docker ps --format "{{.Names}}"'
+ssh jf@server.example.com 'docker ps --format "{{.Names}}"'
 
 # Should see:
 # capital414-chat-api
@@ -229,7 +229,7 @@ ssh jf@34.172.67.93 'docker ps --format "{{.Names}}"'
 # ... (others)
 
 # Verify data preserved
-ssh jf@34.172.67.93 'docker exec capital414-chat-mongodb mongosh ...'
+ssh jf@server.example.com 'docker exec capital414-chat-mongodb mongosh ...'
 # Should still show 12 users, 27 sessions, etc.
 ```
 
@@ -255,13 +255,13 @@ If deploy fails:
 ### Quick Rollback
 ```bash
 # 1. Stop new containers
-ssh jf@34.172.67.93 'cd /home/jf/capital414-chat/infra && docker compose down'
+ssh jf@server.example.com 'cd /home/jf/capital414-chat/infra && docker compose down'
 
 # 2. Restore from backup (if data corrupted)
 # See backup restore instructions in backup files
 
 # 3. Start old containers
-ssh jf@34.172.67.93 'cd /home/jf/capital414-chat/infra && docker compose up -d'
+ssh jf@server.example.com 'cd /home/jf/capital414-chat/infra && docker compose up -d'
 ```
 
 ### Full Data Restore
@@ -290,16 +290,16 @@ See: `~/backups/volumes/TIMESTAMP/RESTORE_INSTRUCTIONS.txt` on server
 ### Useful Commands
 ```bash
 # Check containers
-ssh jf@34.172.67.93 'docker ps'
+ssh jf@server.example.com 'docker ps'
 
 # Check volumes
-ssh jf@34.172.67.93 'docker volume ls'
+ssh jf@server.example.com 'docker volume ls'
 
 # MongoDB stats
-ssh jf@34.172.67.93 'docker exec capital414-chat-mongodb mongosh ...'
+ssh jf@server.example.com 'docker exec capital414-chat-mongodb mongosh ...'
 
 # Logs
-ssh jf@34.172.67.93 'docker logs -f capital414-chat-api'
+ssh jf@server.example.com 'docker logs -f capital414-chat-api'
 ```
 
 ### Report Files

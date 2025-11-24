@@ -2,7 +2,7 @@
 # ========================================
 # DEMO SERVER SETUP SCRIPT
 # ========================================
-# Prepares Capital 414 demo server (34.172.67.93) for deployment
+# Prepares Capital 414 demo server (server.example.com) for deployment
 #
 # This script:
 # ✅ Installs Docker and Docker Compose
@@ -14,7 +14,7 @@
 # Usage:
 #   ./scripts/setup-demo-server.sh
 #
-# Server: 34.172.67.93 (cuatro-catorce)
+# Server: server.example.com (cuatro-catorce)
 # User: jf
 # OS: Ubuntu 24.04 LTS
 #
@@ -28,7 +28,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-DEMO_SERVER="jf@34.172.67.93"
+DEMO_SERVER="jf@server.example.com"
 DEMO_PATH="/home/jf/capital414-chat"
 REPO_URL="https://github.com/saptiva-ai/capital414-chat.git"  # Adjust this URL
 

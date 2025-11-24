@@ -11,7 +11,7 @@ User's Browser
     ↓ HTTPS (TLS 1.3)
 Cloudflare Edge
     ↓ HTTP or HTTPS (depends on SSL mode)
-Nginx (34.172.67.93:80)
+Nginx (server.example.com:80)
     ↓
 Application (Next.js + FastAPI)
 ```
@@ -51,7 +51,7 @@ Cloudflare offers 4 SSL modes:
    ```
    Type: A
    Name: 414
-   Content: 34.172.67.93
+   Content: server.example.com
    Proxy status: Proxied (orange cloud) ✓
    TTL: Auto
    ```
@@ -115,12 +115,12 @@ For production, upgrade to Full (Strict) SSL for better security:
 2. **Wait for DNS propagation (2-5 minutes):**
    ```bash
    dig +short 414.saptiva.com
-   # Should return: 34.172.67.93 (not Cloudflare IPs)
+   # Should return: server.example.com (not Cloudflare IPs)
    ```
 
 3. **Run SSL setup on server:**
    ```bash
-   ssh jf@34.172.67.93
+   ssh jf@server.example.com
    cd /home/jf/capital414-chat
    ./scripts/setup-ssl-414.sh
    ```
@@ -158,15 +158,15 @@ For production, upgrade to Full (Strict) SSL for better security:
 
 3. **Install on Server:**
    ```bash
-   ssh jf@34.172.67.93
+   ssh jf@server.example.com
    cd /home/jf/capital414-chat
 
    # Create SSL directory
    mkdir -p data/ssl
 
    # Copy certificates (from your local machine)
-   scp /tmp/origin-cert.pem jf@34.172.67.93:/home/jf/capital414-chat/data/ssl/fullchain.pem
-   scp /tmp/origin-key.pem jf@34.172.67.93:/home/jf/capital414-chat/data/ssl/privkey.pem
+   scp /tmp/origin-cert.pem jf@server.example.com:/home/jf/capital414-chat/data/ssl/fullchain.pem
+   scp /tmp/origin-key.pem jf@server.example.com:/home/jf/capital414-chat/data/ssl/privkey.pem
 
    # Secure permissions
    chmod 600 data/ssl/privkey.pem
@@ -249,7 +249,7 @@ Cloudflare → SSL/TLS → Edge Certificates
 **Solutions:**
 1. Check if nginx container is running:
    ```bash
-   ssh jf@34.172.67.93
+   ssh jf@server.example.com
    docker ps | grep nginx
    ```
 
@@ -260,7 +260,7 @@ Cloudflare → SSL/TLS → Edge Certificates
 
 3. Verify port 80 is open:
    ```bash
-   curl http://34.172.67.93/health
+   curl http://server.example.com/health
    ```
 
 ### Error 525: SSL Handshake Failed

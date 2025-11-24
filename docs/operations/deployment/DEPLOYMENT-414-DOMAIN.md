@@ -11,9 +11,9 @@ This guide covers deploying the Capital 414 chat application to production with:
 
 ## Prerequisites
 
-- Server: `34.172.67.93` (Ubuntu 24.04 LTS)
+- Server: `server.example.com` (Ubuntu 24.04 LTS)
 - User: `jf` with sudo access and SSH key configured
-- Domain `414.saptiva.com` DNS A record pointing to `34.172.67.93`
+- Domain `414.saptiva.com` DNS A record pointing to `server.example.com`
 - Ports 80 and 443 open in firewall
 
 ## Architecture
@@ -57,7 +57,7 @@ make setup-demo-server
 ```bash
 # Verify domain resolves to server IP
 dig +short 414.saptiva.com
-# Should return: 34.172.67.93
+# Should return: server.example.com
 ```
 
 If DNS is not configured:
@@ -65,7 +65,7 @@ If DNS is not configured:
 2. Create an A record:
    - **Name**: `414` (or `414.saptiva.com` depending on provider)
    - **Type**: `A`
-   - **Value**: `34.172.67.93`
+   - **Value**: `server.example.com`
    - **TTL**: `300` (5 minutes)
 3. Wait for propagation (5-30 minutes)
 
@@ -104,7 +104,7 @@ Run the SSL setup script on the server:
 
 ```bash
 # SSH into server
-ssh jf@34.172.67.93
+ssh jf@server.example.com
 
 # Navigate to project
 cd /home/jf/capital414-chat
@@ -125,7 +125,7 @@ This script will:
 
 ```bash
 # SSH into server
-ssh jf@34.172.67.93
+ssh jf@server.example.com
 cd /home/jf/capital414-chat
 
 # 1. Create directories
@@ -160,7 +160,7 @@ cd /home/jazielflo/Proyects/capital414-chat
 make deploy-demo
 
 # On the server, start the stack with domain config
-ssh jf@34.172.67.93
+ssh jf@server.example.com
 cd /home/jf/capital414-chat
 docker compose -f infra/docker-compose.414.saptiva.com.yml up -d
 ```
@@ -279,7 +279,7 @@ Certificates are automatically renewed by the `certbot` container every 12 hours
 
 ```bash
 # SSH into server
-ssh jf@34.172.67.93
+ssh jf@server.example.com
 cd /home/jf/capital414-chat
 
 # Renew certificates
@@ -386,7 +386,7 @@ If deployment fails:
 make deploy-history
 
 # Rollback to previous version
-ssh jf@34.172.67.93
+ssh jf@server.example.com
 cd /home/jf/capital414-chat
 ./scripts/rollback.sh
 ```

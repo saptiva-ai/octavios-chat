@@ -69,7 +69,7 @@ vim envs/.env.prod
 ./scripts/deploy-cloudflare-414.sh --only-config
 
 # Restart solo el servicio afectado
-ssh jf@34.172.67.93 "cd /home/jf/capital414-chat && \
+ssh jf@server.example.com "cd /home/jf/capital414-chat && \
   docker compose --env-file envs/.env.prod -f infra/docker-compose.cloudflare.yml restart api"
 ```
 
@@ -136,7 +136,7 @@ git add . && git commit -m "fix: critical auth bug"
 ./scripts/deploy-cloudflare-414.sh --fast
 
 # 3. Monitor
-ssh jf@34.172.67.93 "docker logs capital414-chat-api -f"
+ssh jf@server.example.com "docker logs capital414-chat-api -f"
 ```
 
 **Tiempo total:** ~3-4 minutos
@@ -154,7 +154,7 @@ vim envs/.env.prod
 ./scripts/deploy-cloudflare-414.sh --only-config
 
 # 3. Restart servicio afectado
-ssh jf@34.172.67.93 "cd /home/jf/capital414-chat && \
+ssh jf@server.example.com "cd /home/jf/capital414-chat && \
   docker compose --env-file envs/.env.prod -f infra/docker-compose.cloudflare.yml restart api"
 ```
 
@@ -168,7 +168,7 @@ ssh jf@34.172.67.93 "cd /home/jf/capital414-chat && \
 
 ```bash
 # Status completo
-ssh jf@34.172.67.93 "cd /home/jf/capital414-chat && \
+ssh jf@server.example.com "cd /home/jf/capital414-chat && \
   docker compose --env-file envs/.env.prod -f infra/docker-compose.cloudflare.yml ps"
 
 # Health check
@@ -179,24 +179,24 @@ curl https://414.saptiva.com/api/health
 
 ```bash
 # API logs
-ssh jf@34.172.67.93 "docker logs capital414-chat-api -f --tail 50"
+ssh jf@server.example.com "docker logs capital414-chat-api -f --tail 50"
 
 # Web logs
-ssh jf@34.172.67.93 "docker logs capital414-chat-web -f --tail 50"
+ssh jf@server.example.com "docker logs capital414-chat-web -f --tail 50"
 
 # Nginx logs
-ssh jf@34.172.67.93 "docker logs capital414-chat-nginx -f --tail 50"
+ssh jf@server.example.com "docker logs capital414-chat-nginx -f --tail 50"
 ```
 
 ### Restart Individual
 
 ```bash
 # Solo API
-ssh jf@34.172.67.93 "cd /home/jf/capital414-chat && \
+ssh jf@server.example.com "cd /home/jf/capital414-chat && \
   docker compose --env-file envs/.env.prod -f infra/docker-compose.cloudflare.yml restart api"
 
 # Solo Web
-ssh jf@34.172.67.93 "cd /home/jf/capital414-chat && \
+ssh jf@server.example.com "cd /home/jf/capital414-chat && \
   docker compose --env-file envs/.env.prod -f infra/docker-compose.cloudflare.yml restart web"
 ```
 
@@ -281,17 +281,17 @@ Después de deployment, algunos usuarios pueden ver versión antigua:
 
 ```bash
 # Ver detalles del healthcheck
-ssh jf@34.172.67.93 "docker inspect capital414-chat-web --format '{{json .State.Health}}' | python3 -m json.tool"
+ssh jf@server.example.com "docker inspect capital414-chat-web --format '{{json .State.Health}}' | python3 -m json.tool"
 
 # Test manual
-ssh jf@34.172.67.93 "docker exec capital414-chat-web wget --no-verbose --tries=1 --spider http://127.0.0.1:3000"
+ssh jf@server.example.com "docker exec capital414-chat-web wget --no-verbose --tries=1 --spider http://127.0.0.1:3000"
 ```
 
 ### Problema: CORS errors
 
 ```bash
 # Verificar CORS config
-ssh jf@34.172.67.93 "docker exec capital414-chat-api env | grep CORS"
+ssh jf@server.example.com "docker exec capital414-chat-api env | grep CORS"
 
 # Test CORS preflight
 curl -X OPTIONS https://414.saptiva.com/api/auth/register \
@@ -304,10 +304,10 @@ curl -X OPTIONS https://414.saptiva.com/api/auth/register \
 
 ```bash
 # Verificar variables compiladas
-ssh jf@34.172.67.93 "docker exec capital414-chat-web env | grep NEXT_PUBLIC"
+ssh jf@server.example.com "docker exec capital414-chat-web env | grep NEXT_PUBLIC"
 
 # Verificar imagen
-ssh jf@34.172.67.93 "docker image inspect octavios-web:latest --format '{{.Created}}'"
+ssh jf@server.example.com "docker image inspect octavios-web:latest --format '{{.Created}}'"
 
 # Si es antigua, rebuild
 ./scripts/deploy-cloudflare-414.sh --fast

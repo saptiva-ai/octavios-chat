@@ -21,7 +21,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-DEMO_SERVER="jf@34.172.67.93"
+DEMO_SERVER="jf@server.example.com"
 DEMO_PATH="/home/jf/capital414-chat"
 
 # Parse arguments

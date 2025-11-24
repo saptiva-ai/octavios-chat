@@ -4,7 +4,7 @@
 #
 # Usage:
 #   # From local machine:
-#   ssh jf@34.172.67.93 'bash -s' < scripts/audit-production-state.sh
+#   ssh user@your-server 'bash -s' < scripts/audit-production-state.sh
 #
 #   # Or on server:
 #   ./scripts/audit-production-state.sh
@@ -21,8 +21,9 @@ set -o pipefail
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 REPORT_FILE="audit-report-${TIMESTAMP}.json"
 REPORT_MD="audit-report-${TIMESTAMP}.md"
-PROJECT_ROOT="${PROJECT_ROOT:-/home/jf/capital414-chat}"
+PROJECT_ROOT="${PROJECT_ROOT:-/opt/octavios-chat}"
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-octavios-chat-capital414}"
+SERVER_HOST="${SERVER_HOST:-user@your-server}"
 
 # Colors for terminal output
 RED='\033[0;31m'
@@ -365,7 +366,7 @@ EOF
     echo -e "${BLUE}Full report saved to:${NC} $REPORT_FILE"
     echo ""
     echo -e "${YELLOW}Download report to local machine:${NC}"
-    echo "  scp jf@34.172.67.93:$PROJECT_ROOT/$REPORT_FILE ./"
+    echo "  scp $SERVER_HOST:$PROJECT_ROOT/$REPORT_FILE ./"
     echo ""
 
     # Generate Markdown report
@@ -487,8 +488,8 @@ end
 1. **If deploying:** Follow `docs/deployment/MIGRATION_PLAN_QDRANT.md`
 2. **Download reports:**
    \`\`\`bash
-   scp jf@34.172.67.93:$PROJECT_ROOT/$REPORT_FILE ./
-   scp jf@34.172.67.93:$PROJECT_ROOT/$REPORT_MD ./
+   scp $SERVER_HOST:$PROJECT_ROOT/$REPORT_FILE ./
+   scp $SERVER_HOST:$PROJECT_ROOT/$REPORT_MD ./
    \`\`\`
 
 ---

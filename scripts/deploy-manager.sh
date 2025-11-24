@@ -39,7 +39,7 @@ fi
 
 case "$ENV" in
   "demo")
-    SERVER_HOST="jf@34.172.67.93"
+    SERVER_HOST="jf@server.example.com"
     DEPLOY_PATH="/home/jf/capital414-chat"
     ;;
   "prod")

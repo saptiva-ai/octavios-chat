@@ -128,7 +128,7 @@ volumes:
 
 ```bash
 # Conectar al servidor
-ssh jf@34.172.67.93
+ssh jf@server.example.com
 
 # Verificar qué está definido
 cd /home/jf/capital414-chat
@@ -166,10 +166,10 @@ COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-capital414-chat}"
 
 ```bash
 # En el servidor, verificar nombres actuales
-ssh jf@34.172.67.93 'docker ps --format "{{.Names}}"'
+ssh jf@server.example.com 'docker ps --format "{{.Names}}"'
 
 # Verificar volúmenes
-ssh jf@34.172.67.93 'docker volume ls --filter name=capital414'
+ssh jf@server.example.com 'docker volume ls --filter name=capital414'
 ```
 
 ---

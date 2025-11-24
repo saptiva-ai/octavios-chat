@@ -103,7 +103,7 @@ Handles all deployment logic for different environments.
 ```
 
 **Environments**:
-- `demo`: Demo server (34.172.67.93)
+- `demo`: Demo server (server.example.com)
 - `prod`: Production server (from .env.prod)
 
 **Modes**:
@@ -196,7 +196,7 @@ make db CMD=backup
 # Hundreds of deployment targets
 deploy-demo:
 	@echo "Deploying to demo..."
-	@ssh jf@34.172.67.93 "cd /home/jf/capital414-chat && ..."
+	@ssh jf@server.example.com "cd /home/jf/capital414-chat && ..."
 	# ... 50 more lines
 
 deploy-demo-fast:
@@ -232,7 +232,7 @@ Edit `scripts/deploy-manager.sh`:
 ```bash
 case "$ENV" in
   "demo")
-    SERVER_HOST="jf@34.172.67.93"
+    SERVER_HOST="jf@server.example.com"
     DEPLOY_PATH="/home/jf/capital414-chat"
     ;;
   "staging")  # NEW
