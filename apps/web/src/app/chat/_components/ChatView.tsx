@@ -1021,9 +1021,11 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                     ...response,
                     artifact: response.artifact || parsedContent.artifact,
                     metadata: response.metadata || parsedContent.metadata,
-                    decision:
-                      (response as any).decision || parsedContent.decision,
-                  };
+                  } as any; // Cast to any to allow decision property
+                  // Add decision if present (not in type but exists in runtime)
+                  if (parsedContent.decision) {
+                    (response as any).decision = parsedContent.decision;
+                  }
                   const decisionArtifact = (parsedContent.decision || {})
                     .audit_artifact;
                   if (!response.artifact && decisionArtifact) {
