@@ -1,7 +1,7 @@
 """
 Integration tests for audit_file tool.
 
-Tests COPILOTO_414 compliance validation via MCP.
+Tests Document Audit compliance validation via MCP.
 """
 
 import pytest

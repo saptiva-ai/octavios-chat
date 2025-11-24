@@ -1,6 +1,6 @@
 #!/bin/bash
 # ========================================
-# COPILOTOS BRIDGE - CLEAR SERVER CACHE
+# Octavios Chat - CLEAR SERVER CACHE
 # ========================================
 # Clears Redis cache and restarts web container on production server
 #

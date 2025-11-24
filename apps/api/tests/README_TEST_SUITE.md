@@ -126,10 +126,10 @@ xdg-open htmlcov/index.html  # Linux
 
 ```bash
 # Ejecutar tests en contenedor API
-docker exec octavios-chat-capital414-api pytest tests/services/test_saptiva_client_retry.py -v
+docker exec octavios-chat-api pytest tests/services/test_saptiva_client_retry.py -v
 
 # Ejecutar test suite completa en Docker
-docker exec octavios-chat-capital414-api pytest tests/ -v --tb=short
+docker exec octavios-chat-api pytest tests/ -v --tb=short
 ```
 
 ---

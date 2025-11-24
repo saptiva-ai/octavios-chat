@@ -1,8 +1,8 @@
-# 📐 Arquitectura del Sistema de Auditoría - COPILOTO_414
+# 📐 Arquitectura del Sistema de Auditoría - Document Audit
 
 ## 🎯 Descripción General
 
-El sistema de auditoría COPILOTO_414 es un **framework extensible** para validar documentos PDF contra políticas de cumplimiento corporativo. Utiliza un **patrón de coordinador + auditores** donde múltiples validadores especializados se ejecutan en paralelo.
+El sistema de auditoría Document Audit es un **framework extensible** para validar documentos PDF contra políticas de cumplimiento corporativo. Utiliza un **patrón de coordinador + auditores** donde múltiples validadores especializados se ejecutan en paralelo.
 
 ---
 
@@ -232,7 +232,7 @@ Finding(
 
 ```python
 """
-Typography Auditor for COPILOTO_414.
+Typography Auditor for Document Audit.
 
 Validates typography best practices:
 - Consistent heading hierarchy (H1, H2, H3)
@@ -525,7 +525,7 @@ Este auditor valida que TODOS los colores del documento estén dentro de la pale
 
 ```python
 """
-Color Palette Auditor for COPILOTO_414.
+Color Palette Auditor for Document Audit.
 
 Validates strict color palette compliance:
 - All colors must match corporate palette (with tolerance)
@@ -855,4 +855,4 @@ color_palette:
 
 **Última actualización**: 2025-10-30
 **Versión**: 2.0
-**Autor**: Sistema de Auditoría COPILOTO_414
+**Autor**: Sistema de Auditoría Document Audit

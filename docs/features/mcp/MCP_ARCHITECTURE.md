@@ -7,7 +7,7 @@ This document describes the **Model Context Protocol (MCP)** layer integrated in
 **Implementation Status**: ✅ **COMPLETED** - In-process MCP (Opción A) within the same FastAPI container.
 
 **Available Tools** (as of 2025-11-11):
-1. **audit_file** - COPILOTO_414 compliance validation
+1. **audit_file** - Document Audit compliance validation
 2. **excel_analyzer** - Excel data analysis and statistics
 3. **viz_tool** - Data visualization (Plotly/ECharts)
 4. **deep_research** - Multi-step research with Aletheia ✨ NEW
@@ -97,7 +97,7 @@ This document describes the **Model Context Protocol (MCP)** layer integrated in
 - `chat.py` - Main chat endpoint (streaming/non-streaming)
 - `files.py` - File upload with rate limiting (5 uploads/min)
 - `documents.py` - Document management (CRUD)
-- `review.py` - Document review & COPILOTO_414 validation
+- `review.py` - Document review & Document Audit validation
 - `deep_research.py` - Aletheia research orchestration
 - `history.py` - Chat history with pagination
 - `conversations.py` - Session management
@@ -110,7 +110,7 @@ This document describes the **Model Context Protocol (MCP)** layer integrated in
 - `chat_service.py` - Chat session management, Saptiva integration
 - `document_service.py` - Document text retrieval, RAG context
 - `review_service.py` - Review job orchestration
-- `validation_coordinator.py` - COPILOTO_414 audit orchestration
+- `validation_coordinator.py` - Document Audit audit orchestration
 - `history_service.py` - History retrieval with caching
 - `deep_research_service.py` - Research task coordination
 
@@ -121,7 +121,7 @@ This document describes the **Model Context Protocol (MCP)** layer integrated in
 - `cache_service.py` - Redis caching abstraction
 - `document_extraction.py` - 3-tier extraction (pypdf → Saptiva PDF SDK → OCR)
 
-**Specialized Auditors (COPILOTO_414)**:
+**Specialized Auditors (Document Audit)**:
 - `compliance_auditor.py` - Disclaimer validation
 - `format_auditor.py` - Font/color/number format validation
 - `grammar_auditor.py` - LanguageTool integration
@@ -131,7 +131,7 @@ This document describes the **Model Context Protocol (MCP)** layer integrated in
 #### Domain Models (Beanie ODM)
 - `ChatSession`, `ChatMessage` - Conversation storage
 - `Document` - File metadata + extracted text
-- `ValidationReport` - COPILOTO_414 results
+- `ValidationReport` - Document Audit results
 - `ReviewJob` - Document review jobs
 - `ResearchTask` - Deep research tasks
 - `User` - User accounts
@@ -206,7 +206,7 @@ This document describes the **Model Context Protocol (MCP)** layer integrated in
   - `failed` - Error state
   - `heartbeat` - Keep-alive (30s timeout)
 
-#### Document Validation/Audit (COPILOTO_414)
+#### Document Validation/Audit (Document Audit)
 - **Endpoint**: `POST /api/review/validate`
 - **Orchestrator**: `validation_coordinator.py`
 - **Auditors** (run in parallel):
@@ -761,7 +761,7 @@ logger = structlog.get_logger(__name__)
 
 class AuditFileTool(Tool):
     """
-    COPILOTO_414 Document Compliance Validation Tool.
+    Document Audit Document Compliance Validation Tool.
 
     Validates PDFs against corporate compliance policies:
     - Disclaimer presence and coverage
@@ -778,7 +778,7 @@ class AuditFileTool(Tool):
             version="1.0.0",
             display_name="Document Compliance Auditor",
             description=(
-                "Validates PDF documents against COPILOTO_414 compliance policies. "
+                "Validates PDF documents against Document Audit compliance policies. "
                 "Checks disclaimers, formatting, logos, and grammar."
             ),
             category=ToolCategory.COMPLIANCE,
@@ -850,7 +850,7 @@ class AuditFileTool(Tool):
                     },
                 },
             },
-            tags=["compliance", "validation", "copiloto_414", "pdf", "audit"],
+            tags=["compliance", "validation", "document_audit", "pdf", "audit"],
             requires_auth=True,
             rate_limit={"calls_per_minute": 10},
             timeout_ms=60000,  # 60 seconds
@@ -877,7 +877,7 @@ class AuditFileTool(Tool):
         context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
-        Execute COPILOTO_414 validation.
+        Execute Document Audit validation.
 
         Args:
             payload: {
@@ -1915,7 +1915,7 @@ Integration tests should verify:
 - [ ] **Image Analysis Tool** - OCR + object detection + classification
 - [ ] **Code Executor Tool** - Sandboxed Python/JavaScript execution
 - [ ] **Workflow Orchestrator** - Chain multiple tools together
-- [ ] **Custom Policy Designer** - Visual policy configuration for COPILOTO_414
+- [ ] **Custom Policy Designer** - Visual policy configuration for Document Audit
 
 ### 9.4 Migration to Out-of-Process (Future)
 

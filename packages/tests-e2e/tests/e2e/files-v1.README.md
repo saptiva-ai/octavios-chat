@@ -44,9 +44,9 @@ Tests end-to-end automatizados para el sistema unificado de files V1.
 8. **Metrics Verification**
    - GET `/api/metrics`
    - Verifica presencia de métricas:
-     - `copilotos_pdf_ingest_seconds`
-     - `copilotos_pdf_ingest_errors_total`
-     - `copilotos_tool_invocations_total`
+     - `octavios_pdf_ingest_seconds`
+     - `octavios_pdf_ingest_errors_total`
+     - `octavios_tool_invocations_total`
 
 ## Fixtures
 
@@ -227,7 +227,7 @@ ls -lh tests/fixtures/files/
 docker-compose ps
 
 # Ver logs del API
-docker-compose logs -f copilotos-api
+docker-compose logs -f octavios-api
 
 # Verificar health endpoint
 curl http://localhost:8001/api/health

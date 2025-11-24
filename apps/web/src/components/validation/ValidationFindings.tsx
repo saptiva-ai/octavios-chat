@@ -1,7 +1,7 @@
 /**
  * ValidationFindings Component
  *
- * Displays Copiloto 414 validation report with:
+ * Displays Document Audit validation report with:
  * - Summary cards (total findings, disclaimer coverage, duration)
  * - Findings grouped by severity
  * - Individual finding cards with details
@@ -254,7 +254,7 @@ export function ValidationFindings({
             Reporte de Auditoría
           </h3>
           <p className="text-sm text-zinc-400">
-            Copiloto 414 - Validación de documentos
+            Document Audit - Validación de documentos
           </p>
         </div>
       </div>

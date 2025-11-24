@@ -1,6 +1,6 @@
 # Observability Configuration
 
-This directory contains configuration files for the Copilotos Bridge observability stack.
+This directory contains configuration files for the Octavios Chat observability stack.
 
 ## Configuration Files
 

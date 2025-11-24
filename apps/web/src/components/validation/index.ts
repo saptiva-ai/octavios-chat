@@ -1,7 +1,7 @@
 /**
  * Validation Components
  *
- * Copiloto 414 - Document Validation UI
+ * Document Audit - Document Validation UI
  */
 
 export { ValidationFindings } from "./ValidationFindings";

@@ -1,5 +1,5 @@
 """
-Semantic Consistency Auditor for COPILOTO_414.
+Semantic Consistency Auditor for Document Audit.
 
 Validates semantic consistency across document sections:
 - Cross-section coherence (Resumen vs Conclusiones)

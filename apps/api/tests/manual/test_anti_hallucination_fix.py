@@ -233,7 +233,7 @@ def check_api_logs_for_ocr(doc_name: str) -> dict:
 
     try:
         result = subprocess.run(
-            ["docker", "logs", "octavios-chat-capital414-api", "--tail", "100"],
+            ["docker", "logs", "octavios-chat-api", "--tail", "100"],
             capture_output=True,
             text=True,
             timeout=5

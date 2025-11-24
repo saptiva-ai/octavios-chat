@@ -1,5 +1,5 @@
 # ============================================================================
-# Compliance Configuration for Copiloto 414
+# Compliance Configuration for Document Audit
 # ============================================================================
 #
 # This file defines compliance rules for document validation:
@@ -239,7 +239,7 @@ observability:
   structured_logging: true
 
   # Prometheus metrics prefix
-  metrics_prefix: "copiloto_414_validation"
+  metrics_prefix: "document_audit_validation"
 
   # Sample rate for detailed payloads (0.0 - 1.0)
   payload_sample_rate: 0.1

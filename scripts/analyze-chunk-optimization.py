@@ -27,7 +27,7 @@ QDRANT_BASE = "http://localhost:6333"
 TEST_USER = {"email": "demo@example.com", "password": "Demo1234"}
 
 # Test PDFs
-TEST_PDF_DIR = Path(__file__).parent.parent / "packages/tests-e2e/tests/data/capital414"
+TEST_PDF_DIR = Path(__file__).parent.parent / "packages/tests-e2e/tests/data/pdf"
 TEST_PDFS = list(TEST_PDF_DIR.glob("*.pdf"))
 
 

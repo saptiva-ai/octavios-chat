@@ -7,9 +7,8 @@
 #   Testing:    docker compose -f infra/docker-compose.yml --profile testing up --build
 #   Producción: docker compose -f infra/docker-compose.yml --profile production up -d
 
-# CRITICAL: Name must match existing production deployment to reuse volumes
-# Production uses "capital414-chat" as project name, not "octavios-chat-capital414"
-name: ${COMPOSE_PROJECT_NAME:-capital414-chat}
+# Default project name aligns with the open-source deployment
+name: ${COMPOSE_PROJECT_NAME:-octavios-chat}
 
 services:
   # ========================================
@@ -17,7 +16,7 @@ services:
   # ========================================
   mongodb:
     image: mongo:7.0
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-mongodb
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat}-mongodb
     restart: unless-stopped
     env_file:
       - ../envs/.env
@@ -44,7 +43,7 @@ services:
   # ========================================
   redis:
     image: redis:7-alpine
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-redis
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat}-redis
     restart: unless-stopped
     env_file:
       - ../envs/.env
@@ -70,11 +69,11 @@ services:
   # ========================================
   # LANGUAGETOOL - Disabled (client-specific feature)
   # ========================================
-  # Este servicio formaba parte del flujo de auditoría COPILOTO_414
+  # Este servicio formaba parte del flujo de auditoría Document Audit
   # y se mantiene comentado para evitar desplegar dependencias innecesarias.
   # languagetool:
   #   image: erikvl87/languagetool:latest
-  #   container_name: ${COMPOSE_PROJECT_NAME:-octavios}-languagetool
+  #   container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat}-languagetool
   #   restart: unless-stopped
   #   environment:
   #     - Java_Xms=512m
@@ -95,7 +94,7 @@ services:
   # ========================================
   minio:
     image: minio/minio:latest
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-minio
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat}-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
     env_file:
@@ -138,7 +137,7 @@ services:
   # - Memory-mapped storage for efficient large-scale deployments
   qdrant:
     image: qdrant/qdrant:v1.12.5
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-qdrant
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat}-qdrant
     restart: unless-stopped
     env_file:
       - ../envs/.env
@@ -190,7 +189,7 @@ services:
       context: ../apps/api
       dockerfile: Dockerfile
       target: production
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-api
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat}-api
     restart: unless-stopped
     env_file:
       - ../envs/.env
@@ -305,7 +304,7 @@ services:
         NODE_ENV: ${NODE_ENV:-development}
         UID: ${UID:-1000}
         GID: ${GID:-1000}
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-web
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat}-web
     restart: unless-stopped
     user: "${UID:-1000}:${GID:-1000}"
     env_file:
@@ -360,7 +359,7 @@ services:
   # ========================================
   nginx:
     image: nginx:1.25-alpine
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-nginx
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat}-nginx
     restart: unless-stopped
     ports:
       - "80:80"
@@ -385,7 +384,7 @@ services:
     build:
       context: ..
       dockerfile: tests/Dockerfile.playwright
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-playwright
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat}-playwright
     environment:
       - PLAYWRIGHT_BASE_URL=http://web:3000
       - API_BASE_URL=http://api:8001

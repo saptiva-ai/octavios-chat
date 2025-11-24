@@ -89,13 +89,13 @@ pytest tests/integration/test_auth_flow.py::TestCompleteAuthJourney -v
 
 ### Database Isolation
 
-Los tests usan una base de datos separada (`copilotos_test`) que se limpia entre tests:
+Los tests usan una base de datos separada (`octavios_test`) que se limpia entre tests:
 
 ```python
 @pytest.fixture(scope="session")
 async def test_db():
-    """Uses copilotos_test database"""
-    test_db_name = "copilotos_test"
+    """Uses octavios_test database"""
+    test_db_name = "octavios_test"
     # ... setup
     yield client[test_db_name]
     # Cleanup: drop database after tests

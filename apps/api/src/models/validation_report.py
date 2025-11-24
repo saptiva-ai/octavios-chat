@@ -1,5 +1,5 @@
 """
-ValidationReport model for storing Copiloto 414 validation results.
+ValidationReport model for storing Document Audit validation results.
 
 This model persists validation findings so they can be:
 1. Retrieved later without re-running validation

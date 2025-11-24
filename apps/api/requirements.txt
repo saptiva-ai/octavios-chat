@@ -47,7 +47,7 @@ pymupdf>=1.24.0  # PDF rasterization for image-only PDFs (scanned documents)
 saptiva-agents>=0.2.3  # Saptiva SDK for PDF extraction via Custom Tools (requires Python 3.10+)
 filetype>=1.2.0  # FIX ISSUE-011: Magic byte validation for file uploads
 
-# PDF Report Generation (COPILOTO-414)
+# PDF Report Generation (Document Audit)
 reportlab>=4.0.0  # Professional PDF report generation
 opencv-python-headless>=4.8.0  # Logo detection and template matching
 
@@ -56,7 +56,7 @@ pytesseract>=0.3.10
 Pillow>=10.0.0
 pillow-heif>=0.13.0
 
-# Text Analysis & Validation (COPILOTO-414)
+# Text Analysis & Validation (Document Audit)
 rapidfuzz>=3.0.0  # Fuzzy string matching for compliance validation
 PyYAML>=6.0.0  # YAML configuration parsing
 jsonschema>=4.19.0  # Tool schema validation

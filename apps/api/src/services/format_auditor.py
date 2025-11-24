@@ -1,5 +1,5 @@
 """
-Format auditor for Copiloto 414.
+Format auditor for Document Audit.
 
 Validates document formatting against style guidelines:
 - Number formatting (decimal/thousands separators)

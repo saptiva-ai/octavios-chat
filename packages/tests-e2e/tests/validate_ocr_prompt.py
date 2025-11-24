@@ -7,11 +7,11 @@ explicit instructions about having access to OCR-extracted text.
 
 Usage:
     # From project root:
-    docker exec copilotos-api python3 /app/tests/validate_ocr_prompt.py
+    docker exec octavios-api python3 /app/tests/validate_ocr_prompt.py
 
     # Or copy to container and run:
-    docker cp tests/validate_ocr_prompt.py copilotos-api:/app/tests/
-    docker exec copilotos-api python3 /app/tests/validate_ocr_prompt.py
+    docker cp tests/validate_ocr_prompt.py octavios-api:/app/tests/
+    docker exec octavios-api python3 /app/tests/validate_ocr_prompt.py
 """
 
 

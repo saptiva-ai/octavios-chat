@@ -4,7 +4,7 @@ Tool handlers for Copiloto OctaviOS.
 Provides executable tool handlers that can be invoked from chat.
 
 Available tools:
-- audit_file: Validate document against Copiloto 414 compliance rules
+- audit_file: Validate document against Document Audit compliance rules
 
 Note: This package shadows the sibling tools.py module. To import utilities
 from tools.py, use: `from src.services import tools as tools_module`

@@ -1,3 +1,3 @@
 """
-Test package for Copilotos Bridge API.
+Test package for Octavios Chat API.
 """

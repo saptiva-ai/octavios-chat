@@ -1,5 +1,5 @@
 """
-Logo auditor for Copiloto 414.
+Logo auditor for Document Audit.
 
 Validates logo presence, position, and size in documents:
 - Template matching using OpenCV

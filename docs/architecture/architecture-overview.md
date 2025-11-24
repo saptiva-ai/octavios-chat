@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Technical architecture of the Copilotos Bridge observability stack.
+Technical architecture of the Octavios Chat observability stack.
 
 ---
 
@@ -38,7 +38,7 @@ Technical architecture of the Copilotos Bridge observability stack.
          │ (HTTP)                 │ (HTTP)
          ▼                        │
 ┌─────────────────┐      ┌────────┴────────┐
-│  Copilotos API  │      │    Promtail     │
+│  Octavios API  │      │    Promtail     │
 │  (FastAPI app)  │      │ (Log Collector) │
 │                 │      │                 │
 │  • /api/metrics │      │  • Docker SD    │
@@ -117,7 +117,7 @@ Technical architecture of the Copilotos Bridge observability stack.
 **Storage**:
 - **Type**: Time-Series Database (TSDB)
 - **Location**: `/prometheus` in container
-- **Volume**: `copilotos_prometheus_data`
+- **Volume**: `octavios_prometheus_data`
 - **Retention**: 7 days (configurable)
 - **Compression**: Automatic block compression
 
@@ -125,7 +125,7 @@ Technical architecture of the Copilotos Bridge observability stack.
 ```yaml
 # prometheus.yml
 scrape_configs:
-  - job_name: 'copilotos-api'
+  - job_name: 'octavios-api'
     static_configs:
       - targets: ['api:8001']
     metrics_path: '/api/metrics'
@@ -165,7 +165,7 @@ scrape_configs:
 **Storage**:
 - **Type**: BoltDB + Filesystem
 - **Location**: `/tmp/loki` in container
-- **Volume**: `copilotos_loki_data`
+- **Volume**: `octavios_loki_data`
 - **Retention**: 7 days (168 hours)
 
 **Index Strategy**:
@@ -190,7 +190,7 @@ docker_sd_configs:
   - host: unix:///var/run/docker.sock
     filters:
       - name: label
-        values: ["com.docker.compose.project=copilotos-bridge"]
+        values: ["com.docker.compose.project=octavios-bridge"]
 ```
 
 **Relabeling**:
@@ -238,7 +238,7 @@ docker_sd_configs:
    └─> Compressed blocks on disk
 
 5. Grafana queries Prometheus
-   └─> PromQL: rate(copilotos_requests_total[5m])
+   └─> PromQL: rate(octavios_requests_total[5m])
 
 6. Dashboard displays result
    └─> User sees graph/stat
@@ -257,7 +257,7 @@ docker_sd_configs:
    └─> Uses Docker service discovery
 
 4. Promtail filters & labels
-   └─> Adds service="api", container="copilotos-api"
+   └─> Adds service="api", container="octavios-api"
 
 5. Promtail pushes to Loki
    └─> POST http://loki:3100/loki/api/v1/push
@@ -300,11 +300,11 @@ docker_sd_configs:
 
 ### Docker Network
 
-All services communicate via `copilotos-network`:
+All services communicate via `octavios-network`:
 
 ```yaml
 networks:
-  copilotos-network:
+  octavios-network:
     external: true
 ```
 
@@ -353,11 +353,11 @@ docker_sd_configs:
 ```yaml
 volumes:
   prometheus_data:
-    name: copilotos_prometheus_data
+    name: octavios_prometheus_data
   grafana_data:
-    name: copilotos_grafana_data
+    name: octavios_grafana_data
   loki_data:
-    name: copilotos_loki_data
+    name: octavios_loki_data
 ```
 
 ### Disk Usage
@@ -521,7 +521,7 @@ grafana:
 
 Check via:
 ```bash
-docker ps --filter name=copilotos --format "table {{.Names}}\t{{.Status}}"
+docker ps --filter name=octavios --format "table {{.Names}}\t{{.Status}}"
 ```
 
 ---

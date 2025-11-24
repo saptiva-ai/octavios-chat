@@ -1,12 +1,12 @@
 #!/bin/bash
 # ==============================================
-# Precise Security Audit Script for Copilotos Bridge
+# Precise Security Audit Script for Octavios Chat
 # Focused on actual hardcoded credential violations
 # ==============================================
 
 set -e
 
-echo "⛨ Precise Security Audit - Copilotos Bridge"
+echo "⛨ Precise Security Audit - Octavios Chat"
 echo "==========================================="
 
 # Status symbols for logs

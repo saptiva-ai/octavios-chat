@@ -21,7 +21,7 @@ chmod +x scripts/test_mcp_tools.sh
 
 1) Listar tools disponibles
 2) Subir archivo PDF
-3) Auditar archivo (COPILOTO_414)
+3) Auditar archivo (Document Audit)
 4) Extraer texto del archivo
 5) Deep research
 6) Flujo completo: Upload + Audit
@@ -96,7 +96,7 @@ brew install jq
 
 ```
 ============================================
-Auditando Archivo (COPILOTO_414)
+Auditando Archivo (Document Audit)
 ============================================
 
 ℹ Auditando documento: 674a5b8c9e7f12a3b4c5d6e7

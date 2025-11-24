@@ -4,7 +4,7 @@
  * Manages the complete audit file workflow:
  * 1. Upload PDF document
  * 2. Wait for document processing (ready status)
- * 3. Trigger validation audit (Copiloto 414)
+ * 3. Trigger validation audit (Document Audit)
  * 4. Return findings report
  *
  * Usage:
@@ -141,7 +141,7 @@ export function useAuditFile() {
   }, []);
 
   /**
-   * Validate document with Copiloto 414 auditors
+   * Validate document with Document Audit auditors
    */
   const validate = useCallback(
     async (

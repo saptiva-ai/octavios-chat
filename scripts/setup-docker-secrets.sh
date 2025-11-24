@@ -1,11 +1,11 @@
 #!/bin/bash
 # ==============================================
-# Docker Secrets Setup for Copilotos Bridge
+# Docker Secrets Setup for Octavios Chat
 # ==============================================
 
 set -e
 
-echo "⛨ Setting up Docker Secrets for Copilotos Bridge"
+echo "⛨ Setting up Docker Secrets for Octavios Chat"
 echo "=================================================="
 
 # Status symbols for logs

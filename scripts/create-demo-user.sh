@@ -23,7 +23,7 @@ API_URL="${API_URL:-http://localhost:8001}"
 MAX_RETRIES=5
 RETRY_DELAY=2
 
-echo -e "${BLUE}Creating demo user for Copilotos Bridge...${NC}"
+echo -e "${BLUE}Creating demo user for Octavios Chat...${NC}"
 echo "=================================================="
 
 # Function to wait for API to be ready

@@ -1,5 +1,5 @@
 """
-Typography Auditor for Copiloto 414.
+Typography Auditor for Document Audit.
 
 Validates basic typography guidelines:
 - Reasonable number of heading levels (based on font size)

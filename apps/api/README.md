@@ -112,7 +112,7 @@ sequenceDiagram
     F->>F: Validates type & size (max 30MB)
     F->>API: POST /api/documents
 
-    API->>TempFS: Save to /tmp/copilotos_documents/
+    API->>TempFS: Save to /tmp/octavios_documents/
     API->>DS: process_document(file, storage_key)
 
     Note over DS,pypdf: Strategy 1: Try pypdf (free, local)
@@ -191,7 +191,7 @@ sequenceDiagram
     F->>F: Validates: maxSize=30MB, type
     F->>API: POST /api/documents
 
-    API->>TempFS: Save to /tmp/copilotos_documents/
+    API->>TempFS: Save to /tmp/octavios_documents/
     API->>DS: process_document(image_file, storage_key)
 
     DS->>DS: Detect mimetype: image/*
@@ -376,7 +376,7 @@ pytest tests/integration/ -v
 make dev
 
 # Verify services
-docker ps | grep copilotos
+docker ps | grep octavios
 
 # Check port mappings
 docker compose ps

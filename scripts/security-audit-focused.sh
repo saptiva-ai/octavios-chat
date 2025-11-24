@@ -1,12 +1,12 @@
 #!/bin/bash
 # ==============================================
-# Focused Security Audit Script for Copilotos Bridge
+# Focused Security Audit Script for Octavios Chat
 # Excludes node_modules and focuses on our code
 # ==============================================
 
 set -e
 
-echo "⛨ Focused Security Audit - Copilotos Bridge"
+echo "⛨ Focused Security Audit - Octavios Chat"
 echo "====================================="
 
 # Status symbols for logs

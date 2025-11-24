@@ -1,5 +1,5 @@
 """
-Secure secrets management for Copilotos Bridge.
+Secure secrets management for Octavios Chat.
 
 This module provides utilities for loading secrets from various sources
 in a secure manner, with proper validation and error handling.
@@ -126,11 +126,11 @@ class SecretsManager:
                 return complete_url
 
             # Otherwise, construct from individual components (production default)
-            user = os.getenv("MONGODB_USER", "copilotos_user")
+            user = os.getenv("MONGODB_USER", "octavios_user")
             password = self.get_secret("MONGODB_PASSWORD", required=True)
             host = os.getenv("MONGODB_HOST", "mongodb")
             port = os.getenv("MONGODB_PORT", "27017")
-            database = os.getenv("MONGODB_DATABASE", "copilotos")
+            database = os.getenv("MONGODB_DATABASE", "octavios")
             auth_source = os.getenv("MONGODB_AUTH_SOURCE", "admin")
 
             return f"mongodb://{user}:{password}@{host}:{port}/{database}?authSource={auth_source}"
@@ -183,7 +183,7 @@ class SecretsManager:
     def _load_from_file(self, secret_name: str) -> Optional[str]:
         """Load secret from file (with permission checks)."""
         # Check common secret file locations
-        for secret_dir in ["/etc/copilotos/secrets", "/opt/copilotos/secrets", "./secrets"]:
+        for secret_dir in ["/etc/octavios/secrets", "/opt/octavios/secrets", "./secrets"]:
             secret_file = Path(secret_dir) / secret_name.lower()
             if secret_file.exists():
                 # Check file permissions (should be 600 or 400)

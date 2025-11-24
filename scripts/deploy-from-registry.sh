@@ -14,7 +14,7 @@ VERSION="${1:-latest}"
 SKIP_HEALTH="${SKIP_HEALTH:-false}"
 
 echo "╔═══════════════════════════════════════════════════════════════╗"
-echo "║  ▸ Copilotos Bridge - Production Deploy from Registry       ║"
+echo "║  ▸ Octavios Chat - Production Deploy from Registry       ║"
 echo "╚═══════════════════════════════════════════════════════════════╝"
 echo ""
 echo "▸ Registry: $REGISTRY_URL"

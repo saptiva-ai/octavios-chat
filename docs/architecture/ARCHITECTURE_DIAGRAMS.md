@@ -1,6 +1,6 @@
 # OctaviOS Chat - Architecture Diagrams
 
-Comprehensive architecture diagrams for the OctaviOS Chat platform, including MCP lazy loading, COPILOTO_414, document processing, and deployment.
+Comprehensive architecture diagrams for the OctaviOS Chat platform, including MCP lazy loading, Document Audit, document processing, and deployment.
 
 ---
 
@@ -9,7 +9,7 @@ Comprehensive architecture diagrams for the OctaviOS Chat platform, including MC
 1. [System Overview](#1-system-overview)
 2. [Container Architecture](#2-container-architecture)
 3. [MCP Lazy Loading Architecture](#3-mcp-lazy-loading-architecture)
-4. [COPILOTO_414 Validation Flow](#4-copiloto_414-validation-flow)
+4. [Document Audit Validation Flow](#4-document_audit-validation-flow)
 5. [Document Extraction Pipeline](#5-document-extraction-pipeline)
 6. [Chat Flow with RAG](#6-chat-flow-with-rag)
 7. [Authentication & Authorization](#7-authentication--authorization)
@@ -60,7 +60,7 @@ flowchart TB
         subgraph Services["Business Logic Services"]
             ChatService["Chat Service<br/>(Strategy Pattern)"]
             DocService["Document Service<br/>(3-tier Extraction)"]
-            ValidationCoord["Validation Coordinator<br/>(COPILOTO_414)"]
+            ValidationCoord["Validation Coordinator<br/>(Document Audit)"]
             ResearchCoord["Research Coordinator<br/>(Aletheia)"]
         end
 
@@ -120,7 +120,7 @@ flowchart TB
     ValidationCoord --> LangTool
 
     style MCP fill:#e1f5ff
-    style COPILOTO_414 fill:#fff3e0
+    style Document Audit fill:#fff3e0
     style Storage fill:#e8f5e9
     style External fill:#fce4ec
 ```
@@ -273,7 +273,7 @@ sequenceDiagram
 
 ---
 
-## 4. COPILOTO_414 Validation Flow
+## 4. Document Audit Validation Flow
 
 Automated document compliance with 4 parallel auditors.
 

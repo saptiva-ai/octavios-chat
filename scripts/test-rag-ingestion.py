@@ -26,8 +26,8 @@ API_BASE = "http://localhost:8001"
 QDRANT_BASE = "http://localhost:6333"
 TEST_USER = {"email": "demo@example.com", "password": "Demo1234"}
 
-# Test PDF path (using existing test data)
-TEST_PDF_PATH = Path(__file__).parent.parent / "packages/tests-e2e/tests/data/capital414" / "Capital414_usoIA.pdf"
+# Test PDF path (using existing open-source test data)
+TEST_PDF_PATH = Path(__file__).parent.parent / "packages/tests-e2e/tests/data/pdf" / "sample_text.pdf"
 
 
 def create_test_pdf():

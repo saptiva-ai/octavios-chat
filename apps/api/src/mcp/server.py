@@ -33,7 +33,7 @@ mcp = FastMCP(
 
 
 # ============================================================================
-# TOOL 1: audit_file - COPILOTO_414 Compliance Validation
+# TOOL 1: audit_file - Document Audit Compliance Validation
 # ============================================================================
 
 class AuditInput(BaseModel):
@@ -45,7 +45,7 @@ class AuditInput(BaseModel):
 @mcp.tool()
 async def audit_file(args: AuditInput, ctx: Context = None) -> dict:
     """
-    Validate PDF documents against COPILOTO_414 compliance policies.
+    Validate PDF documents against Document Audit compliance policies.
     """
     doc_id = args.doc_id
     user_id = args.user_id

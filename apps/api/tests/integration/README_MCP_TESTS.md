@@ -33,7 +33,7 @@ A diferencia de los tests unitarios que usan mocks, estos tests validan el flujo
 - ✅ Manejar documentos no encontrados
 
 #### 4. TestAuditFileToolIntegration (1 test)
-- ✅ Validar documento PDF con COPILOTO_414
+- ✅ Validar documento PDF con Document Audit
 
 #### 5. TestExcelAnalyzerToolIntegration (2 tests)
 - ✅ Analizar archivo Excel y retornar estadísticas
@@ -154,7 +154,7 @@ Los tests usan las variables de `envs/.env` con overrides para testing:
 
 ```bash
 # MongoDB test connection
-MONGODB_URL=mongodb://user:pass@localhost:27018/copilotos?authSource=admin
+MONGODB_URL=mongodb://user:pass@localhost:27018/octavios?authSource=admin
 
 # Redis test connection
 REDIS_URL=redis://:password@localhost:6380

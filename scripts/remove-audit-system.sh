@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # remove-audit-system.sh
-# Script para eliminar el sistema de auditoría COPILOTO_414 del código base
+# Script para eliminar el sistema de auditoría Document Audit del código base
 #
 # Uso: ./scripts/remove-audit-system.sh [--dry-run]
 #
@@ -40,7 +40,7 @@ remove_item() {
 }
 
 echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}Removing COPILOTO_414 Audit System${NC}"
+echo -e "${GREEN}Removing Document Audit Audit System${NC}"
 echo -e "${GREEN}========================================${NC}\n"
 
 # ============================================================================

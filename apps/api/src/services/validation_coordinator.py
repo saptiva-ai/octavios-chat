@@ -1,5 +1,5 @@
 """
-Validation coordinator for Copiloto 414.
+Validation coordinator for Document Audit.
 
 Orchestrates all validation auditors:
 - Disclaimer compliance

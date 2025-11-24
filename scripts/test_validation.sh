@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Test script for Copiloto 414 validation API
+# Test script for Document Audit validation API
 #
 # Usage:
 #   ./scripts/test_validation.sh /path/to/document.pdf [client_name]
@@ -30,7 +30,7 @@ if [ ! -f "$PDF_PATH" ]; then
 fi
 
 echo "=========================================="
-echo "Copiloto 414 - Validation Test"
+echo "Document Audit - Validation Test"
 echo "=========================================="
 echo "PDF: $PDF_PATH"
 echo "Client: $CLIENT_NAME"

@@ -1,6 +1,6 @@
 #!/bin/bash
 # ========================================
-# COPILOTOS BRIDGE - TAR DEPLOYMENT SCRIPT
+# Octavios Chat - TAR DEPLOYMENT SCRIPT
 # ========================================
 # Automated deployment using tar file transfer
 # Usage: ./scripts/deploy-with-tar.sh [--skip-build] [--skip-transfer]
@@ -390,7 +390,7 @@ show_summary() {
 main() {
     echo ""
     echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║  COPILOTOS BRIDGE - AUTOMATED TAR DEPLOYMENT                  ║${NC}"
+    echo -e "${BLUE}║  Octavios Chat - AUTOMATED TAR DEPLOYMENT                  ║${NC}"
     echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
 

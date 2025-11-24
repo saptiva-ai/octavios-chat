@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Secure secrets generator for Copilotos Bridge.
+Secure secrets generator for Octavios Chat.
 
 Generates cryptographically secure passwords and keys for production deployment.
 """
@@ -25,7 +25,7 @@ def generate_base64_key(length: int = 32) -> str:
     return base64.urlsafe_b64encode(secrets.token_bytes(length)).decode('utf-8')
 
 def main():
-    print("🔐 Copilotos Bridge - Secure Secrets Generator")
+    print("🔐 Octavios Chat - Secure Secrets Generator")
     print("=" * 60)
     print()
 

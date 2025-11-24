@@ -9,7 +9,7 @@
 
 set -e
 
-echo "▸ Docker Permissions Fix - Copilotos Bridge"
+echo "▸ Docker Permissions Fix - Octavios Chat"
 echo "============================================="
 
 # Status symbols for logs

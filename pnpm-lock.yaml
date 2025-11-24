@@ -8,7 +8,7 @@ importers:
 
   apps/web:
     dependencies:
-      '@copilotos/shared':
+      '@octavios/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       '@headlessui/react':

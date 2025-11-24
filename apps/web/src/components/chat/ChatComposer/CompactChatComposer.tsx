@@ -48,7 +48,7 @@ interface CompactChatComposerProps {
   onRemoveFilesV1Attachment?: (fileId: string) => void;
   conversationId?: string;
   featureFlags?: FeatureFlagsResponse | null;
-  // Copiloto 414: Audit props
+  // Document Audit: Audit props
   lastReadyFile?: LastReadyFile | null;
   onStartAudit?: (fileId: string, filename: string) => void;
   onAuditError?: (fileId: string, reason?: string) => void;

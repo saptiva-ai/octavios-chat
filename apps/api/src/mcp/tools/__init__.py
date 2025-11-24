@@ -2,7 +2,7 @@
 MCP Tools - Concrete tool implementations.
 
 Available tools:
-- AuditFileTool: COPILOTO_414 compliance validation
+- AuditFileTool: Document Audit compliance validation
 - ExcelAnalyzerTool: Excel data analysis and statistics
 - VizTool: Data visualization (Plotly/ECharts spec generation)
 - DeepResearchTool: Multi-step research with Aletheia integration

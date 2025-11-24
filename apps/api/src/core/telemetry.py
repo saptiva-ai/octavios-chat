@@ -1,5 +1,5 @@
 """
-Advanced telemetry and observability module for Copilotos Bridge.
+Advanced telemetry and observability module for Octavios Chat.
 
 This module provides comprehensive monitoring capabilities including:
 - Custom metrics for Deep Research operations
@@ -33,14 +33,14 @@ CUSTOM_REGISTRY = CollectorRegistry()
 
 # Request metrics
 REQUEST_COUNT = Counter(
-    'copilotos_requests_total',
+    'octavios_requests_total',
     'Total HTTP requests',
     ['method', 'endpoint', 'status_code'],
     registry=CUSTOM_REGISTRY
 )
 
 REQUEST_DURATION = Histogram(
-    'copilotos_request_duration_seconds',
+    'octavios_request_duration_seconds',
     'HTTP request duration in seconds',
     ['method', 'endpoint'],
     buckets=[0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
@@ -52,14 +52,14 @@ REQUEST_DURATION = Histogram(
 # ============================================================================
 
 RESEARCH_REQUESTS = Counter(
-    'copilotos_research_requests_total',
+    'octavios_research_requests_total',
     'Total deep research requests',
     ['intent_type', 'classification_method'],
     registry=CUSTOM_REGISTRY
 )
 
 RESEARCH_DURATION = Histogram(
-    'copilotos_research_duration_seconds',
+    'octavios_research_duration_seconds',
     'Deep research operation duration',
     ['research_phase', 'success'],
     buckets=[1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0],
@@ -67,14 +67,14 @@ RESEARCH_DURATION = Histogram(
 )
 
 RESEARCH_QUALITY = Gauge(
-    'copilotos_research_quality_score',
+    'octavios_research_quality_score',
     'Research quality score (0-1)',
     ['research_type'],
     registry=CUSTOM_REGISTRY
 )
 
 INTENT_CLASSIFICATION = Counter(
-    'copilotos_intent_classification_total',
+    'octavios_intent_classification_total',
     'Intent classification results',
     ['intent_type', 'confidence_level', 'method'],
     registry=CUSTOM_REGISTRY
@@ -85,20 +85,20 @@ INTENT_CLASSIFICATION = Counter(
 # ============================================================================
 
 ACTIVE_CONNECTIONS = Gauge(
-    'copilotos_active_connections',
+    'octavios_active_connections',
     'Number of active connections',
     registry=CUSTOM_REGISTRY
 )
 
 MEMORY_USAGE = Gauge(
-    'copilotos_memory_usage_bytes',
+    'octavios_memory_usage_bytes',
     'Memory usage in bytes',
     ['type'],
     registry=CUSTOM_REGISTRY
 )
 
 CACHE_OPERATIONS = Counter(
-    'copilotos_cache_operations_total',
+    'octavios_cache_operations_total',
     'Cache operations',
     ['operation', 'backend', 'hit'],
     registry=CUSTOM_REGISTRY
@@ -106,7 +106,7 @@ CACHE_OPERATIONS = Counter(
 
 # Document ingestion metrics
 PDF_INGEST_DURATION = Histogram(
-    'copilotos_pdf_ingest_seconds',
+    'octavios_pdf_ingest_seconds',
     'PDF ingestion phase duration',
     ['phase'],
     buckets=[0.25, 0.5, 1.0, 2.0, 3.0, 5.0, 8.0, 13.0, 21.0],
@@ -114,7 +114,7 @@ PDF_INGEST_DURATION = Histogram(
 )
 
 PDF_INGEST_ERRORS = Counter(
-    'copilotos_pdf_ingest_errors_total',
+    'octavios_pdf_ingest_errors_total',
     'PDF ingestion errors by code',
     ['code'],
     registry=CUSTOM_REGISTRY
@@ -122,7 +122,7 @@ PDF_INGEST_ERRORS = Counter(
 
 # OBS-1: Document text size metric
 DOC_TEXT_SIZE_CHARS = Histogram(
-    'copilotos_doc_text_size_chars',
+    'octavios_doc_text_size_chars',
     'Extracted document text size in characters',
     ['mimetype'],
     buckets=[500, 1000, 2500, 5000, 10000, 20000, 50000, 100000],
@@ -131,7 +131,7 @@ DOC_TEXT_SIZE_CHARS = Histogram(
 
 # OBS-1: Documents used in chat metric
 DOCS_USED_TOTAL = Counter(
-    'copilotos_docs_used_total',
+    'octavios_docs_used_total',
     'Total documents used in chat context',
     ['chat_id'],
     registry=CUSTOM_REGISTRY
@@ -139,7 +139,7 @@ DOCS_USED_TOTAL = Counter(
 
 # OBS-1: Chat completion latency metric
 CHAT_COMPLETION_SECONDS = Histogram(
-    'copilotos_chat_completion_seconds',
+    'octavios_chat_completion_seconds',
     'Chat LLM completion latency',
     ['model', 'has_documents'],
     buckets=[0.5, 1.0, 2.0, 5.0, 10.0, 15.0, 30.0, 60.0],
@@ -148,14 +148,14 @@ CHAT_COMPLETION_SECONDS = Histogram(
 
 # OBS-1: LLM timeout counter
 CHAT_LLM_TIMEOUT_TOTAL = Counter(
-    'copilotos_chat_llm_timeout_total',
+    'octavios_chat_llm_timeout_total',
     'Total LLM call timeouts',
     ['model'],
     registry=CUSTOM_REGISTRY
 )
 
 TOOL_INVOCATIONS = Counter(
-    'copilotos_tool_invocations_total',
+    'octavios_tool_invocations_total',
     'Tool invocations grouped by key',
     ['tool'],
     registry=CUSTOM_REGISTRY
@@ -226,7 +226,7 @@ def increment_llm_timeout(model: str) -> None:
 # ============================================================================
 
 ERROR_COUNT = Counter(
-    'copilotos_errors_total',
+    'octavios_errors_total',
     'Total application errors',
     ['error_type', 'endpoint', 'severity'],
     registry=CUSTOM_REGISTRY
@@ -237,27 +237,27 @@ ERROR_COUNT = Counter(
 # ============================================================================
 
 USER_SESSIONS = Gauge(
-    'copilotos_active_user_sessions',
+    'octavios_active_user_sessions',
     'Number of active user sessions',
     registry=CUSTOM_REGISTRY
 )
 
 API_RATE_LIMITS = Counter(
-    'copilotos_rate_limit_hits_total',
+    'octavios_rate_limit_hits_total',
     'Rate limit violations',
     ['endpoint', 'user_id'],
     registry=CUSTOM_REGISTRY
 )
 
 EXTERNAL_API_CALLS = Counter(
-    'copilotos_external_api_calls_total',
+    'octavios_external_api_calls_total',
     'External API calls',
     ['service', 'endpoint', 'status'],
     registry=CUSTOM_REGISTRY
 )
 
 EXTERNAL_API_DURATION = Histogram(
-    'copilotos_external_api_duration_seconds',
+    'octavios_external_api_duration_seconds',
     'External API call duration',
     ['service', 'endpoint'],
     buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0],
@@ -265,21 +265,21 @@ EXTERNAL_API_DURATION = Histogram(
 )
 
 TOOL_TOGGLE_EVENTS = Counter(
-    'copilotos_tool_toggle_total',
+    'octavios_tool_toggle_total',
     'Tool toggles triggered by users',
     ['tool', 'state'],
     registry=CUSTOM_REGISTRY
 )
 
 TOOL_CALL_BLOCKED = Counter(
-    'copilotos_tool_call_blocked_total',
+    'octavios_tool_call_blocked_total',
     'Blocked tool call attempts',
     ['tool', 'reason'],
     registry=CUSTOM_REGISTRY
 )
 
 PLANNER_TOOL_SUGGESTED = Counter(
-    'copilotos_planner_tool_suggested_total',
+    'octavios_planner_tool_suggested_total',
     'Planner tool suggestions emitted',
     ['tool'],
     registry=CUSTOM_REGISTRY

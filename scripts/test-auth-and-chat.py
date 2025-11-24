@@ -187,7 +187,7 @@ def main():
         args.email = f"{args.username}@example.com"
 
     print_colored(Colors.BLUE, "\n" + "=" * 70)
-    print_colored(Colors.BLUE, "  Copilotos Bridge - Authentication & Chat Test")
+    print_colored(Colors.BLUE, "  Octavios Chat - Authentication & Chat Test")
     print_colored(Colors.BLUE, "=" * 70)
     print_colored(Colors.CYAN, f"  API URL: {args.api_url}")
     print_colored(Colors.CYAN, f"  Username: {args.username}")

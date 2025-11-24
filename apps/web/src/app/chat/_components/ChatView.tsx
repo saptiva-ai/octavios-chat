@@ -178,7 +178,7 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
   const [researchError, setResearchError] = React.useState<string | null>(null);
   const [isSending, setIsSending] = React.useState(false); // ISSUE-009: Rate limiting
 
-  // Audit progress state (Copiloto 414)
+  // Audit progress state (Document Audit)
   const [activeAudit, setActiveAudit] = React.useState<{
     fileId: string;
     filename: string;
@@ -1116,7 +1116,7 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
     ],
   );
 
-  // Copiloto 414: Audit progress handlers
+  // Document Audit: Audit progress handlers
   const handleStartAudit = React.useCallback(
     (fileId: string, filename: string) => {
       setActiveAudit({ fileId, filename });
@@ -1212,7 +1212,7 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
       setNudgeMessage(null);
       setResearchError(null);
 
-      // Copiloto 414: Auto-trigger audit command when files están listos
+      // Document Audit: Auto-trigger audit command when files están listos
       const effectiveMessage =
         shouldAutoAudit && defaultAuditTarget
           ? `Auditar archivo: ${defaultAuditTarget.filename}`
@@ -1691,7 +1691,7 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
               />
             )}
 
-            {/* Copiloto 414: Audit progress indicator */}
+            {/* Document Audit: Audit progress indicator */}
             {activeAudit && <AuditProgress filename={activeAudit.filename} />}
           </div>
         )}
@@ -1749,7 +1749,7 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                 onRemoveFilesV1Attachment={removeFilesV1Attachment}
                 onClearFilesV1Attachments={clearFilesV1Attachments}
                 lastReadyFile={lastReadyAuditFile}
-                // Copiloto 414: Audit progress callback
+                // Document Audit: Audit progress callback
                 onStartAudit={handleStartAudit}
                 onAuditError={handleAuditError}
               />

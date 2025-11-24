@@ -1,7 +1,7 @@
 /**
  * ComplianceBadge Component
  *
- * Compact badge for file attachments showing Copiloto 414 validation status.
+ * Compact badge for file attachments showing Document Audit validation status.
  * Displays:
  * - Icon + severity count (e.g., "🔴 2 🟠 1")
  * - Clickable to open modal with full ValidationFindings

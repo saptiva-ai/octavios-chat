@@ -1,5 +1,5 @@
 # ============================================================================
-# PROMETHEUS ALERTING RULES FOR COPILOTOS BRIDGE
+# PROMETHEUS ALERTING RULES FOR Octavios Chat
 # ============================================================================
 
 groups:
@@ -27,7 +27,7 @@ groups:
           service: octavios-bridge
         annotations:
           summary: "API service is down"
-          description: "Copilotos Bridge API has been down for more than 1 minute"
+          description: "Octavios Chat API has been down for more than 1 minute"
 
       - alert: HighResponseTime
         expr: histogram_quantile(0.95, rate(octavios_request_duration_seconds_bucket[5m])) > 5

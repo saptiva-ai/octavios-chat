@@ -79,11 +79,11 @@ These mappings are configured in `tests/integration/conftest.py`.
 # Adjust conftest.py to use container hostnames (mongodb:27017, redis:6379)
 # OR set environment variables before running tests
 
-docker exec -it copilotos-api bash
+docker exec -it octavios-api bash
 cd /app
 
 # Set correct connection URLs for container
-export MONGODB_URL="mongodb://copilotos_user:${MONGODB_PASSWORD}@mongodb:27017/copilotos?authSource=admin"
+export MONGODB_URL="mongodb://octavios_user:${MONGODB_PASSWORD}@mongodb:27017/octavios?authSource=admin"
 export REDIS_URL="redis://:${REDIS_PASSWORD}@redis:6379"
 
 pytest tests/integration/test_chat_attachments_no_inheritance.py -v

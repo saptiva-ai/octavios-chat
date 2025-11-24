@@ -186,7 +186,7 @@ audit_file() {
     local doc_id="${1:-$FILE_ID}"
     local policy="${2:-auto}"
 
-    print_header "Auditando Archivo (COPILOTO_414)"
+    print_header "Auditando Archivo (Document Audit)"
 
     if [ -z "$doc_id" ]; then
         print_error "No hay FILE_ID. Sube un archivo primero."
@@ -339,7 +339,7 @@ show_menu() {
     echo -e "${BLUE}└─────────────────────────────────────┘${NC}\n"
     echo "1) Listar tools disponibles"
     echo "2) Subir archivo PDF"
-    echo "3) Auditar archivo (COPILOTO_414)"
+    echo "3) Auditar archivo (Document Audit)"
     echo "4) Extraer texto del archivo"
     echo "5) Deep research"
     echo "6) Flujo completo: Upload + Audit"

@@ -146,7 +146,7 @@ services:
   # Prometheus - Metrics collection and storage
   prometheus:
     image: prom/prometheus:v2.48.0
-    container_name: copilotos-prometheus
+    container_name: octavios-prometheus
     restart: unless-stopped
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
@@ -160,7 +160,7 @@ services:
     ports:
       - "9090:9090"
     networks:
-      - copilotos-network
+      - octavios-network
     deploy:
       resources:
         limits:
@@ -175,7 +175,7 @@ services:
   # Grafana - Metrics visualization
   grafana:
     image: grafana/grafana:10.2.2
-    container_name: copilotos-grafana
+    container_name: octavios-grafana
     restart: unless-stopped
     environment:
       - GF_SECURITY_ADMIN_USER=admin
@@ -190,7 +190,7 @@ services:
     ports:
       - "3001:3000"
     networks:
-      - copilotos-network
+      - octavios-network
     depends_on:
       - prometheus
       - loki
@@ -208,7 +208,7 @@ services:
   # Loki - Log aggregation
   loki:
     image: grafana/loki:2.9.3
-    container_name: copilotos-loki
+    container_name: octavios-loki
     restart: unless-stopped
     volumes:
       - ./monitoring/loki.yml:/etc/loki/local-config.yaml:ro
@@ -217,7 +217,7 @@ services:
     ports:
       - "3100:3100"
     networks:
-      - copilotos-network
+      - octavios-network
     deploy:
       resources:
         limits:
@@ -232,7 +232,7 @@ services:
   # Promtail - Log collector
   promtail:
     image: grafana/promtail:2.9.3
-    container_name: copilotos-promtail
+    container_name: octavios-promtail
     restart: unless-stopped
     volumes:
       - ./monitoring/promtail.yml:/etc/promtail/config.yml:ro
@@ -240,7 +240,7 @@ services:
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
     command: -config.file=/etc/promtail/config.yml
     networks:
-      - copilotos-network
+      - octavios-network
     depends_on:
       - loki
     deploy:
@@ -257,7 +257,7 @@ services:
   # cAdvisor - Container metrics
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.47.2
-    container_name: copilotos-cadvisor
+    container_name: octavios-cadvisor
     restart: unless-stopped
     privileged: true
     devices:
@@ -271,7 +271,7 @@ services:
     ports:
       - "8080:8080"
     networks:
-      - copilotos-network
+      - octavios-network
     deploy:
       resources:
         limits:
@@ -285,12 +285,12 @@ services:
 
 volumes:
   prometheus_data:
-    name: copilotos_prometheus_data
+    name: octavios_prometheus_data
   grafana_data:
-    name: copilotos_grafana_data
+    name: octavios_grafana_data
   loki_data:
-    name: copilotos_loki_data
+    name: octavios_loki_data
 
 networks:
-  copilotos-network:
+  octavios-network:
     external: true

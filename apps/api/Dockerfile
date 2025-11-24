@@ -50,7 +50,7 @@ RUN pip install --no-cache-dir \
     -r requirements-dev.txt
 
 # Install runtime dependencies (MVP-OCR: Added tesseract-ocr for image text extraction)
-# COPILOTO-414: Added OpenCV for logo detection (dev packages for debugging)
+# Document Audit: Added OpenCV for logo detection (dev packages for debugging)
 RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     curl \
@@ -94,7 +94,7 @@ FROM base as production
 COPY --from=deps /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=deps /usr/local/bin /usr/local/bin
 
-# Install ONLY runtime dependencies (MVP-OCR + COPILOTO-414)
+# Install ONLY runtime dependencies (MVP-OCR + Document Audit)
 # OPTIMIZED: Removed -dev packages, only runtime libraries
 RUN apt-get update && apt-get install -y \
     --no-install-recommends \

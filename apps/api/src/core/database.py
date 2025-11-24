@@ -33,7 +33,7 @@ class Database:
 
         # Check for common misconfiguration: password mismatch
         mongodb_password_env = os.getenv('MONGODB_PASSWORD')
-        mongodb_user_env = os.getenv('MONGODB_USER', 'copilotos_user')
+        mongodb_user_env = os.getenv('MONGODB_USER', 'octavios_user')
 
         if mongodb_password_env:
             logger.info(
@@ -149,7 +149,7 @@ class Database:
                     "2. Verify MongoDB container initialized with same password",
                     "3. If password changed, recreate volumes: docker compose down -v",
                     "4. Check environment variables are loaded: docker compose config",
-                    "5. Test direct connection: docker exec copilotos-mongodb mongosh -u <user> -p <pass>"
+                    "5. Test direct connection: docker exec octavios-mongodb mongosh -u <user> -p <pass>"
                 ]
             )
 

@@ -8,7 +8,7 @@
 Saptiva OctaviOS Chat es una plataforma conversacional empresarial lista para producción que combina:
 - **Chat multi-modelo** con streaming SSE y soporte para múltiples LLMs de SAPTIVA
 - **Model Context Protocol (MCP)** con 5 herramientas productivas y lazy loading
-- **Sistema de auditoría COPILOTO_414** con streaming en tiempo real
+- **Sistema de auditoría Document Audit** con streaming en tiempo real
 - **Frontend Next.js 14** con App Router y Zustand para gestión de estado
 - **Backend FastAPI** con arquitectura limpia y patrones de diseño empresariales
 
@@ -97,7 +97,7 @@ src/
 
 | Herramienta | Propósito | Entradas |
 |-------------|-----------|----------|
-| `audit_file` | Ejecuta COPILOTO_414 con políticas configurables | doc_id, policy_id, flags |
+| `audit_file` | Ejecuta Document Audit con políticas configurables | doc_id, policy_id, flags |
 | `excel_analyzer` | Análisis de datos de planillas Excel | doc_id, operations |
 | `viz_tool` | Generación de narrativa + visualizaciones | prompt, data_source |
 | `deep_research` | Investigación iterativa con Aletheia | query, depth, max_iterations |
@@ -116,7 +116,7 @@ src/
 - `POST /api/mcp/lazy/invoke`: Ejecuta herramienta
 - `GET /api/mcp/lazy/health`: Health check
 
-#### 4. Sistema de Auditoría COPILOTO_414
+#### 4. Sistema de Auditoría Document Audit
 
 **Ubicación**: `apps/api/src/services/validation_coordinator.py`
 
@@ -447,7 +447,7 @@ tests/
 
 ### Documentación Técnica
 - `docs/architecture/ARCHITECTURE.md`: Detalles de arquitectura
-- `docs/architecture/AUDIT_SYSTEM_ARCHITECTURE.md`: Sistema COPILOTO_414
+- `docs/architecture/AUDIT_SYSTEM_ARCHITECTURE.md`: Sistema Document Audit
 - `docs/features/mcp/MCP_ARCHITECTURE.md`: Arquitectura MCP
 - `docs/guides/MCP_TESTING_GUIDE.md`: Guía de testing MCP
 

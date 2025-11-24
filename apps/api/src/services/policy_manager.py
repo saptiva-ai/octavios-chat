@@ -1,5 +1,5 @@
 """
-Policy Manager for Copiloto 414.
+Policy Manager for Document Audit.
 
 Manages policy configurations and auto-detection for document validation.
 

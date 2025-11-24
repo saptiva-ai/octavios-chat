@@ -1,6 +1,6 @@
 #!/bin/bash
 # ========================================
-# COPILOTOS BRIDGE - CONSOLIDATED DEPLOYMENT SCRIPT
+# Octavios Chat - CONSOLIDATED DEPLOYMENT SCRIPT
 # ========================================
 # Unified deployment with versioning and automatic rollback
 #
@@ -841,7 +841,7 @@ show_deployment_summary() {
 main() {
     echo ""
     echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║  COPILOTOS BRIDGE - CONSOLIDATED DEPLOYMENT                   ║${NC}"
+    echo -e "${BLUE}║  Octavios Chat - CONSOLIDATED DEPLOYMENT                   ║${NC}"
     echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
 

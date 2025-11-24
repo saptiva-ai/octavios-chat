@@ -26,7 +26,7 @@ class TestDatabaseIntegration:
             await client.admin.command('ping')
 
             # Test basic operations
-            db = client.copilotos_test
+            db = client.octavios_test
             collection = db.test_collection
 
             # Insert test document

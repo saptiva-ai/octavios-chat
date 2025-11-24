@@ -7,7 +7,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![Next.js](https://img.shields.io/badge/Next.js-14-black.svg)](https://nextjs.org/)
 
-> Plataforma conversacional lista para producción con chat streaming, RAG, auditoría COPILOTO_414 y herramientas MCP sobre FastAPI + Next.js.
+> Plataforma conversacional lista para producción con chat streaming, RAG, auditoría Document Audit y herramientas MCP sobre FastAPI + Next.js.
 
 ## Tabla de contenidos
 - [Saptiva OctaviOS Chat](#saptiva-octavios-chat)
@@ -20,7 +20,7 @@
   - [Stack y capacidades](#stack-y-capacidades)
     - [Plataforma conversacional](#plataforma-conversacional)
     - [Documentos y RAG](#documentos-y-rag)
-    - [Cumplimiento COPILOTO\_414](#cumplimiento-copiloto_414)
+    - [Cumplimiento Document Audit](#cumplimiento-document-audit)
     - [Model Context Protocol (MCP)](#model-context-protocol-mcp)
     - [Seguridad y observabilidad](#seguridad-y-observabilidad)
   - [Arquitectura](#arquitectura)
@@ -55,7 +55,7 @@
 - Chat multi-modelo (Turbo, Cortex, Ops, etc.) con SSE y chain-of-responsibility (`apps/api/src/routers/chat/endpoints/message_endpoints.py`).
 - Integración MCP oficial (FastMCP) con lazy loading y telemetría (`apps/api/src/mcp/server.py`).
 - Pipeline documental: subida segura, cache Redis y extracción multi-tier antes del RAG (`apps/api/src/services/document_service.py`).
-- COPILOTO_414 coordina auditores de disclaimer, formato, logos, tipografía, gramática y consistencia semántica (`apps/api/src/services/validation_coordinator.py`).
+- Document Audit coordina auditores de disclaimer, formato, logos, tipografía, gramática y consistencia semántica (`apps/api/src/services/validation_coordinator.py`).
 - Frontend Next.js 14 + Zustand con herramientas de archivos, research y UI accesible (`apps/web/src/lib/stores/chat-store.ts`).
 - Seguridad empresarial: JWT con revocación en Redis, rate limiting y políticas CSP en Nginx (`apps/api/src/middleware/auth.py`).
 
@@ -78,7 +78,7 @@ flowchart TB
 
     chat --> builder["ChatResponseBuilder<br/>Builder Pattern"]:::light
     mcp --> tools["MCP Tools<br/>audit_file · excel_analyzer<br/>viz_tool · deep_research<br/>extract_document_text"]:::light
-    audit_stream --> coordinator["COPILOTO_414 Coordinator<br/>8 Auditores Especializados"]:::light
+    audit_stream --> coordinator["Document Audit Coordinator<br/>8 Auditores Especializados"]:::light
 
     builder --> persistence[(Mongo · Redis · MinIO<br/>Ports & Adapters<br/>JWT Blacklist · Cache)]:::gray
     tools --> persistence
@@ -125,7 +125,7 @@ flowchart TB
         subgraph Services["Domain Services"]
             response_builder["ChatResponseBuilder<br/>Builder Pattern"]:::light
             doc_service["DocumentService<br/>Multi-tier Extraction<br/>Cache + Thumbnails"]:::light
-            validation_coord["ValidationCoordinator<br/>COPILOTO_414<br/>Orchestrator Pattern"]:::light
+            validation_coord["ValidationCoordinator<br/>Document Audit<br/>Orchestrator Pattern"]:::light
             context_mgr["ContextManager<br/>SessionContext<br/>Email Service"]:::light
         end
     end
@@ -171,7 +171,7 @@ flowchart TB
     subgraph Core["Núcleo API (FastAPI + FastMCP)"]
         chat_core["Chat Service<br/>StreamingHandler<br/>SSE Events"]:::dark
         mcp_core["FastMCP Server<br/>5 Tools Productivas<br/>Lazy Loading"]:::dark
-        audit_core["COPILOTO_414<br/>8 Auditores Streaming<br/>ValidationCoordinator"]:::dark
+        audit_core["Document Audit<br/>8 Auditores Streaming<br/>ValidationCoordinator"]:::dark
         doc_core["Document Service<br/>Extraction Multi-tier<br/>Thumbnail Generation"]:::dark
     end
 
@@ -226,14 +226,14 @@ flowchart TB
     classDef gray fill:#e5e7eb,stroke:#4b5563,color:#111111;
 ```
 
-**Arquitectura de integración completa**: El núcleo API integra 4 servicios principales (Chat con SSE streaming, FastMCP con 5 herramientas, COPILOTO_414 con 8 auditores streaming, y Document Service con extracción multi-tier). Se conecta a servicios externos (SAPTIVA LLMs multi-modelo, Aletheia Research, LanguageTool, SMTP), usa almacenamiento triple (MongoDB para datos estructurados, Redis para cache/blacklist/registry, MinIO para archivos/thumbnails), y se monitoriza end-to-end mediante Prometheus (métricas de request + invocaciones MCP), OpenTelemetry (traces distribuidos), Structlog (logs JSON contextuales) y Grafana (dashboards + alertas).
+**Arquitectura de integración completa**: El núcleo API integra 4 servicios principales (Chat con SSE streaming, FastMCP con 5 herramientas, Document Audit con 8 auditores streaming, y Document Service con extracción multi-tier). Se conecta a servicios externos (SAPTIVA LLMs multi-modelo, Aletheia Research, LanguageTool, SMTP), usa almacenamiento triple (MongoDB para datos estructurados, Redis para cache/blacklist/registry, MinIO para archivos/thumbnails), y se monitoriza end-to-end mediante Prometheus (métricas de request + invocaciones MCP), OpenTelemetry (traces distribuidos), Structlog (logs JSON contextuales) y Grafana (dashboards + alertas).
 
 **Patrones y componentes clave**
 - *Chain of Responsibility + Strategy*: `apps/api/src/routers/chat/endpoints/message_endpoints.py` delega en `domain/message_handlers` para escoger streaming/simple.
 - *Builder Pattern*: `ChatResponseBuilder` compone respuestas enriquecidas con metadatos (`apps/api/src/domain/chat_response_builder.py`).
 - *Lazy Loading / Adapter*: `MCPFastAPIAdapter` expone herramientas FastMCP vía REST con telemetría y auth (`apps/api/src/mcp/fastapi_adapter.py`).
 - *Background Reaper*: `Storage` elimina documentos expirados/controla uso de disco (`apps/api/src/services/storage.py`).
-- *Coordinador + Auditores*: `validation_coordinator.py` orquesta múltiples validadores especializados para COPILOTO_414.
+- *Coordinador + Auditores*: `validation_coordinator.py` orquesta múltiples validadores especializados para Document Audit.
 
 ## Stack y capacidades
 
@@ -248,7 +248,7 @@ flowchart TB
 - **Cache de texto**: Redis almacena extractos 1h y valida ownership antes de usarlos en prompts (`apps/api/src/services/document_service.py`).
 - **RAG sin vector DB**: no usamos base vectorial; el contexto se arma con fragmentos curados desde Redis (hasta `MAX_TOTAL_DOC_CHARS`) mediante `DocumentService.extract_content_for_rag_from_cache`, lo que simplifica el despliegue y mantiene control del prompt.
 
-### Cumplimiento COPILOTO_414
+### Cumplimiento Document Audit
 - Coordinador async que ejecuta auditores de disclaimer, formato, tipografía, color, logo, gramática y consistencia (`apps/api/src/services/validation_coordinator.py`).
 - Las políticas se resuelven dinámicamente y cada hallazgo se serializa a `ValidationReport` (Mongo + MinIO).
 
@@ -387,7 +387,7 @@ flowchart TB
 2. **Chat Interface**:
    - **ChatView** orquesta toda la UI con handler SSE integrado y limpieza agresiva de adjuntos.
    - **Logic**: Manejo robusto de estados de carga para chats borradores (`draft`) y temporales, evitando bloqueos de UI.
-   - **Message Display**: ChatMessage con thumbnails/audit, StreamingMessage con typing real-time, FileReviewMessage y MessageAuditCard para COPILOTO_414
+   - **Message Display**: ChatMessage con thumbnails/audit, StreamingMessage con typing real-time, FileReviewMessage y MessageAuditCard para Document Audit
    - **Message Input**: CompactChatComposer con auto-submit para auditoría, PreviewAttachment con botón de audit, ThumbnailImage con fetch autenticado
    - **Content Display**: MarkdownMessage con syntax highlighting y CodeBlock con detección de lenguaje
 
@@ -436,7 +436,7 @@ flowchart TB
             doc_svc["DocumentService<br/>pypdf→SDK→OCR"]:::light
         end
 
-        subgraph COPILOTO["COPILOTO_414"]
+        subgraph AUDIT["Document Audit"]
             validator["ValidationCoordinator<br/>8 Auditors Parallel"]:::light
         end
 
@@ -500,7 +500,7 @@ flowchart TB
 3. **Processing Layer**:
    - **Request Handlers**: Streaming (SSE), Message (Strategy), Audit (Progress)
    - **Core Services**: ChatService (Builder pattern), DocumentService (multi-tier extraction pypdf→SDK→OCR)
-   - **COPILOTO_414**: ValidationCoordinator con 8 auditores paralelos (Disclaimer, Format, Grammar, Logo, Typography, Color, Entity, Semantic)
+   - **Document Audit**: ValidationCoordinator con 8 auditores paralelos (Disclaimer, Format, Grammar, Logo, Typography, Color, Entity, Semantic)
    - **MCP Server**: FastMCP core con 5 herramientas productivas + lazy loading (98% reducción contexto)
 
 4. **Storage Layer**: Servicios de almacenamiento (MinIO operations, Thumbnail generation, Email delivery) - Abstracción de operaciones de storage
@@ -512,7 +512,7 @@ flowchart TB
 
 6. **External APIs**: SAPTIVA LLMs (Turbo/Cortex/Ops), Aletheia Research, LanguageTool
 
-**Patrones clave**: Chain of Responsibility (routing), Builder (ChatService), Strategy (handlers), Orchestrator (COPILOTO_414), Adapter (MCP), Lazy Loading (tools), Ports & Adapters (persistence).
+**Patrones clave**: Chain of Responsibility (routing), Builder (ChatService), Strategy (handlers), Orchestrator (Document Audit), Adapter (MCP), Lazy Loading (tools), Ports & Adapters (persistence).
 
 ### Integración Frontend ↔ Backend
 Conexiones clave: REST, SSE y MCP; se incluyen dependencias externas (LLMs y herramientas) y dónde se instrumenta.
@@ -532,7 +532,7 @@ flowchart LR
 
     streaming --> chat_service
     mcp_adapter --> fastmcp["FastMCP Server"]:::dark
-    fastmcp --> validation["COPILOTO_414 Auditors"]:::light
+    fastmcp --> validation["Document Audit Auditors"]:::light
     validation --> languagetool["LanguageTool"]:::light
     fastmcp --> aletheia["Aletheia Research"]:::light
 
@@ -578,7 +578,7 @@ Funcionamiento: el request crea un `ChatContext`, el `StreamingHandler` lanza un
 
 ### Pipeline de ingestión y auditoría
 
-Secuencia de subida de archivos, persistencia y ejecución del coordinador COPILOTO_414.
+Secuencia de subida de archivos, persistencia y ejecución del coordinador Document Audit.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'actorBorder': '#4b5563','actorBkg': '#f9fafb','actorTextColor': '#111111','signalColor': '#4b5563','signalTextColor': '#111111','activationBorderColor': '#4b5563','activationBkgColor': '#d1d5db','sequenceNumberColor': '#4b5563'}}}%%
@@ -589,7 +589,7 @@ sequenceDiagram
     participant MinIO as MinIO S3
     participant Mongo as MongoDB
     participant Redis as Redis Cache
-    participant Auditor as COPILOTO_414
+    participant Auditor as Document Audit
 
     Dropzone->>API: multipart/form-data
     API->>Storage: save_upload()
@@ -674,16 +674,16 @@ Ejecuta health checks de contenedores, API, DB y frontend.
 2. **Persistencia**: FastAPI guarda streaming en disco, mueve a MinIO y almacena metadatos en Mongo (`apps/api/src/services/storage.py`, `apps/api/src/services/minio_storage.py`).
 3. **Cache + OCR**: texto se guarda en Redis; si el PDF carece de texto se usan páginas OCR guardadas (`apps/api/src/services/document_service.py`).
 4. **Extracción on-demand**: herramienta `extract_document_text` aplica el fallback pypdf → SDK → OCR antes de responder (`apps/api/src/mcp/server.py`).
-5. **Auditoría COPILOTO_414**: coordinador ejecuta auditores paralelos y agrupa hallazgos/políticas (`apps/api/src/services/validation_coordinator.py`).
+5. **Auditoría Document Audit**: coordinador ejecuta auditores paralelos y agrupa hallazgos/políticas (`apps/api/src/services/validation_coordinator.py`).
 6. **Revisión visual**: panel de resultados usa pestañas, badges y MCC toggles (`apps/web/src/components/document-review/ResultTabs.tsx`).
 7. **Limpieza**: `ChatView` aplica una limpieza agresiva de adjuntos tras la respuesta exitosa, asegurando que no queden archivos huérfanos en la UI (`useFiles` con selectores).
 
-> **Nota RAG**: la versión actual no usa base de datos vectorial; el contexto se arma con texto cacheado en Redis (1 h) y truncado por presupuesto de tokens antes de llegar al LLM. El diseño para Pinecone/pgvector vive en `docs/architecture/pdf-rag-flow.md` para una futura iteración.
+> **Nota RAG**: la versión actual no usa base de datos vectorial; el contexto se arma con texto cacheado en Redis (1 h) y truncado por presupuesto de tokens antes de llegar al LLM. El diseño para Pinecone/pgvector vive en `docs/architecture/ARCHITECTURE_DIAGRAMS.md` para una futura iteración.
 
 ## Herramientas MCP
 | Herramienta | Categoría | Descripción | Entrada principal |
 |-------------|-----------|-------------|-------------------|
-| `audit_file` | Compliance | Ejecuta COPILOTO_414 con selección de política y auditores opcionales | `doc_id`, `policy_id`, flags |
+| `audit_file` | Compliance | Ejecuta Document Audit con selección de política y auditores opcionales | `doc_id`, `policy_id`, flags |
 | `excel_analyzer` | Datos | Perfilado, agregaciones y validaciones de planillas | `doc_id`, `operations`, `aggregate_columns` |
 | `viz_tool` | Insights | Genera voz narrativa + gráficos ligeros a partir de tablas | `prompt`, `data_source` |
 | `deep_research` | Investigación | Orquesta iteraciones con Aletheia y devuelve hallazgos+fuentes | `query`, `depth`, `max_iterations` |
@@ -826,7 +826,7 @@ Vista rápida de carpetas raíz y submódulos más relevantes. La idea es poder 
 
 | Ruta | Propósito | Patrones / Notas |
 |------|-----------|------------------|
-| `apps/api/src` | Backend FastAPI, integra Chat + MCP + COPILOTO_414 | Clean Architecture (core/routers/services), Chain of Responsibility en chat, Builder para respuestas |
+| `apps/api/src` | Backend FastAPI, integra Chat + MCP + Document Audit | Clean Architecture (core/routers/services), Chain of Responsibility en chat, Builder para respuestas |
 | `apps/web/src` | Frontend Next.js 14 con App Router y Zustand | State pattern en stores, Gateway pattern en `lib/api-client.ts`, componentes UI críticos probados |
 | `apps/api/src/mcp` | Servidor FastMCP, herramientas (audit_file, excel_analyzer, etc.) y rutas lazy | Adapter hacia FastAPI, Lazy loading para reducir contexto, integración con telemetría |
 | `apps/api/src/services` | Servicios de dominio (ChatService, ValidationCoordinator, Storage, etc.) | Strategy + Orchestrator para chat/auditorías, integración con MinIO, Redis y SAPTIVA |
@@ -850,16 +850,15 @@ Tips rápidos:
 - Los paquetes compartidos (`backend/`, `packages/`) permiten reutilizar código entre API y otros servicios MCP.
 
 ## Documentación adicional
-- `docs/ARCHITECTURE.md`: detalle técnico Back/Front/MCP.
-- `docs/AUDIT_SYSTEM_ARCHITECTURE.md`: COPILOTO_414 end-to-end.
-- `docs/MCP_ARCHITECTURE.md` y `docs/MCP_TOOLS_GUIDE.md`: guías para herramientas.
-- `docs/TROUBLESHOOTING.md`: recetas extendidas.
+- `docs/architecture/ARCHITECTURE.md`: detalle técnico Back/Front/MCP.
+- `docs/architecture/AUDIT_SYSTEM_ARCHITECTURE.md`: Document Audit end-to-end.
+- `docs/features/mcp/MCP_ARCHITECTURE.md`: guías para herramientas MCP.
 
 ## Solución de problemas
 - `make debug-full` para un reporte consolidado.
 - `make debug-logs-errors` filtra errores relevantes.
 - `make troubleshoot` aplica fixes automáticos frecuentes.
-- Problemas comunes cubiertos en `docs/TROUBLESHOOTING.md` y en la sección `scripts/README_MCP_TESTING.md` para flujos MCP.
+- Problemas comunes cubiertos en la sección `scripts/README_MCP_TESTING.md` para flujos MCP y en este README.
 
 ## Contribuir
 1. Crear rama `git checkout -b feature/mi-cambio`.

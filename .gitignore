@@ -312,7 +312,7 @@ docker-compose.override.yml
 # Deployment packages
 *.tar.gz
 *.tar.gz.sha256
-copilotos-bridge-*.tar.gz
+octavios-bridge-*.tar.gz
 
 # Playwright
 playwright/

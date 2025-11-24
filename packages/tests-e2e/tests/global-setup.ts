@@ -27,7 +27,7 @@ async function globalSetup(config: FullConfig) {
 # Test Environment Configuration
 SAPTIVA_API_KEY=demo-key-for-testing
 JWT_SECRET_KEY=test-jwt-secret-key-for-e2e-tests
-MONGODB_URL=mongodb://localhost:27017/copilotos_test
+MONGODB_URL=mongodb://localhost:27017/octavios_test
 REDIS_URL=redis://localhost:6379/1
 LOG_LEVEL=error
 NODE_ENV=test

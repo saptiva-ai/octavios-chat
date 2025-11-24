@@ -1,5 +1,5 @@
 """
-Audit File Tool Handler for Copiloto 414.
+Audit File Tool Handler for Document Audit.
 
 Handles tool invocations from chat to audit documents and post results as messages.
 
