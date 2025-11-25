@@ -15,7 +15,7 @@ from types import SimpleNamespace
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
 from fastapi import FastAPI
-from httpx import AsyncClient
+from httpx import AsyncClient, ASGITransport
 
 # Provide a lightweight stub for prometheus_client during unit tests
 if "prometheus_client" not in sys.modules:
@@ -194,7 +194,7 @@ class TestDiscoverEndpoint:
             }
         ]
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/mcp/lazy/discover")
 
         assert response.status_code == 200, response.json()
@@ -228,7 +228,7 @@ class TestDiscoverEndpoint:
             }
         ]
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/mcp/lazy/discover?category=compliance")
 
         assert response.status_code == 200, response.json()
@@ -256,7 +256,7 @@ class TestDiscoverEndpoint:
             }
         ]
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/mcp/lazy/discover?search=audit")
 
         assert response.status_code == 200
@@ -280,7 +280,7 @@ class TestDiscoverEndpoint:
             {"name": "tool3", "category": "general", "description": "Tool 3", "loaded": False}
         ]
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/mcp/lazy/discover")
 
         data = response.json()
@@ -300,7 +300,7 @@ class TestDiscoverEndpoint:
             }
         ]
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/mcp/lazy/discover")
 
         data = response.json()
@@ -336,7 +336,7 @@ class TestGetToolSpecEndpoint:
 
         mock_registry.get_tool_spec = AsyncMock(return_value=mock_spec)
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/mcp/lazy/tools/audit_file")
 
         assert response.status_code == 200
@@ -358,7 +358,7 @@ class TestGetToolSpecEndpoint:
 
         mock_registry.get_tool_spec = AsyncMock(return_value=None)
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/mcp/lazy/tools/nonexistent")
 
         assert response.status_code == 404
@@ -382,7 +382,7 @@ class TestGetToolSpecEndpoint:
 
         mock_registry.get_tool_spec = AsyncMock(return_value=mock_spec)
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/mcp/lazy/tools/audit_file")
 
         assert response.status_code == 200
@@ -415,7 +415,7 @@ class TestInvokeEndpoint:
 
         mock_registry.invoke = AsyncMock(return_value=mock_response)
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
                 "/mcp/lazy/invoke",
                 json={
@@ -447,7 +447,7 @@ class TestInvokeEndpoint:
             "src.mcp.lazy_routes.PayloadValidator.validate_size",
             side_effect=ValueError("payload too large"),
         ):
-            async with AsyncClient(app=app, base_url="http://test") as client:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.post(
                     "/mcp/lazy/invoke",
                     json={"tool": "audit_file", "payload": {"doc_id": "doc123"}},
@@ -467,7 +467,7 @@ class TestInvokeEndpoint:
             "src.mcp.lazy_routes.ScopeValidator.validate_tool_access",
             side_effect=PermissionError("no scope"),
         ):
-            async with AsyncClient(app=app, base_url="http://test") as client:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.post(
                     "/mcp/lazy/invoke",
                     json={"tool": "audit_file", "payload": {"doc_id": "doc123"}},
@@ -487,7 +487,7 @@ class TestInvokeEndpoint:
             "src.mcp.lazy_routes.rate_limiter.check_rate_limit",
             AsyncMock(return_value=(False, 2500)),
         ):
-            async with AsyncClient(app=app, base_url="http://test") as client:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.post(
                     "/mcp/lazy/invoke",
                     json={"tool": "audit_file", "payload": {"doc_id": "doc123"}},
@@ -517,7 +517,7 @@ class TestInvokeEndpoint:
 
         mock_registry.invoke = AsyncMock(return_value=mock_response)
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
                 "/mcp/lazy/invoke",
                 json={
@@ -572,7 +572,7 @@ class TestInvokeEndpoint:
 
         mock_registry.invoke = AsyncMock(return_value=mock_response)
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
                 "/mcp/lazy/invoke",
                 json={
@@ -623,7 +623,7 @@ class TestInvokeEndpoint:
 
         mock_registry.invoke = AsyncMock(return_value=mock_response)
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
                 "/mcp/lazy/invoke",
                 json={
@@ -645,7 +645,7 @@ class TestStatsEndpoint:
         """Regular users cannot access stats."""
         app, _ = app_with_lazy_routes
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/mcp/lazy/stats")
 
         assert response.status_code == 403
@@ -662,7 +662,7 @@ class TestStatsEndpoint:
             "memory_efficiency": "60.0%"
         }
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/mcp/lazy/stats")
 
         assert response.status_code == 200
@@ -687,7 +687,7 @@ class TestStatsEndpoint:
             "memory_efficiency": "90.0%"
         }
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/mcp/lazy/stats")
 
         data = response.json()
@@ -705,7 +705,7 @@ class TestUnloadEndpoint:
         """Regular users cannot unload tools."""
         app, _ = app_with_lazy_routes
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.delete("/mcp/lazy/tools/audit_file/unload")
 
         assert response.status_code == 403
@@ -716,7 +716,7 @@ class TestUnloadEndpoint:
 
         mock_registry.unload_tool.return_value = True
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.delete("/mcp/lazy/tools/audit_file/unload")
 
         assert response.status_code == 200
@@ -735,7 +735,7 @@ class TestUnloadEndpoint:
 
         mock_registry.unload_tool.return_value = False
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.delete("/mcp/lazy/tools/audit_file/unload")
 
         assert response.status_code == 200
@@ -768,7 +768,7 @@ class TestAuthenticationRequired:
             )
             app.include_router(router)
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/mcp/lazy/discover")
 
         assert response.status_code == 401
@@ -789,7 +789,7 @@ class TestAuthenticationRequired:
             )
             app.include_router(router)
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/mcp/lazy/tools/audit_file")
 
         assert response.status_code == 401
@@ -810,7 +810,7 @@ class TestAuthenticationRequired:
             )
             app.include_router(router)
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
                 "/mcp/lazy/invoke",
                 json={"tool": "audit_file", "payload": {"doc_id": "doc123"}}

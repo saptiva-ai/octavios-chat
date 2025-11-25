@@ -32,7 +32,8 @@ class TestResourceAPIE2E:
     @pytest.fixture(scope="class")
     async def client(self, app):
         """Create async HTTP client."""
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        from httpx import ASGITransport
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             yield client
 
     @pytest.fixture

@@ -63,6 +63,28 @@ async def validate_document(
 
     Orchestrates all validators and aggregates findings.
 
+    TODO [Octavius-2.0 / Phase 3]: Migrate to queue-based worker
+    Current implementation: Synchronous execution (blocks chat response)
+    Target implementation: Background job with progress updates
+
+    Migration plan:
+    1. Create AuditProducer in this file (enqueue validation job)
+    2. Implement AuditWorker in workers/audit_worker.py (consumer)
+    3. Add job progress tracking for each auditor phase:
+       - Disclaimer → Format → Typography → Grammar → Logo
+    4. Emit WebSocket/SSE events for real-time canvas updates
+    5. Update endpoint to return 202 Accepted + task_id immediately
+    6. Add streaming endpoint GET /api/audit/{task_id}/stream
+
+    Benefits:
+    - Handle large PDFs without timeout (current limit: ~30s)
+    - Real-time progress bar in frontend
+    - Retry logic for failed auditors (especially logo detection)
+    - Resource throttling for OpenCV operations
+    - Parallel processing of multiple documents
+
+    See: apps/api/src/workers/README.md Section 2 (Document Audit Processing)
+
     Args:
         document: Document model (for metadata)
         pdf_path: Path to PDF file on disk

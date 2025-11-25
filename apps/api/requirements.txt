@@ -1,5 +1,8 @@
 # Core FastAPI dependencies
-fastapi>=0.104.0
+# SECURITY UPDATE 2025-11-24: Updated to fix Starlette vulnerabilities
+# - GHSA-2c2j-9gv5-cj73 (Starlette < 0.47.2)
+# - GHSA-7f5h-v6xp-fcq8 (Starlette < 0.49.1)
+fastapi>=0.115.0  # Includes starlette>=0.49.1 (security fix)
 uvicorn[standard]>=0.24.0
 pydantic>=2.5.0
 pydantic-settings>=2.1.0
@@ -13,7 +16,10 @@ redis>=5.0.1
 # HTTP client
 httpx[http2]>=0.25.2
 aiohttp>=3.9.5
-urllib3>=2.2.0  # Force secure version (2.2.x series includes security fixes)
+# SECURITY UPDATE 2025-11-24: Updated to fix urllib3 vulnerabilities
+# - GHSA-48p4-8xcf-vxj5
+# - GHSA-pq67-6m6q-mj2v
+urllib3>=2.5.0  # Security fix for HTTP handling vulnerabilities
 
 # Authentication
 python-jose[cryptography]>=3.3.0
