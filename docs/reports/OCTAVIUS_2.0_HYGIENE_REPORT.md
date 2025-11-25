@@ -12,7 +12,7 @@
 ### Tareas Completadas: 10/10
 
 1. ✅ **Auditoría de seguridad (npm + Python)**
-2. ✅ **Documentación de vulnerabilidades** (`SECURITY.md`)
+2. ✅ **Documentación de vulnerabilidades** (`docs/security/SECURITY.md`)
 3. ✅ **Git hooks con secrets detection** (Husky + pre-commit)
 4. ✅ **Verificación de Dockerfiles** (multi-stage builds confirmados)
 5. ✅ **Script de mantenimiento del servidor** (`cleanup-server.sh`)
@@ -74,7 +74,7 @@ make test-all && make test-e2e
 
 ### Documentación Generada
 
-**Archivo**: [`SECURITY.md`](/SECURITY.md)
+**Archivo**: [`docs/security/SECURITY.md`](../../security/SECURITY.md)
 **Contenido**:
 - Reporte completo de vulnerabilidades
 - Plan de remediación con comandos
@@ -437,10 +437,10 @@ process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001"
 ## 📂 Archivos Generados/Modificados
 
 ### Nuevos Archivos
-1. `SECURITY.md` - Reporte completo de vulnerabilidades
+1. `docs/security/SECURITY.md` - Reporte completo de vulnerabilidades
 2. `scripts/maintenance/cleanup-server.sh` - Script de mantenimiento
 3. `apps/api/src/workers/README.md` - Arquitectura de workers
-4. `OCTAVIUS_2.0_HYGIENE_REPORT.md` - Este documento
+4. `docs/reports/OCTAVIUS_2.0_HYGIENE_REPORT.md` - Este documento
 
 ### Archivos Modificados
 1. `apps/web/.husky/pre-commit` - Integración de secrets detection

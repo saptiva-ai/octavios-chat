@@ -129,10 +129,11 @@ else
 fi
 
 # Verify security documentation exists
-if [ -f "SECURITY.md" ]; then
-    echo -e "   Security documentation: ${GREEN}PASS${NC}"
+if [ -f "docs/security/SECURITY.md" ]; then
+    echo "✅ SECURITY.md found (using updated logic)"
+    # Implement specific check logic here
 else
-    echo -e "   Security documentation: ${YELLOW}WARNING${NC}"
+    echo "⚠️  docs/security/SECURITY.md not found"
 fi
 
 echo
@@ -156,7 +157,7 @@ else
     echo -e "${RED} Critical security issues found - must be fixed before deployment.${NC}"
     echo
     echo -e "${YELLOW}Security Resources:${NC}"
-    echo "   - Review SECURITY.md for detailed guidelines"
+    echo "   - Review docs/security/SECURITY.md for detailed guidelines"
     echo "   - Use scripts/generate-secrets.py for secure credentials"
     echo "   - Deploy with docker-compose.secure.yml for production"
     echo "   - Ensure all secrets are loaded from environment variables"
