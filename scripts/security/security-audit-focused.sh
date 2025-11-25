@@ -149,7 +149,7 @@ else
     echo -e "${RED} Please fix the identified security issues before deployment.${NC}"
     echo
     echo -e "${YELLOW}Security Resources:${NC}"
-    echo "   - Review SECURITY.md for detailed guidelines"
+    echo "   - Review docs/security/SECURITY.md for detailed guidelines"
     echo "   - Use scripts/generate-secrets.py for secure credentials"
     echo "   - Deploy with docker-compose.secure.yml for production"
     echo

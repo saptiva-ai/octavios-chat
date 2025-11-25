@@ -8,8 +8,8 @@
 #   Producción: docker compose -f infra/docker-compose.yml --profile production up -d
 
 # CRITICAL: Name must match existing production deployment to reuse volumes
-# Production uses "client-project-chat" as project name, not "octavios-chat-client-project"
-name: ${COMPOSE_PROJECT_NAME:-client-project-chat}
+# Production uses "octavios-chat" as project name
+name: ${COMPOSE_PROJECT_NAME:-octavios-chat}
 
 services:
   # ========================================

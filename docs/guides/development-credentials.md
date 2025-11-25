@@ -342,7 +342,7 @@ open http://localhost:3000/login
 
 - **Quick Start Guide**: [QUICK_START.md](QUICK_START.md)
 - **Main README**: [README.md](README.md)
-- **Security Guide**: [docs/SECURITY.md](docs/SECURITY.md)
+- **Security Guide**: [docs/security/SECURITY.md](../security/SECURITY.md)
 - **Deployment Guide**: [docs/operations/deployment.md](docs/operations/deployment.md)
 
 ---

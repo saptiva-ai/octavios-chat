@@ -13,7 +13,7 @@ ifneq (,$(wildcard envs/.env))
     export
 endif
 
-PROJECT_NAME := octavios-chat-capital414
+PROJECT_NAME := octavios-chat
 COMPOSE := docker compose -p $(PROJECT_NAME) -f infra/docker-compose.yml
 
 # Colors
@@ -88,24 +88,24 @@ help:
 
 setup:
 	@echo "$(YELLOW)🔧 Setting up project...$(NC)"
-	@chmod +x scripts/*.sh
-	@./scripts/interactive-env-setup.sh development
+	@chmod +x scripts/setup/*.sh
+	@./scripts/setup/interactive-env-setup.sh development
 	@echo "$(GREEN)✅ Setup complete. Run 'make dev' to start.$(NC)"
 
 env-check:
 	@echo "$(YELLOW)🔍 Validating environment variables...$(NC)"
-	@chmod +x scripts/env-checker.sh
-	@./scripts/env-checker.sh warn
+	@chmod +x scripts/setup/env-checker.sh
+	@./scripts/setup/env-checker.sh warn
 
 env-info:
 	@echo "$(YELLOW)📋 Environment variables information...$(NC)"
-	@chmod +x scripts/env-checker.sh
-	@./scripts/env-checker.sh info
+	@chmod +x scripts/setup/env-checker.sh
+	@./scripts/setup/env-checker.sh info
 
 env-strict:
 	@echo "$(YELLOW)🔒 Strict environment validation...$(NC)"
-	@chmod +x scripts/env-checker.sh
-	@./scripts/env-checker.sh strict
+	@chmod +x scripts/setup/env-checker.sh
+	@./scripts/setup/env-checker.sh strict
 
 dev:
 	@echo "$(YELLOW)🟡 Starting development environment...$(NC)"
@@ -224,11 +224,11 @@ install: install-web
 # ============================================================================ 
 
 test:
-	@chmod +x scripts/test-runner.sh
+	@chmod +x scripts/testing/test-runner.sh
 ifdef T
-	@./scripts/test-runner.sh $(T) $(ARGS)
+	@./scripts/testing/test-runner.sh $(T) $(ARGS)
 else
-	@./scripts/test-runner.sh all
+	@./scripts/testing/test-runner.sh all
 endif
 
 
@@ -241,10 +241,10 @@ test-local:
 	fi
 	@echo "$(YELLOW)📥 Loading environment from envs/.env.local (if exists)...$(NC)"
 ifdef FILE
-	@eval $$(./scripts/env-manager.sh load local) && \
+	@eval $$(./scripts/setup/env-manager.sh load local) && \
 	cd apps/api && .venv/bin/python -m pytest $(FILE) $(ARGS)
 else
-	@eval $$(./scripts/env-manager.sh load local) && \
+	@eval $$(./scripts/setup/env-manager.sh load local) && \
 	cd apps/api && .venv/bin/python -m pytest tests/ $(ARGS)
 endif
 
@@ -258,8 +258,8 @@ ifndef CMD
 	@echo "Available: backup, restore, stats, shell"
 	@exit 1
 endif
-	@chmod +x scripts/db-manager.sh
-	@./scripts/db-manager.sh $(CMD) $(PROJECT_NAME)
+	@chmod +x scripts/database/db-manager.sh
+	@./scripts/database/db-manager.sh $(CMD) $(PROJECT_NAME)
 
 # ============================================================================ 
 # DEPLOYMENT
@@ -271,8 +271,8 @@ ifndef ENV
 	@echo "Available: demo, prod"
 	@exit 1
 endif
-	@chmod +x scripts/deploy-manager.sh
-	@./scripts/deploy-manager.sh $(ENV) $(MODE)
+	@chmod +x scripts/deployment/deploy-manager.sh
+	@./scripts/deployment/deploy-manager.sh $(ENV) $(MODE)
 
 # ============================================================================ 
 # CLEANUP
@@ -343,7 +343,7 @@ db-restore:
 
 create-demo-user:
 	@echo "📝 Creating demo user..."
-	@$(COMPOSE) exec -T api sh -c 'MONGODB_URI="$$MONGODB_URL" MONGODB_DB_NAME="$$MONGODB_DATABASE" python scripts/create_demo_user.py'
+	@$(COMPOSE) exec -T api sh -c 'MONGODB_URI="$$MONGODB_URL" MONGODB_DB_NAME="$$MONGODB_DATABASE" python scripts/setup/create_demo_user.py'
 
 verify:
 	@$(MAKE) health
