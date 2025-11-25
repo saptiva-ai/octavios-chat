@@ -2,7 +2,16 @@
 COPILOTO_414 Document Compliance Validation Tool (Class-based Implementation).
 
 This tool implements the COPILOTO_414 audit system, which validates PDF documents
-against corporate compliance policies (disclaimers, branding, grammar, etc.).
+against corporate compliance policies using 8 specialized auditors:
+
+1. Disclaimer - Legal disclaimer validation
+2. Format - Font and number format compliance
+3. Typography - Typography consistency checks
+4. Grammar - Spelling and grammar validation
+5. Logo - Logo detection and placement
+6. Color Palette - Color palette compliance
+7. Entity Consistency - Entity consistency validation
+8. Semantic Consistency - Semantic coherence analysis
 
 It is designed to be loaded by the Lazy Registry or used directly by the
 ToolExecutionService.
@@ -30,27 +39,39 @@ class AuditInput(BaseModel):
     policy_id: str = Field("auto", description="ID de la política")
     enable_disclaimer: bool = Field(True, description="Activar auditor de disclaimers")
     enable_format: bool = Field(True, description="Activar auditor de formato")
-    enable_logo: bool = Field(True, description="Activar auditor de logos")
+    enable_typography: bool = Field(True, description="Activar auditor de tipografías")
     enable_grammar: bool = Field(True, description="Activar auditor de gramática")
+    enable_logo: bool = Field(True, description="Activar auditor de logos")
+    enable_color_palette: bool = Field(True, description="Activar auditor de paleta de colores")
+    enable_entity_consistency: bool = Field(True, description="Activar auditor de consistencia de entidades")
+    enable_semantic_consistency: bool = Field(True, description="Activar auditor de consistencia semántica")
 
 
 class AuditFileTool(Tool):
     """
     COPILOTO_414 Document Compliance Validation Tool.
-    
-    Orchestrates the execution of multiple auditors (Disclaimer, Format, Logo, Grammar)
-    via the ValidationCoordinator.
+
+    Orchestrates the execution of 8 specialized auditors via the ValidationCoordinator:
+    1. Disclaimer - Legal disclaimer validation
+    2. Format - Font and number format compliance
+    3. Typography - Typography consistency checks
+    4. Grammar - Spelling and grammar validation
+    5. Logo - Logo detection and placement
+    6. Color Palette - Color palette compliance
+    7. Entity Consistency - Entity consistency validation
+    8. Semantic Consistency - Semantic coherence analysis
     """
 
     def get_spec(self) -> ToolSpec:
         return ToolSpec(
             name="audit_file",
-            version="1.0.0",
+            version="1.1.0",
             display_name="Audit File (COPILOTO_414)",
             description=(
                 "Validates PDF documents against COPILOTO_414 compliance policies. "
-                "Performs checks for disclaimers, corporate formatting, logo usage, "
-                "and grammar/spelling."
+                "Performs 8 specialized checks: disclaimers, format validation, "
+                "typography consistency, grammar/spelling, logo detection, "
+                "color palette compliance, entity consistency, and semantic coherence."
             ),
             category=ToolCategory.COMPLIANCE,
             capabilities=[
@@ -62,7 +83,7 @@ class AuditFileTool(Tool):
                 "type": "object",
                 "properties": {
                     "doc_id": {
-                        "type": "string", 
+                        "type": "string",
                         "description": "Document ID to audit"
                     },
                     "policy_id": {
@@ -72,24 +93,44 @@ class AuditFileTool(Tool):
                         "description": "Compliance policy to apply (default: auto-detect)"
                     },
                     "enable_disclaimer": {
-                        "type": "boolean", 
+                        "type": "boolean",
                         "default": True,
                         "description": "Check for required disclaimers"
                     },
                     "enable_format": {
-                        "type": "boolean", 
+                        "type": "boolean",
                         "default": True,
-                        "description": "Check font and color compliance"
+                        "description": "Check font and number format compliance"
+                    },
+                    "enable_typography": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": "Check typography consistency"
+                    },
+                    "enable_grammar": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": "Check grammar and spelling"
                     },
                     "enable_logo": {
-                        "type": "boolean", 
+                        "type": "boolean",
                         "default": True,
                         "description": "Check logo placement and quality"
                     },
-                    "enable_grammar": {
-                        "type": "boolean", 
+                    "enable_color_palette": {
+                        "type": "boolean",
                         "default": True,
-                        "description": "Check grammar and spelling"
+                        "description": "Check color palette compliance"
+                    },
+                    "enable_entity_consistency": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": "Check entity consistency across document"
+                    },
+                    "enable_semantic_consistency": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": "Check semantic coherence and consistency"
                     }
                 },
                 "required": ["doc_id"],
@@ -159,8 +200,12 @@ class AuditFileTool(Tool):
         policy_id = input_data.policy_id
         enable_disclaimer = input_data.enable_disclaimer
         enable_format = input_data.enable_format
-        enable_logo = input_data.enable_logo
+        enable_typography = input_data.enable_typography
         enable_grammar = input_data.enable_grammar
+        enable_logo = input_data.enable_logo
+        enable_color_palette = input_data.enable_color_palette
+        enable_entity_consistency = input_data.enable_entity_consistency
+        enable_semantic_consistency = input_data.enable_semantic_consistency
 
         # Programmatic invocations pass user_id en payload (obligatorio)
         user_id = input_data.user_id or (context.get("user_id") if context else None)
@@ -239,8 +284,12 @@ class AuditFileTool(Tool):
                 client_name=policy.client_name,
                 enable_disclaimer=enable_disclaimer,
                 enable_format=enable_format,
-                enable_logo=enable_logo,
+                enable_typography=enable_typography,
                 enable_grammar=enable_grammar,
+                enable_logo=enable_logo,
+                enable_color_palette=enable_color_palette,
+                enable_entity_consistency=enable_entity_consistency,
+                enable_semantic_consistency=enable_semantic_consistency,
                 policy_config=policy.to_compliance_config(),
                 policy_id=policy.id,
                 policy_name=policy.name,
