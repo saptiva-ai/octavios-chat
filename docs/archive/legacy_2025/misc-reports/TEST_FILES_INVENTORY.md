@@ -290,13 +290,13 @@
 
 ### To Run Tests Locally
 ```bash
-cd /home/jazielflo/Proyects/octavios-chat-capital414/apps/api
+cd /home/jazielflo/Proyects/octavios-chat-client-project/apps/api
 pytest tests/unit/routers/chat/ -v --tb=short
 ```
 
 ### To Run in Docker
 ```bash
-docker exec capital414-chat-api python -m pytest tests/unit/routers/chat/ -v
+docker exec client-project-chat-api python -m pytest tests/unit/routers/chat/ -v
 ```
 
 ### To Run Optimized v2 Tests Only
@@ -315,7 +315,7 @@ pytest tests/unit/routers/chat/ --cov=src.routers.chat --cov-report=html
 
 All files are located in:
 ```
-/home/jazielflo/Proyects/octavios-chat-capital414/
+/home/jazielflo/Proyects/octavios-chat-client-project/
 ├── apps/api/tests/unit/routers/chat/
 │   ├── __init__.py
 │   ├── conftest.py

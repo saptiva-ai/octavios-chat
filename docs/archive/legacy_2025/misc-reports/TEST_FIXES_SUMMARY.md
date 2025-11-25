@@ -40,7 +40,7 @@ query_mock.find = MagicMock(return_value=query_mock)
 ## Solutions Implemented
 
 ### Solution 1: FastAPI Dependency Overrides
-**File:** `/home/jazielflo/Proyects/octavios-chat-capital414/apps/api/tests/unit/routers/chat/test_message_endpoints_v2.py`
+**File:** `/home/jazielflo/Proyects/octavios-chat-client-project/apps/api/tests/unit/routers/chat/test_message_endpoints_v2.py`
 
 **Implementation:**
 ```python
@@ -78,7 +78,7 @@ async def test_escalate_to_research_success(self, app, mock_chat_session, mock_s
 - No side effects (proper cleanup)
 
 ### Solution 2: MockBeanieQueryBuilder Class
-**File:** `/home/jazielflo/Proyects/octavios-chat-capital414/apps/api/tests/unit/routers/chat/conftest.py`
+**File:** `/home/jazielflo/Proyects/octavios-chat-client-project/apps/api/tests/unit/routers/chat/conftest.py`
 
 **Implementation:**
 ```python

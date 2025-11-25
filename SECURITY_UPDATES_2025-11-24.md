@@ -139,7 +139,7 @@ Version: 2.5.0
 1. **Deploy to Staging**
    ```bash
    # On server
-   cd /home/jf/capital414-chat
+   cd /home/jf/client-project-chat
    git pull origin main
    docker compose -f infra/docker-compose.yml down api
    docker compose -f infra/docker-compose.yml up -d --build api

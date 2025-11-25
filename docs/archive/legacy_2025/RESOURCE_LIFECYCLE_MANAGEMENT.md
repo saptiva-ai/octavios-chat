@@ -407,7 +407,7 @@ Con deduplicación:
 curl http://localhost:8001/api/resources/metrics -H "Authorization: Bearer $TOKEN" | jq .
 
 # Verificar si cleanup worker está corriendo
-docker logs octavios-chat-capital414-api | grep "ResourceCleanupWorker"
+docker logs octavios-chat-client-project-api | grep "ResourceCleanupWorker"
 ```
 
 **Soluciones:**
@@ -487,7 +487,7 @@ curl -X POST http://localhost:8001/api/resources/cleanup \
 
 ```bash
 # Backup MongoDB antes de cleanup masivo
-docker exec octavios-chat-capital414-mongodb mongodump --out /backup/$(date +%Y%m%d)
+docker exec octavios-chat-client-project-mongodb mongodump --out /backup/$(date +%Y%m%d)
 
 # Ejecutar cleanup
 curl -X POST http://localhost:8001/api/resources/cleanup ...

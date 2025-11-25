@@ -105,7 +105,7 @@ Verificar que el orquestador selecciona la estrategia correcta según intent + c
 ## 🚀 Test Suite 4: End-to-End Retrieval con Documento Real
 
 ### Setup
-- **Documento**: Capital414_ProcesoValoracion.pdf
+- **Documento**: ClientProject_ProcesoValoracion.pdf
 - **Session ID**: cb2ec1d6-66ee-4502-92ed-be0417d7f1a1
 - **Chunks en Qdrant**: 9 chunks (384-dim embeddings)
 - **Vector DB**: Qdrant v1.12.5 con 42 points totales

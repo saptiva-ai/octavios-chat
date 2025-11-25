@@ -170,7 +170,7 @@ if handler_result:
 
 4. **Check database** (MongoDB):
    ```bash
-   docker exec octavios-chat-capital414-mongodb mongosh \
+   docker exec octavios-chat-client-project-mongodb mongosh \
      -u octavios_user -p <password> --authenticationDatabase admin octavios \
      --eval 'db.chat_messages.find({role: "assistant"}).sort({created_at: -1}).limit(1).pretty()'
    ```

@@ -1,7 +1,7 @@
 /**
  * FileAttachmentList - Audit Toggle Test
  *
- * COPILOTO_414: Verifies that the audit toggle:
+ * Document Audit: Verifies that the audit toggle:
  * - Appears only for READY files
  * - Calls onAudit callback when activated
  * - Shows correct accessibility attributes
@@ -333,7 +333,7 @@ describe("FileAttachmentList - Audit Toggle", () => {
 
     it("has aria-label with filename context", () => {
       const readyFiles: FileAttachment[] = [
-        createMockFile("file-aria", "Capital414_presentacion.pdf", "READY"),
+        createMockFile("file-aria", "ClientProject_presentacion.pdf", "READY"),
       ];
 
       render(
@@ -347,7 +347,7 @@ describe("FileAttachmentList - Audit Toggle", () => {
       const toggle = screen.getByRole("switch");
       expect(toggle).toHaveAttribute(
         "aria-label",
-        "Activar auditoría para Capital414_presentacion.pdf",
+        "Activar auditoría para ClientProject_presentacion.pdf",
       );
     });
 

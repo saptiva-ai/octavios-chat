@@ -1,7 +1,7 @@
 # 📊 OCR Benchmark Report (AlphaXiv)
 
 **Generated**: 2025-11-03 18:36:50
-**PDF**: /tmp/test_data/Capital414_presentacion.pdf
+**PDF**: /tmp/test_data/ClientProject_presentacion.pdf
 **Pages Tested**: [1, 3, 4]
 
 ## Performance Summary

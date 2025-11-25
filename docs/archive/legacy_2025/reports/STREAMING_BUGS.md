@@ -30,7 +30,7 @@ Error body: "This model's maximum context length is 8192 tokens.
 ### Diagnóstico
 ```bash
 # Verificar error en logs
-docker logs octavios-chat-capital414-api | grep "maximum context length"
+docker logs octavios-chat-client-project-api | grep "maximum context length"
 ```
 
 **Log evidencia**:
@@ -111,12 +111,12 @@ httpcore.RemoteProtocolError: <StreamReset stream_id:1, error_code:2, remote_res
 
 ```bash
 # Test 1: Streaming simple (sin RAG)
-docker exec octavios-chat-capital414-api python /app/tests/manual/test_saptiva_streaming.py
+docker exec octavios-chat-client-project-api python /app/tests/manual/test_saptiva_streaming.py
 # ✅ RESULTADO: 14 chunks recibidos exitosamente
 
 # Test 2: Streaming con RAG (prompt grande)
 # Revisar logs reales de la aplicación
-docker logs octavios-chat-capital414-api | grep RemoteProtocolError
+docker logs octavios-chat-client-project-api | grep RemoteProtocolError
 # ❌ RESULTADO: StreamReset error_code:2
 ```
 
@@ -209,7 +209,7 @@ segments_result = await get_segments_tool.execute(
 grep "max_segments" apps/api/src/mcp/tools/get_segments.py
 
 # Revisar logs de segmentos recuperados
-docker logs octavios-chat-capital414-api | grep "segments_count"
+docker logs octavios-chat-client-project-api | grep "segments_count"
 ```
 
 **Evidencia**:
@@ -335,7 +335,7 @@ Formato de salida (natural y conversacional)
 
 ### Test API Key
 ```bash
-docker exec octavios-chat-capital414-api python /app/tests/manual/test_saptiva_api_key.py
+docker exec octavios-chat-client-project-api python /app/tests/manual/test_saptiva_api_key.py
 ```
 
 **Valida**:
@@ -345,7 +345,7 @@ docker exec octavios-chat-capital414-api python /app/tests/manual/test_saptiva_a
 
 ### Test Streaming
 ```bash
-docker exec octavios-chat-capital414-api python /app/tests/manual/test_saptiva_streaming.py
+docker exec octavios-chat-client-project-api python /app/tests/manual/test_saptiva_streaming.py
 ```
 
 **Valida**:
@@ -354,7 +354,7 @@ docker exec octavios-chat-capital414-api python /app/tests/manual/test_saptiva_s
 
 ### Diagnóstico de Alucinaciones
 ```bash
-docker exec octavios-chat-capital414-api python /app/tests/manual/diagnose_hallucination.py
+docker exec octavios-chat-client-project-api python /app/tests/manual/diagnose_hallucination.py
 ```
 
 **Valida**:
@@ -383,13 +383,13 @@ docker exec octavios-chat-capital414-api python /app/tests/manual/diagnose_hallu
 **Logs a observar**:
 ```bash
 # Token budget en acción
-docker logs octavios-chat-capital414-api | grep "Calculated dynamic max_tokens"
+docker logs octavios-chat-client-project-api | grep "Calculated dynamic max_tokens"
 
 # Modo non-streaming activado
-docker logs octavios-chat-capital414-api | grep "Using non-streaming mode for RAG"
+docker logs octavios-chat-client-project-api | grep "Using non-streaming mode for RAG"
 
 # Errores de Saptiva
-docker logs octavios-chat-capital414-api | grep "SAPTIVA.*ERROR"
+docker logs octavios-chat-client-project-api | grep "SAPTIVA.*ERROR"
 ```
 
 ### Posibles Mejoras Futuras

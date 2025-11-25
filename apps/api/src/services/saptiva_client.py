@@ -546,7 +546,7 @@ class SaptivaClient:
         message_lower = last_message.lower()
 
         if "hola" in message_lower or "hello" in message_lower:
-            content = "¡Hola! Soy SAPTIVA en modo demo para capital414-chat. ¿En qué puedo ayudarte hoy?"
+            content = "¡Hola! Soy SAPTIVA en modo demo para client-project-chat. ¿En qué puedo ayudarte hoy?"
         elif "?" in last_message:
             content = (
                 f"Entiendo tu pregunta sobre \"{last_message}\". "

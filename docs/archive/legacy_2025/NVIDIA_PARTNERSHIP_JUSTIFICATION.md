@@ -45,7 +45,7 @@ EMBEDDING_DEVICE=cpu  # ← Cambiar a "cuda" activa NVIDIA GPU
 - **Soporte GPU**: MuPDF puede usar CUDA para rendering acelerado
 - **Beneficio**: Procesamiento de PDFs escaneados 3-5x más rápido
 
-#### **D. OpenCV (Logo Detection - COPILOTO_414)**
+#### **D. OpenCV (Logo Detection - Document Audit)**
 - **Librería**: `opencv-python-headless>=4.8.0`
 - **Uso**: Template matching para detección de logos corporativos
 - **Soporte GPU**: OpenCV puede usar CUDA para operaciones de imagen

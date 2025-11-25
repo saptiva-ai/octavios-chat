@@ -1,7 +1,7 @@
 """
-COPILOTO_414 Document Compliance Validation Tool (Class-based Implementation).
+Document Audit Document Compliance Validation Tool (Class-based Implementation).
 
-This tool implements the COPILOTO_414 audit system, which validates PDF documents
+This tool implements the Document Audit audit system, which validates PDF documents
 against corporate compliance policies (disclaimers, branding, grammar, etc.).
 
 It is designed to be loaded by the Lazy Registry or used directly by the
@@ -36,7 +36,7 @@ class AuditInput(BaseModel):
 
 class AuditFileTool(Tool):
     """
-    COPILOTO_414 Document Compliance Validation Tool.
+    Document Audit Document Compliance Validation Tool.
     
     Orchestrates the execution of multiple auditors (Disclaimer, Format, Logo, Grammar)
     via the ValidationCoordinator.
@@ -46,9 +46,9 @@ class AuditFileTool(Tool):
         return ToolSpec(
             name="audit_file",
             version="1.0.0",
-            display_name="Audit File (COPILOTO_414)",
+            display_name="Audit File (Document Audit)",
             description=(
-                "Validates PDF documents against COPILOTO_414 compliance policies. "
+                "Validates PDF documents against Document Audit compliance policies. "
                 "Performs checks for disclaimers, corporate formatting, logo usage, "
                 "and grammar/spelling."
             ),
@@ -166,7 +166,7 @@ class AuditFileTool(Tool):
         user_id = input_data.user_id or (context.get("user_id") if context else None)
 
         logger.info(
-            "COPILOTO_414: Starting audit execution", 
+            "Document Audit: Starting audit execution", 
             doc_id=doc_id, 
             policy_id=policy_id, 
             user_id=user_id
@@ -180,7 +180,7 @@ class AuditFileTool(Tool):
         # Validate user_id is provided (required for ownership check)
         if not user_id:
             logger.warning(
-                "COPILOTO_414: No user_id provided (dev mode?)",
+                "Document Audit: No user_id provided (dev mode?)",
                 doc_id=doc_id,
                 context_available=bool(context)
             )
@@ -202,7 +202,7 @@ class AuditFileTool(Tool):
         session_id = context.get("session_id") if context else None
         if session_id and doc.conversation_id and str(doc.conversation_id) != str(session_id):
             logger.warning(
-                "COPILOTO_414: Database latency detected - conversation_id mismatch (allowing access)",
+                "Document Audit: Database latency detected - conversation_id mismatch (allowing access)",
                 doc_id=doc_id,
                 doc_conversation_id=str(doc.conversation_id),
                 current_session_id=str(session_id)
@@ -210,7 +210,7 @@ class AuditFileTool(Tool):
             
         # 2. Resolve Policy
         policy = await resolve_policy(policy_id, document=doc)
-        logger.info("COPILOTO_414: Policy resolved", policy_name=policy.name)
+        logger.info("Document Audit: Policy resolved", policy_name=policy.name)
 
         # 3. Materialize File
         import tempfile

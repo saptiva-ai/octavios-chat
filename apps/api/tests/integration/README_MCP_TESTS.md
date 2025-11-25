@@ -33,7 +33,7 @@ A diferencia de los tests unitarios que usan mocks, estos tests validan el flujo
 - ✅ Manejar documentos no encontrados
 
 #### 4. TestAuditFileToolIntegration (1 test)
-- ✅ Validar documento PDF con COPILOTO_414
+- ✅ Validar documento PDF con Document Audit
 
 #### 5. TestExcelAnalyzerToolIntegration (2 tests)
 - ✅ Analizar archivo Excel y retornar estadísticas

@@ -97,13 +97,13 @@ Después de editar `prompts/registry.yaml`, ejecutar:
 
 ```bash
 # 1. Copiar el archivo actualizado al contenedor
-docker cp apps/api/prompts/registry.yaml octavios-chat-capital414-api:/app/prompts/registry.yaml
+docker cp apps/api/prompts/registry.yaml octavios-chat-client-project-api:/app/prompts/registry.yaml
 
 # 2. Reiniciar la API
-docker restart octavios-chat-capital414-api
+docker restart octavios-chat-client-project-api
 
 # 3. Verificar que los cambios se aplicaron
-docker exec octavios-chat-capital414-api cat /app/prompts/registry.yaml | grep "CERO ALUCINACIONES"
+docker exec octavios-chat-client-project-api cat /app/prompts/registry.yaml | grep "CERO ALUCINACIONES"
 ```
 
 ### Alternativa: Agregar Volumen (Permanente)
@@ -145,7 +145,7 @@ python apps/api/tests/manual/diagnose_hallucination.py
 1. **Re-subir** el PDF (fuerza re-procesamiento con nuevas validaciones)
 2. **Revisar logs** de la API:
    ```bash
-   docker logs octavios-chat-capital414-api --tail 100 | grep -E "OCR|quality|insufficient"
+   docker logs octavios-chat-client-project-api --tail 100 | grep -E "OCR|quality|insufficient"
    ```
 3. **Hacer pregunta** "¿Qué es esto?"
 4. **Validar respuesta:**
@@ -196,7 +196,7 @@ python apps/api/tests/manual/inspect_pdf_extraction.py /ruta/al/archivo.pdf
 
 3. **Verificar logs de procesamiento:**
    ```bash
-   docker logs octavios-chat-capital414-api --tail 200 | grep -A 5 "hybrid PDF extraction"
+   docker logs octavios-chat-client-project-api --tail 200 | grep -A 5 "hybrid PDF extraction"
    ```
    Debe mostrar:
    - `"min_chars_threshold": 150`
@@ -205,7 +205,7 @@ python apps/api/tests/manual/inspect_pdf_extraction.py /ruta/al/archivo.pdf
 
 4. **Verificar contexto RAG:**
    ```bash
-   docker logs octavios-chat-capital414-api --tail 200 | grep "Added document context"
+   docker logs octavios-chat-client-project-api --tail 200 | grep "Added document context"
    ```
    Debe mostrar:
    - `"context_length": > 0`

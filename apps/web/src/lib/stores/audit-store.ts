@@ -191,7 +191,7 @@ export const useAuditStore = create<AuditStoreState>()(
 
           // Call audit API via apiClient
           const report = await apiClient.auditDocument(firstFileId, {
-            clientName: clientName || "Capital414",
+            clientName: clientName || "ClientProject",
             // Add signal for cancellation
             // @ts-ignore - signal not in types yet
             signal: controller.signal,

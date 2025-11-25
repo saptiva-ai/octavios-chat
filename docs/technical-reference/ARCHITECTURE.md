@@ -27,7 +27,7 @@ OctaviOS Chat is a **production-ready conversational AI platform** with:
 
 - 💬 **Conversational AI**: Multi-model support (Saptiva Turbo/Cortex/Ops)
 - 📄 **RAG (Retrieval-Augmented Generation)**: Document-aware conversations
-- ✅ **COPILOTO_414**: Automated document compliance validation (4 auditors)
+- ✅ **Document Audit**: Automated document compliance validation (4 auditors)
 - 🔧 **MCP (Model Context Protocol)**: 5 production tools with lazy loading (~98% context reduction)
 - 📊 **Deep Research**: Multi-step research with Aletheia integration
 - 🔐 **Enterprise Security**: JWT auth, rate limiting, ownership validation
@@ -105,7 +105,7 @@ flowchart TB
         subgraph Services["Business Services"]
             ChatService["Chat Service<br/>(Strategy: Standard/RAG)"]
             DocumentService["Document Service<br/>(3-tier extraction)"]
-            ValidationCoord["Validation Coordinator<br/>(COPILOTO_414)"]
+            ValidationCoord["Validation Coordinator<br/>(Document Audit)"]
             ResearchCoord["Research Coordinator<br/>(Aletheia)"]
             HistoryService["History Service<br/>(timeline aggregation)"]
         end
@@ -115,7 +115,7 @@ flowchart TB
             ToolCache["Tool Cache<br/>(in-memory)"]
 
             subgraph Tools["Production Tools (5)"]
-                AuditTool["audit_file<br/>(COPILOTO_414)"]
+                AuditTool["audit_file<br/>(Document Audit)"]
                 ExcelTool["excel_analyzer<br/>(data analytics)"]
                 VizTool["viz_tool<br/>(visualization)"]
                 ResearchTool["deep_research<br/>(Aletheia)"]
@@ -333,7 +333,7 @@ apps/api/src/
 │   ├── document.py         # File metadata + extracted text
 │   ├── history_event.py    # Unified timeline
 │   ├── user.py             # User accounts
-│   └── validation_report.py  # COPILOTO_414 results
+│   └── validation_report.py  # Document Audit results
 ├── routers/                 # FastAPI endpoints
 │   ├── auth.py             # /api/auth/* (login, register)
 │   ├── chat.py             # /api/chat (streaming, history)
@@ -347,7 +347,7 @@ apps/api/src/
     ├── document_service.py  # Document processing
     ├── document_extraction.py  # 3-tier fallback
     ├── history_service.py  # Timeline aggregation
-    ├── validation_coordinator.py  # COPILOTO_414
+    ├── validation_coordinator.py  # Document Audit
     ├── aletheia.py         # Deep research client
     └── storage.py          # MinIO client
 ```

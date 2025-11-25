@@ -182,7 +182,7 @@ __all__ = [
 
 ### **Verificación de Tests**
 ```bash
-docker exec capital414-chat-api pytest /app/tests/ --no-cov -q
+docker exec client-project-chat-api pytest /app/tests/ --no-cov -q
 
 # Resultados:
 # ✅ 630 passed

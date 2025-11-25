@@ -133,7 +133,7 @@ This handles both API response formats:
 
 5. **Check API logs**:
    ```bash
-   docker logs octavios-chat-capital414-api --tail 50 | grep -i "streaming\|error"
+   docker logs octavios-chat-client-project-api --tail 50 | grep -i "streaming\|error"
    ```
    - Should NOT show `AttributeError: 'dict' object has no attribute 'delta'` ✅
 

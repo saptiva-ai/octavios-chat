@@ -152,7 +152,7 @@ diff tests/outputs_markdown/report1.md external_outputs/report1.md
 
 ```bash
 # 1. Procesar varios PDFs de prueba
-cp tests/data/capital414/*.pdf tests/inputs_pdfs/
+cp tests/data/client-project/*.pdf tests/inputs_pdfs/
 make convert-markdown
 
 # 2. Revisar CONVERSION_REPORT.md

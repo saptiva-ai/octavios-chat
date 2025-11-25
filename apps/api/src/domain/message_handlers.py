@@ -183,7 +183,7 @@ def create_handler_chain() -> MessageHandler:
     # Standard chat is the fallback (always last)
     standard_handler = StandardChatHandler()
 
-    # CLIENT-SPECIFIC: Import and add AuditCommandHandler for Capital414
+    # CLIENT-SPECIFIC: Import and add AuditCommandHandler for ClientProject
     # This handler is only available in client branches with audit system
     try:
         from .audit_handler import AuditCommandHandler

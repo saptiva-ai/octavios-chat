@@ -162,13 +162,13 @@ def sample_file_hash(sample_pdf_content):
 @pytest.fixture
 def test_pdfs_dir():
     """Path to test PDFs directory."""
-    return Path(__file__).parent.parent.parent.parent / "packages/tests-e2e/tests/data/capital414"
+    return Path(__file__).parent.parent.parent.parent / "packages/tests-e2e/tests/data/client-project"
 
 
 @pytest.fixture
-def capital414_uso_ia_pdf(test_pdfs_dir):
-    """Path to Capital414_usoIA.pdf test file."""
-    return test_pdfs_dir / "Capital414_usoIA.pdf"
+def client-project_uso_ia_pdf(test_pdfs_dir):
+    """Path to ClientProject_usoIA.pdf test file."""
+    return test_pdfs_dir / "ClientProject_usoIA.pdf"
 
 
 # Pytest configuration

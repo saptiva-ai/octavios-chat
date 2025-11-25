@@ -222,7 +222,7 @@ Get full tool specification (loads tool on-demand if needed).
 {
   "name": "audit_file",
   "version": "1.0.0",
-  "display_name": "Audit File (COPILOTO_414)",
+  "display_name": "Audit File (Document Audit)",
   "description": "Validates document compliance...",
   "category": "compliance",
   "capabilities": ["async", "validation"],

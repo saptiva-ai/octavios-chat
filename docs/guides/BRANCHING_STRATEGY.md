@@ -2,7 +2,7 @@
 
 ## Problema
 
-Necesitamos mantener el feature de **auditoría de archivos** (COPILOTO_414) separado del código base principal, pero permitir que ambos evolucionen de forma independiente:
+Necesitamos mantener el feature de **auditoría de archivos** (Document Audit) separado del código base principal, pero permitir que ambos evolucionen de forma independiente:
 
 - `main`/`upstream`: Código base sin features de cliente
 - `develop`: Desarrollo activo sin features de cliente
@@ -199,7 +199,7 @@ git push origin feature/audit-system
 
 ### Documentación
 
-- `docs/copiloto-414/` - Documentación del sistema COPILOTO_414
+- `docs/copiloto-414/` - Documentación del sistema Document Audit
 - `docs/AUDIT_SYSTEM_ARCHITECTURE.md` - Arquitectura del sistema
 
 ## Resolución de Conflictos Comunes
@@ -271,7 +271,7 @@ Si trabajas frecuentemente en ambos branches:
 git worktree add ../octavios-audit feature/audit-system
 
 # Ahora tienes dos directorios:
-# ~/octavios-chat-capital414/ (develop)
+# ~/octavios-chat-client-project/ (develop)
 # ~/octavios-audit/ (feature/audit-system)
 
 # Puedes trabajar en ambos simultáneamente sin cambiar de branch

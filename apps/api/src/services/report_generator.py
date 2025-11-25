@@ -78,7 +78,7 @@ async def generate_audit_report_pdf(
         report = await ValidationReport.get("report_id_123")
         pdf_buffer = await generate_audit_report_pdf(
             report=report,
-            filename="Capital414_presentacion.pdf"
+            filename="ClientProject_presentacion.pdf"
         )
 
         # Upload to MinIO

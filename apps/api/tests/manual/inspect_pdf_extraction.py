@@ -102,7 +102,7 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python inspect_pdf_extraction.py <path_to_pdf>")
         print("\nExample:")
-        print("  python inspect_pdf_extraction.py /tmp/Capital414_presentacion.pdf")
+        print("  python inspect_pdf_extraction.py /tmp/ClientProject_presentacion.pdf")
         sys.exit(1)
 
     pdf_path = sys.argv[1]

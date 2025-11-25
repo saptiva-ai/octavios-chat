@@ -165,7 +165,7 @@ Database operations consolidated.
 **Example**:
 ```bash
 make db CMD=backup
-# Internally calls: ./scripts/db-manager.sh backup octavios-chat-capital414
+# Internally calls: ./scripts/db-manager.sh backup octavios-chat-client-project
 ```
 
 **Backup Location**: `backups/mongodb/mongodb-YYYYMMDD-HHMMSS.archive`
@@ -196,7 +196,7 @@ make db CMD=backup
 # Hundreds of deployment targets
 deploy-demo:
 	@echo "Deploying to demo..."
-	@ssh jf@34.172.67.93 "cd /home/jf/capital414-chat && ..."
+	@ssh jf@34.172.67.93 "cd /home/jf/client-project-chat && ..."
 	# ... 50 more lines
 
 deploy-demo-fast:
@@ -233,7 +233,7 @@ Edit `scripts/deploy-manager.sh`:
 case "$ENV" in
   "demo")
     SERVER_HOST="jf@34.172.67.93"
-    DEPLOY_PATH="/home/jf/capital414-chat"
+    DEPLOY_PATH="/home/jf/client-project-chat"
     ;;
   "staging")  # NEW
     SERVER_HOST="user@staging.server.com"

@@ -50,7 +50,7 @@ La migración de `attached_file_ids` → `documents` se ejecutó exitosamente en
 ### Comando Ejecutado
 
 ```bash
-docker exec octavios-chat-capital414-api \
+docker exec octavios-chat-client-project-api \
   python scripts/migrate_attached_files_to_documents.py --execute
 ```
 

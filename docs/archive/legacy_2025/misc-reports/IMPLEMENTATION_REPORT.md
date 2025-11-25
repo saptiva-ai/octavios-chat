@@ -5,7 +5,7 @@
 Successfully resolved all 6 skipped tests in the chat endpoint test suite without introducing any regressions. The existing 23 passing tests remain untouched, maintaining the current 79% pass rate baseline and aiming for 100% (29/29 tests) after these fixes.
 
 **Commit Hash:** `ba49257`
-**Branch:** `client/capital414`
+**Branch:** `client/client-project`
 **Status:** Ready for integration testing with Docker
 
 ## Test Coverage
@@ -82,7 +82,7 @@ finally:
 - Proper cleanup prevents test pollution
 
 **Implementation:**
-- File: `/home/jazielflo/Proyects/octavios-chat-capital414/apps/api/tests/unit/routers/chat/test_message_endpoints_v2.py`
+- File: `/home/jazielflo/Proyects/octavios-chat-client-project/apps/api/tests/unit/routers/chat/test_message_endpoints_v2.py`
 - Lines: 250-290 and 292-328
 - Changes:
   - Removed `@pytest.mark.skip` decorator
@@ -171,7 +171,7 @@ class MockBeanieQueryBuilder:
 - Reusable for other Beanie query mocking needs
 
 **Implementation:**
-- File: `/home/jazielflo/Proyects/octavios-chat-capital414/apps/api/tests/unit/routers/chat/conftest.py`
+- File: `/home/jazielflo/Proyects/octavios-chat-client-project/apps/api/tests/unit/routers/chat/conftest.py`
 - Lines: 215-279
 - Changes in test files:
   - Removed `@pytest.mark.skip` decorators
@@ -413,4 +413,4 @@ All changes maintain backward compatibility, follow project conventions, and pro
 
 **Implementation Date:** 2025-11-10
 **Commit:** ba49257
-**Branch:** client/capital414
+**Branch:** client/client-project

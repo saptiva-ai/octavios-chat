@@ -79,7 +79,7 @@
 ## 🎯 Final Structure
 
 ```
-octavios-chat-capital414/
+octavios-chat-client-project/
 ├── apps/
 │   ├── api/                    # FastAPI backend
 │   │   ├── src/                # Source code

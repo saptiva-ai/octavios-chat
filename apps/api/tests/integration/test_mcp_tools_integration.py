@@ -5,7 +5,7 @@ These tests use real MongoDB, Redis, and MinIO connections via Docker Compose
 to validate end-to-end behavior of MCP tools:
 - deep_research (Aletheia integration)
 - extract_document_text (multi-tier extraction)
-- audit_file (COPILOTO_414 validation)
+- audit_file (Document Audit validation)
 - excel_analyzer (Excel data analysis)
 - viz_tool (chart generation)
 

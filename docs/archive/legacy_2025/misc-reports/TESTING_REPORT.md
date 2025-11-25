@@ -24,7 +24,7 @@ Execution Time: < 3 seconds
 ## Files Created
 
 ### 1. Test Configuration & Fixtures
-**File**: `/home/jazielflo/Proyects/octavios-chat-capital414/apps/api/tests/unit/routers/chat/conftest.py`
+**File**: `/home/jazielflo/Proyects/octavios-chat-client-project/apps/api/tests/unit/routers/chat/conftest.py`
 
 **Purpose**: Shared pytest fixtures for all chat endpoint tests
 
@@ -49,8 +49,8 @@ Execution Time: < 3 seconds
 ---
 
 ### 2. Message Endpoints Tests (v1 & v2)
-**File**: `/home/jazielflo/Proyects/octavios-chat-capital414/apps/api/tests/unit/routers/chat/test_message_endpoints.py`
-**File**: `/home/jazielflo/Proyects/octavios-chat-capital414/apps/api/tests/unit/routers/chat/test_message_endpoints_v2.py`
+**File**: `/home/jazielflo/Proyects/octavios-chat-client-project/apps/api/tests/unit/routers/chat/test_message_endpoints.py`
+**File**: `/home/jazielflo/Proyects/octavios-chat-client-project/apps/api/tests/unit/routers/chat/test_message_endpoints_v2.py`
 
 **Endpoints Tested**:
 - `POST /chat` - Send chat message (streaming and non-streaming)
@@ -82,8 +82,8 @@ Execution Time: < 3 seconds
 ---
 
 ### 3. Session Endpoints Tests (v1 & v2)
-**File**: `/home/jazielflo/Proyects/octavios-chat-capital414/apps/api/tests/unit/routers/chat/test_session_endpoints.py`
-**File**: `/home/jazielflo/Proyects/octavios-chat-capital414/apps/api/tests/unit/routers/chat/test_session_endpoints_v2.py`
+**File**: `/home/jazielflo/Proyects/octavios-chat-client-project/apps/api/tests/unit/routers/chat/test_session_endpoints.py`
+**File**: `/home/jazielflo/Proyects/octavios-chat-client-project/apps/api/tests/unit/routers/chat/test_session_endpoints_v2.py`
 
 **Endpoints Tested**:
 - `GET /sessions` - List user sessions with pagination
@@ -127,8 +127,8 @@ Execution Time: < 3 seconds
 ---
 
 ### 4. History Endpoints Tests (v1 & v2)
-**File**: `/home/jazielflo/Proyects/octavios-chat-capital414/apps/api/tests/unit/routers/chat/test_history_endpoints.py`
-**File**: `/home/jazielflo/Proyects/octavios-chat-capital414/apps/api/tests/unit/routers/chat/test_history_endpoints_v2.py`
+**File**: `/home/jazielflo/Proyects/octavios-chat-client-project/apps/api/tests/unit/routers/chat/test_history_endpoints.py`
+**File**: `/home/jazielflo/Proyects/octavios-chat-client-project/apps/api/tests/unit/routers/chat/test_history_endpoints_v2.py`
 
 **Endpoints Tested**:
 - `GET /history/{chat_id}` - Retrieve chat message history with optional research task enrichment
@@ -220,7 +220,7 @@ pytest tests/unit/routers/chat/ --cov=src.routers.chat --cov-report=html
 make test-api
 
 # Direct Docker execution
-docker exec capital414-chat-api python -m pytest tests/unit/routers/chat/ -v --no-cov
+docker exec client-project-chat-api python -m pytest tests/unit/routers/chat/ -v --no-cov
 ```
 
 ### Current Test Results

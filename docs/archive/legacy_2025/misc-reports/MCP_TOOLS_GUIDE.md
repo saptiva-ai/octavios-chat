@@ -1,6 +1,6 @@
 # Guía Práctica: Tools MCP de OctaviOS
 
-Guía completa para usar las herramientas MCP (Model Context Protocol) en OctaviOS Chat, con énfasis en **adjuntar archivos** y **auditar archivos** (COPILOTO_414).
+Guía completa para usar las herramientas MCP (Model Context Protocol) en OctaviOS Chat, con énfasis en **adjuntar archivos** y **auditar archivos** (Document Audit).
 
 ---
 
@@ -10,7 +10,7 @@ OctaviOS actualmente tiene **5 tools MCP** implementadas:
 
 | # | Tool | Descripción | Versión |
 |---|------|-------------|---------|
-| 1 | `audit_file` | Validación COPILOTO_414 de compliance | 1.0.0 |
+| 1 | `audit_file` | Validación Document Audit de compliance | 1.0.0 |
 | 2 | `excel_analyzer` | Análisis de archivos Excel | 1.0.0 |
 | 3 | `viz_tool` | Generación de gráficos (Plotly/ECharts) | 1.0.0 |
 | 4 | `deep_research` | Investigación multi-paso con Aletheia | 1.0.0 |
@@ -57,7 +57,7 @@ curl http://localhost:8000/api/mcp/health
 
 ## 📁 Flujo: Adjuntar y Auditar Archivo
 
-Este es el flujo completo para subir un PDF y auditarlo con COPILOTO_414.
+Este es el flujo completo para subir un PDF y auditarlo con Document Audit.
 
 ### Paso 1: Autenticación
 
@@ -141,7 +141,7 @@ curl http://localhost:8000/api/mcp/tools \
 #     "name": "audit_file",
 #     "version": "1.0.0",
 #     "display_name": "Audit File",
-#     "description": "Validate PDF documents against COPILOTO_414 compliance policies...",
+#     "description": "Validate PDF documents against Document Audit compliance policies...",
 #     "category": "general",
 #     "requires_auth": true
 #   },
@@ -149,7 +149,7 @@ curl http://localhost:8000/api/mcp/tools \
 # ]
 ```
 
-### Paso 4: Auditar Archivo (COPILOTO_414)
+### Paso 4: Auditar Archivo (Document Audit)
 
 ```bash
 # Invocar tool de auditoría
@@ -210,7 +210,7 @@ curl -X POST http://localhost:8000/api/mcp/tools/invoke \
 
 ## 🛠️ Ejemplos Detallados por Tool
 
-### 1️⃣ audit_file - Validación COPILOTO_414
+### 1️⃣ audit_file - Validación Document Audit
 
 **Propósito**: Validar compliance de documentos PDF contra políticas corporativas.
 
@@ -609,5 +609,5 @@ docker compose restart api
 1. **Frontend UI**: Interfaz gráfica para invocar tools
 2. **Webhooks**: Notificaciones cuando auditoría completa
 3. **Batch Processing**: Auditar múltiples archivos en paralelo
-4. **Custom Policies**: Editor visual de políticas COPILOTO_414
+4. **Custom Policies**: Editor visual de políticas Document Audit
 5. **Reportes PDF**: Generación automática de reportes de auditoría

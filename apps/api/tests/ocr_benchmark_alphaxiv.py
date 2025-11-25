@@ -10,7 +10,7 @@ Genera reportes automáticos en JSON y Markdown con métricas cuantitativas.
 
 Usage:
     cd apps/api
-    python -m tests.ocr_benchmark_alphaxiv --pdf ../../tests/data/capital414/Capital414_presentacion.pdf --pages 2
+    python -m tests.ocr_benchmark_alphaxiv --pdf ../../tests/data/client-project/ClientProject_presentacion.pdf --pages 2
 """
 
 import argparse

@@ -66,7 +66,7 @@ BT
 50 700 Td
 (CAPITAL414 TEST DOCUMENT - RAG FIX VERIFICATION) Tj
 0 -20 Td
-(This document contains information about Capital414's main product.) Tj
+(This document contains information about ClientProject's main product.) Tj
 0 -20 Td
 (Our flagship product is called OCTAVIOS CHAT.) Tj
 0 -20 Td
@@ -203,7 +203,7 @@ def main():
 
     # Step 5: Send chat message with document context
     print("[5/5] Send chat message with document context...")
-    query = "¿Cuál es el producto principal de Capital414 según el documento?"
+    query = "¿Cuál es el producto principal de ClientProject según el documento?"
 
     try:
         chat_result = send_chat_message(token, conversation_id, [doc_id], query)

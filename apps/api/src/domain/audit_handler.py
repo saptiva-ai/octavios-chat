@@ -1,7 +1,7 @@
 """
 Audit Command Handler - Client-specific message handler.
 
-This handler is only present in client-specific branches (e.g., client/capital414).
+This handler is only present in client-specific branches (e.g., client/client-project).
 It processes "Auditar archivo:" commands and delegates to the audit system.
 
 Architecture:
@@ -46,7 +46,7 @@ class AuditCommandHandler(MessageHandler):
     Handler for audit commands in chat.
 
     Detects messages starting with "Auditar archivo:" and executes
-    document validation using the COPILOTO_414 audit system.
+    document validation using the Document Audit audit system.
 
     This handler is client-specific and only exists in branches with audit support.
     """

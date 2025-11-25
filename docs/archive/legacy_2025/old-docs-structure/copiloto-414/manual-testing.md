@@ -21,19 +21,19 @@ Esta guía documenta el smoke test manual recomendado antes de entregas a Capita
 3. Abrir http://localhost:3000, iniciar sesión con `demo / Demo1234`.
 4. Conservar panel de minio opcional (`http://localhost:9001`) para monitorear objetos (`documents/`, `audit-reports/`).
 
-**Archivos de prueba** (`tests/data/capital414/`):
+**Archivos de prueba** (`tests/data/client-project/`):
 
 | Archivo | Escenario |
 |---------|-----------|
-| `Capital414_presentacion.pdf` | Documento completo con disclaimers correctos |
-| `Capital414_ProcesoValoracion.pdf` | Contenido con cifras y tablas |
-| `Capital414_usoIA.pdf` | Material con gráficos (prueba de logo y color) |
+| `ClientProject_presentacion.pdf` | Documento completo con disclaimers correctos |
+| `ClientProject_ProcesoValoracion.pdf` | Contenido con cifras y tablas |
+| `ClientProject_usoIA.pdf` | Material con gráficos (prueba de logo y color) |
 
 ---
 
 ## 2. Ingesta de archivos (Files V1)
 
-1. Desde el chat, usar **Agregar archivos** y cargar `Capital414_presentacion.pdf`.
+1. Desde el chat, usar **Agregar archivos** y cargar `ClientProject_presentacion.pdf`.
 2. Confirmar en UI que aparecen los estados `Subiendo → Procesando → Listo` en menos de 90s.
 3. Verificar SSE en consola:
    ```bash
@@ -59,7 +59,7 @@ Esta guía documenta el smoke test manual recomendado antes de entregas a Capita
    - Etiqueta de política detectada (`414-std` esperado).
 3. Confirmar persistencia en Mongo:
    ```bash
-   docker exec -it capital414-chat-mongodb mongosh copilotos \
+   docker exec -it client-project-chat-mongodb mongosh copilotos \
      --eval 'db.validation_reports.find().sort({created_at:-1}).limit(1).pretty()'
    ```
    - `policy_id`, `summary.findings_by_severity`, `document_id` deben estar presentes.
@@ -79,7 +79,7 @@ Esta guía documenta el smoke test manual recomendado antes de entregas a Capita
    ```bash
    docker exec -it octavios-redis redis-cli GET doc:text:<document_id>
    ```
-4. Limpiar archivos y repetir con `Capital414_ProcesoValoracion.pdf` para verificar detección de formato numérico.
+4. Limpiar archivos y repetir con `ClientProject_ProcesoValoracion.pdf` para verificar detección de formato numérico.
 
 ---
 

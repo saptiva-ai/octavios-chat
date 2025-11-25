@@ -557,7 +557,7 @@ class Settings:
 **Acción Recomendada**:
 Verificar índices en MongoDB:
 ```bash
-docker exec -it octavios-chat-capital414-mongo-1 mongosh
+docker exec -it octavios-chat-client-project-mongo-1 mongosh
 > use octavios_chat
 > db.messages.getIndexes()
 ```

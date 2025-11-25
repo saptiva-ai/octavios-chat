@@ -10,10 +10,10 @@ github.com/saptiva-ai/octavios-chat
   └── main (open-source base product)
 
 FORK (private)
-github.com/saptiva-ai/octavios-chat-capital414
+github.com/saptiva-ai/octavios-chat-client-project
   ├── main (synced with upstream, open-source features)
   ├── develop (active development, open-source features)
-  └── client/capital414 (client-specific features + open-source base)
+  └── client/client-project (client-specific features + open-source base)
 ```
 
 ## Architecture Pattern: Chain of Responsibility
@@ -64,7 +64,7 @@ def create_handler_chain() -> MessageHandler:
 
 #### Client-Specific Handler (Capital 414 Only)
 
-File: `apps/api/src/domain/audit_handler.py` (only in `client/capital414` branch)
+File: `apps/api/src/domain/audit_handler.py` (only in `client/client-project` branch)
 
 ```python
 class AuditCommandHandler(MessageHandler):
@@ -89,7 +89,7 @@ User Message
     ↓
 create_handler_chain()
     ↓
-    ├── AuditCommandHandler? ← Only in client/capital414
+    ├── AuditCommandHandler? ← Only in client/client-project
     │   ├── can_handle() = True → process() → Return result
     │   └── can_handle() = False → Pass to next
     ↓
@@ -134,27 +134,27 @@ git merge main
 git push origin develop
 
 # Update client branch with new changes
-git checkout client/capital414
+git checkout client/client-project
 git merge develop  # Or: git rebase develop for cleaner history
 
 # Resolve conflicts if any (keep audit files!)
 git add .
 git commit -m "merge: sync with develop"
-git push origin client/capital414
+git push origin client/client-project
 ```
 
 ### 3. Working on Client-Specific Features
 
-Add or modify audit system in `client/capital414`:
+Add or modify audit system in `client/client-project`:
 
 ```bash
-git checkout client/capital414
+git checkout client/client-project
 
 # Modify audit-specific files
 git add apps/api/src/domain/audit_handler.py
 git add apps/api/src/services/*auditor*.py
 git commit -m "feat(audit): improve validation accuracy"
-git push origin client/capital414
+git push origin client/client-project
 ```
 
 ### 4. Contributing to Upstream
@@ -163,7 +163,7 @@ To contribute shared features back to the public repo:
 
 ```bash
 # Create PR from fork to upstream
-# From: saptiva-ai/octavios-chat-capital414:main
+# From: saptiva-ai/octavios-chat-client-project:main
 # To:   saptiva-ai/octavios-chat:main
 
 # Ensure NO client-specific code is included!
@@ -189,7 +189,7 @@ apps/api/src/
 │   └── message_handlers.py ← Shared base
 ```
 
-### Client-Specific Files (Only in client/capital414)
+### Client-Specific Files (Only in client/client-project)
 
 ```
 apps/api/src/
@@ -213,7 +213,7 @@ apps/api/src/
     └── logo_template.png
 ```
 
-### Frontend Files (client/capital414)
+### Frontend Files (client/client-project)
 
 ```
 apps/web/src/
@@ -242,7 +242,7 @@ docker compose -f docker-compose.yml up -d
 ### Client-Specific Version (Capital 414)
 
 ```bash
-git checkout client/capital414
+git checkout client/client-project
 docker compose -f docker-compose.yml up -d
 # Runs with full audit system
 ```
@@ -292,7 +292,7 @@ class CustomReportHandler(MessageHandler):
 ### 2. Register in Chain (client branch only)
 
 ```python
-# apps/api/src/domain/message_handlers.py (in client/capital414)
+# apps/api/src/domain/message_handlers.py (in client/client-project)
 def create_handler_chain() -> MessageHandler:
     standard_handler = StandardChatHandler()
 
@@ -309,7 +309,7 @@ def create_handler_chain() -> MessageHandler:
 
 ### 3. Add Feature Files
 
-Create all necessary service/model/schema files in `client/capital414` branch only.
+Create all necessary service/model/schema files in `client/client-project` branch only.
 
 ## Common Pitfalls
 
@@ -323,7 +323,7 @@ Create all necessary service/model/schema files in `client/capital414` branch on
 ### ✅ Do
 
 - Use handler chain for all message processing
-- Keep client code in `client/capital414` branch
+- Keep client code in `client/client-project` branch
 - Sync regularly from `upstream/main`
 - Test both versions (with/without client features)
 - Document all client-specific patterns
@@ -340,7 +340,7 @@ make test-api  # Should pass without audit system
 ### Client-Specific Tests
 
 ```bash
-# In client/capital414 branch
+# In client/client-project branch
 make test-api  # Tests both base + audit features
 make test-audit  # Tests only audit system
 ```

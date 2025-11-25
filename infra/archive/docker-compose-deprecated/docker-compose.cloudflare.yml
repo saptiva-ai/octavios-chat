@@ -13,15 +13,15 @@ services:
   # ========================================
   mongodb:
     image: mongo:7.0
-    container_name: ${COMPOSE_PROJECT_NAME:-capital414-chat}-mongodb
+    container_name: ${COMPOSE_PROJECT_NAME:-client-project-chat}-mongodb
     restart: unless-stopped
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USER}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD}
       MONGO_INITDB_DATABASE: octavios
     volumes:
-      - ${PROD_DEPLOY_PATH:-/home/jf/capital414-chat}/data/mongodb:/data/db
-      - ${PROD_DEPLOY_PATH:-/home/jf/capital414-chat}/data/mongodb_config:/data/configdb
+      - ${PROD_DEPLOY_PATH:-/home/jf/client-project-chat}/data/mongodb:/data/db
+      - ${PROD_DEPLOY_PATH:-/home/jf/client-project-chat}/data/mongodb_config:/data/configdb
     expose:
       - "27017"
     healthcheck:
@@ -31,7 +31,7 @@ services:
       retries: 5
       start_period: 60s
     networks:
-      - capital414-network
+      - client-project-network
     logging:
       driver: "json-file"
       options:
@@ -43,7 +43,7 @@ services:
   # ========================================
   redis:
     image: redis:7-alpine
-    container_name: ${COMPOSE_PROJECT_NAME:-capital414-chat}-redis
+    container_name: ${COMPOSE_PROJECT_NAME:-client-project-chat}-redis
     restart: unless-stopped
     command: >
       redis-server
@@ -52,7 +52,7 @@ services:
       --maxmemory 512mb
       --maxmemory-policy allkeys-lru
     volumes:
-      - ${PROD_DEPLOY_PATH:-/home/jf/capital414-chat}/data/redis:/data
+      - ${PROD_DEPLOY_PATH:-/home/jf/client-project-chat}/data/redis:/data
     expose:
       - "6379"
     healthcheck:
@@ -62,7 +62,7 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - capital414-network
+      - client-project-network
     logging:
       driver: "json-file"
       options:
@@ -74,14 +74,14 @@ services:
   # ========================================
   minio:
     image: minio/minio:latest
-    container_name: ${COMPOSE_PROJECT_NAME:-capital414-chat}-minio
+    container_name: ${COMPOSE_PROJECT_NAME:-client-project-chat}-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     volumes:
-      - ${PROD_DEPLOY_PATH:-/home/jf/capital414-chat}/data/minio:/data
+      - ${PROD_DEPLOY_PATH:-/home/jf/client-project-chat}/data/minio:/data
     ports:
       - "${MINIO_API_PORT:-9000}:9000"
       - "${MINIO_CONSOLE_PORT:-9001}:9001"
@@ -91,7 +91,7 @@ services:
       timeout: 10s
       retries: 3
     networks:
-      - capital414-network
+      - client-project-network
     logging:
       driver: "json-file"
       options:
@@ -103,7 +103,7 @@ services:
   # ========================================
   languagetool:
     image: erikvl87/languagetool:latest
-    container_name: ${COMPOSE_PROJECT_NAME:-capital414-chat}-languagetool
+    container_name: ${COMPOSE_PROJECT_NAME:-client-project-chat}-languagetool
     restart: unless-stopped
     environment:
       - Java_Xms=512m
@@ -117,7 +117,7 @@ services:
       retries: 3
       start_period: 60s
     networks:
-      - capital414-network
+      - client-project-network
     logging:
       driver: "json-file"
       options:
@@ -129,10 +129,10 @@ services:
   # ========================================
   api:
     image: octavios-api:latest
-    container_name: ${COMPOSE_PROJECT_NAME:-capital414-chat}-api
+    container_name: ${COMPOSE_PROJECT_NAME:-client-project-chat}-api
     restart: unless-stopped
     env_file:
-      - ${PROD_DEPLOY_PATH:-/home/jf/capital414-chat}/envs/.env.prod
+      - ${PROD_DEPLOY_PATH:-/home/jf/client-project-chat}/envs/.env.prod
     environment:
       - MONGODB_URL=mongodb://${MONGODB_USER}:${MONGODB_PASSWORD}@mongodb:27017/octavios?authSource=admin
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
@@ -164,7 +164,7 @@ services:
       retries: 5
       start_period: 90s
     networks:
-      - capital414-network
+      - client-project-network
     logging:
       driver: "json-file"
       options:
@@ -176,7 +176,7 @@ services:
   # ========================================
   web:
     image: octavios-web:latest
-    container_name: ${COMPOSE_PROJECT_NAME:-capital414-chat}-web
+    container_name: ${COMPOSE_PROJECT_NAME:-client-project-chat}-web
     restart: unless-stopped
     environment:
       - NODE_ENV=production
@@ -199,7 +199,7 @@ services:
       retries: 3
       start_period: 40s
     networks:
-      - capital414-network
+      - client-project-network
     logging:
       driver: "json-file"
       options:
@@ -211,15 +211,15 @@ services:
   # ========================================
   nginx:
     image: nginx:alpine
-    container_name: ${COMPOSE_PROJECT_NAME:-capital414-chat}-nginx
+    container_name: ${COMPOSE_PROJECT_NAME:-client-project-chat}-nginx
     restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./nginx/nginx.414.cloudflare.conf:/etc/nginx/nginx.conf:ro
-      - ${PROD_DEPLOY_PATH:-/home/jf/capital414-chat}/infra/ssl:/etc/nginx/ssl:ro
-      - ${PROD_DEPLOY_PATH:-/home/jf/capital414-chat}/logs/nginx:/var/log/nginx
+      - ${PROD_DEPLOY_PATH:-/home/jf/client-project-chat}/infra/ssl:/etc/nginx/ssl:ro
+      - ${PROD_DEPLOY_PATH:-/home/jf/client-project-chat}/logs/nginx:/var/log/nginx
     depends_on:
       - api
       - web
@@ -230,7 +230,7 @@ services:
       retries: 3
       start_period: 20s
     networks:
-      - capital414-network
+      - client-project-network
     logging:
       driver: "json-file"
       options:
@@ -241,6 +241,6 @@ services:
 # NETWORKS
 # ========================================
 networks:
-  capital414-network:
+  client-project-network:
     driver: bridge
-    name: capital414-production
+    name: client-project-production

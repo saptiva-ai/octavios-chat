@@ -389,7 +389,7 @@ describe("useAuditFlow", () => {
 
       const file = createMockFile(
         "file-555",
-        "Capital414_presentacion.pdf",
+        "ClientProject_presentacion.pdf",
         "READY",
       );
 
@@ -399,14 +399,14 @@ describe("useAuditFlow", () => {
 
       expect(mockApiClient.sendChatMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: "Auditar archivo: Capital414_presentacion.pdf",
+          message: "Auditar archivo: ClientProject_presentacion.pdf",
         }),
       );
 
       expect(logDebug).toHaveBeenCalledWith(
         "[useAuditFlow] Sending audit message",
         expect.objectContaining({
-          message: "Auditar archivo: Capital414_presentacion.pdf",
+          message: "Auditar archivo: ClientProject_presentacion.pdf",
         }),
       );
     });

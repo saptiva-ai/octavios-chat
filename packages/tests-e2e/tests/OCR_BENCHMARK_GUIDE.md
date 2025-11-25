@@ -34,7 +34,7 @@ make test-benchmark
 ```
 
 Esto ejecuta el benchmark con configuración por defecto:
-- **PDF**: Capital414_presentacion.pdf
+- **PDF**: ClientProject_presentacion.pdf
 - **Páginas**: Primeras 3 páginas
 - **Output**: tests/reports/
 
@@ -43,7 +43,7 @@ Esto ejecuta el benchmark con configuración por defecto:
 ```bash
 # Dentro del contenedor API
 docker exec octavios-api python -m tests.test_ocr_benchmark \
-    --pdf /app/../../tests/data/capital414/Capital414_presentacion.pdf \
+    --pdf /app/../../tests/data/client-project/ClientProject_presentacion.pdf \
     --pages 3 \
     --output /app/../../tests/reports
 ```
@@ -53,7 +53,7 @@ docker exec octavios-api python -m tests.test_ocr_benchmark \
 ```bash
 cd apps/api
 python -m tests.test_ocr_benchmark \
-    --pdf ../../tests/data/capital414/Capital414_presentacion.pdf \
+    --pdf ../../tests/data/client-project/ClientProject_presentacion.pdf \
     --pages 3 \
     --output ../../tests/reports \
     --deepseek-endpoint "$HF_OCR_ENDPOINT" \
@@ -64,7 +64,7 @@ python -m tests.test_ocr_benchmark \
 
 | Opción | Descripción | Default | Ejemplos |
 |--------|-------------|---------|----------|
-| `--pdf` | Path al PDF de prueba | (requerido) | `Capital414_presentacion.pdf` |
+| `--pdf` | Path al PDF de prueba | (requerido) | `ClientProject_presentacion.pdf` |
 | `--pages` | Páginas a probar | `1,2,3` | `3`, `1,5,10`, `1-5` |
 | `--output` | Directorio de reportes | `tests/reports` | `tests/benchmark_results` |
 | `--deepseek-endpoint` | Endpoint de DeepSeek | (opcional) | `https://api.example.com/ocr` |
@@ -83,7 +83,7 @@ python -m tests.test_ocr_benchmark --pdf test.pdf --pages 1,3,5
 python -m tests.test_ocr_benchmark --pdf test.pdf --pages 1-10
 
 # Usar otro PDF
-python -m tests.test_ocr_benchmark --pdf tests/data/capital414/Capital414_usoIA.pdf --pages 5
+python -m tests.test_ocr_benchmark --pdf tests/data/client-project/ClientProject_usoIA.pdf --pages 5
 ```
 
 ## 📊 Resultados Generados
@@ -96,7 +96,7 @@ El benchmark genera automáticamente 2 archivos en `tests/reports/`:
 {
   "metadata": {
     "timestamp": "2025-01-03 16:30:45",
-    "pdf_path": "tests/data/capital414/Capital414_presentacion.pdf",
+    "pdf_path": "tests/data/client-project/ClientProject_presentacion.pdf",
     "pages_tested": [1, 2, 3]
   },
   "results": {
@@ -148,7 +148,7 @@ Ejemplo de reporte generado:
 # 📊 OCR Benchmark Report
 
 **Generated**: 2025-01-03 16:30:45
-**PDF**: Capital414_presentacion.pdf
+**PDF**: ClientProject_presentacion.pdf
 **Pages Tested**: [1, 2, 3]
 
 ## Performance Summary
@@ -271,7 +271,7 @@ make reload-env-service SERVICE=api
 
 ```bash
 # Verificar path del PDF
-ls -la tests/data/capital414/*.pdf
+ls -la tests/data/client-project/*.pdf
 
 # Usar path absoluto si es necesario
 python -m tests.test_ocr_benchmark --pdf /full/path/to/file.pdf

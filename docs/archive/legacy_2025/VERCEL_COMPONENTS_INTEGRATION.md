@@ -388,7 +388,7 @@ make dev
 **Beneficios**:
 - No abarrotar el chat
 - Mejor experiencia para document review
-- Reutilizable para auditoría (COPILOTO_414)
+- Reutilizable para auditoría (Document Audit)
 
 ---
 
@@ -396,7 +396,7 @@ make dev
 
 ### Repositorios
 - **Vercel AI Chatbot**: `/home/jazielflo/Proyects/ai-chatbot`
-- **Octavio's Chat**: `/home/jazielflo/Proyects/octavios-chat-capital414`
+- **Octavio's Chat**: `/home/jazielflo/Proyects/octavios-chat-client-project`
 
 ### Componentes Fuente (Vercel)
 - `components/preview-attachment.tsx`

@@ -570,7 +570,7 @@ async def download_audit_report_pdf(
 
         # Create filename with timestamp
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        filename = f"auditoria_{report.client_name or 'capital414'}_{timestamp}.pdf"
+        filename = f"auditoria_{report.client_name or 'client-project'}_{timestamp}.pdf"
 
         logger.info(
             "Serving audit PDF on-demand",
