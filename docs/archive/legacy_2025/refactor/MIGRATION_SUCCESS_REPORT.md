@@ -153,7 +153,7 @@ session = await ChatSession.get('8bc56bdb-d56c-41e1-b46d-592edafaee9a')
 ```
 📄 Sample Documents:
    1. Product Bible.pdf              | Status: ready | Segments: 1
-   2. PRD - BajaWare.pdf             | Status: ready | Segments: 1
+   2. PRD - ClientProject.pdf             | Status: ready | Segments: 1
    3. document_691bc0b1              | Status: ready | Segments: 0
 ```
 

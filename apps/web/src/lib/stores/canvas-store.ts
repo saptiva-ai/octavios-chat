@@ -89,7 +89,7 @@ export const useCanvasStore = create<CanvasState>()(
           payload?.report_pdf_url ||
           null;
 
-        // Allow opening without structured audit content (e.g., BankAdvisor UI render)
+        // Allow opening without structured audit content (e.g., Generic UI render)
         set((state) => ({
           isOpen: true,
           isSidebarOpen: true,
