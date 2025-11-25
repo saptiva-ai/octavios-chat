@@ -20,7 +20,7 @@
   - [Stack y capacidades](#stack-y-capacidades)
     - [Plataforma conversacional](#plataforma-conversacional)
     - [Documentos y RAG](#documentos-y-rag)
-    - [Cumplimiento COPILOTO\_414](#cumplimiento-copiloto_414)
+    - [Cumplimiento Document Audit](#cumplimiento-document-audit)
     - [Model Context Protocol (MCP)](#model-context-protocol-mcp)
     - [Seguridad y observabilidad](#seguridad-y-observabilidad)
   - [Arquitectura](#arquitectura)
