@@ -40,7 +40,7 @@ fi
 case "$ENV" in
   "demo")
     SERVER_HOST="jf@34.172.67.93"
-    DEPLOY_PATH="/home/jf/capital414-chat"
+    DEPLOY_PATH="/home/user/octavios-chat"
     ;;
   "prod")
     # Load from .env if available

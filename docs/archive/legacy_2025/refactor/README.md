@@ -194,10 +194,8 @@ Backend: (usa segmentos cacheados) "Según el reporte pág. 12..."
 
 ## 🔗 Referencias Adicionales
 
-### Documentación del Proyecto
-- [CLAUDE.md](../../CLAUDE.md) - Arquitectura actual del sistema
-- [Capital 414 Success Report](../CAPITAL414_SUCCESS_REPORT.md) - Fixes tácticos ya implementados
-- [README.md](../../README.md) - Documentación general del proyecto
+### Reports
+- [Refactoring Summary](REFACTORING_SUMMARY.md) - Resumen técnico de cambios
 
 ### Contexto de 414 Capital
 - Los fixes tácticos ya resuelven los síntomas (errores silenciosos, identidad Qwen)

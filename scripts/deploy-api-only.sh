@@ -16,8 +16,8 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-DEMO_SERVER="jf@34.172.67.93"
-DEMO_PATH="/home/jf/capital414-chat"
+DEMO_SERVER="user@your-server-ip"
+DEMO_PATH="/home/user/octavios-chat"
 
 log_info() { echo -e "${BLUE}ℹ${NC} $1"; }
 log_success() { echo -e "${GREEN}✔${NC} $1"; }
@@ -34,7 +34,7 @@ step() {
 main() {
     echo ""
     echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║  FAST API-ONLY DEPLOYMENT - 414.SAPTIVA.COM                  ║${NC}"
+    echo -e "${BLUE}║  FAST API-ONLY DEPLOYMENT                                     ║${NC}"
     echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     log_warning "Only deploying API container (Web/DB unchanged)"
@@ -88,7 +88,6 @@ main() {
     echo -e "${GREEN}║  API-ONLY DEPLOYMENT COMPLETE                                 ║${NC}"
     echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "${BLUE}Domain:${NC}       https://414.saptiva.com/api"
     echo -e "${BLUE}Status:${NC}       API container restarted"
     echo ""
     echo -e "${YELLOW}Note:${NC} Web, MongoDB, Redis, MinIO unchanged"

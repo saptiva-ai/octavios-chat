@@ -5,7 +5,7 @@
 set -e
 
 API_URL="http://localhost:8001"
-TEST_PDF="/home/jazielflo/Proyects/octavios-chat/tests/data/capital414/Capital414_presentacion.pdf"
+TEST_PDF="/home/jazielflo/Proyects/octavios-chat/tests/data/sample.pdf"
 
 echo "🧪 Testing Copiloto 414 Audit Flow"
 echo "=================================="

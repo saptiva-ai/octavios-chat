@@ -352,7 +352,7 @@ Para aprobar despliegue a producción:
 
 ### Contexto del Proyecto
 
-- [Capital 414 Success Report](../CAPITAL414_SUCCESS_REPORT.md) - Fixes tácticos implementados
+- [Refactoring Summary](REFACTORING_SUMMARY.md) - Resumen técnico de cambios
 - [CLAUDE.md](../../CLAUDE.md) - Arquitectura actual del sistema
 
 ---

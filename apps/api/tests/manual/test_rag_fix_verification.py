@@ -64,7 +64,7 @@ stream
 BT
 /F1 12 Tf
 50 700 Td
-(CAPITAL414 TEST DOCUMENT - RAG FIX VERIFICATION) Tj
+(TEST DOCUMENT - RAG FIX VERIFICATION) Tj
 0 -20 Td
 (This document contains information about ClientProject's main product.) Tj
 0 -20 Td
