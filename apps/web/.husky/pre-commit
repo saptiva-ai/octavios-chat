@@ -1,2 +1,21 @@
+#!/bin/bash
+# Husky pre-commit hook for Octavius 2.0
+# Runs: 1) Secrets detection, 2) Linting & formatting
+
+set -e
+
+# Navigate to project root
+cd "$(git rev-parse --show-toplevel)"
+
+# STEP 1: Run secrets detection
+echo "🔒 Running secrets detection..."
+bash scripts/git-secrets-check.sh --staged
+if [ $? -ne 0 ]; then
+    echo "❌ Commit blocked: Secrets detected"
+    exit 1
+fi
+
+# STEP 2: Run lint-staged for code quality
+echo "🧹 Running linters and formatters..."
 cd apps/web
 npx lint-staged

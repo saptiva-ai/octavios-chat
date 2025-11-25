@@ -41,6 +41,26 @@ async def start_deep_research(
 
     Creates a new research task and returns task ID for tracking progress.
     The actual research is delegated to Aletheia orchestrator.
+
+    TODO [Octavius-2.0 / Phase 3]: Refactor to async queue pattern
+    Current implementation: Synchronous Aletheia orchestrator call (blocks until completion)
+    Target implementation: Producer-Consumer with BullMQ/Celery queue
+
+    Migration steps:
+    1. Create DeepResearchProducer in services/deep_research_service.py
+    2. Implement DeepResearchConsumer in workers/deep_research_worker.py
+    3. Add queue configuration in core/queue_config.py (Celery recommended)
+    4. Update this endpoint to return 202 Accepted immediately after enqueuing
+    5. Add GET /api/tasks/{task_id} for status polling
+    6. Implement WebSocket/SSE for real-time progress updates
+
+    Benefits:
+    - Non-blocking chat interface (immediate response)
+    - Retry logic for failed research tasks
+    - Better resource management and rate limiting
+    - Horizontal scaling of research workers
+
+    See: apps/api/src/workers/README.md for full architecture plan
     """
     user_id = getattr(http_request.state, 'user_id', 'anonymous')
 
@@ -54,6 +74,9 @@ async def start_deep_research(
         # Create task record
         task = await service.create_research_task(request, user_id)
 
+        # TODO [Octavius-2.0]: Replace with queue.enqueue() call
+        # Current: Synchronous orchestrator call
+        # Future: await deep_research_queue.add_job(task_id=task.id, query=request.query)
         # Submit to Aletheia orchestrator
         await service.start_aletheia_research(task, request, user_id)
 

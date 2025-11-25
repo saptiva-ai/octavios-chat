@@ -11,7 +11,7 @@ import os
 # Add src to path so we can import the service
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "apps", "api", "src"))
 
-from services.qdrant_service import QdrantService
+from src.services.qdrant_service import QdrantService
 
 
 def test_qdrant_integration():
