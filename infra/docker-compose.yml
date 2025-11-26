@@ -501,36 +501,19 @@ services:
 # VOLUMES
 # ========================================
 volumes:
-  # Data volumes with configurable bind mounts for production
-  # In production, set VOLUME_TYPE=none to use bind mounts
-  # In development, leave unset to use Docker-managed volumes
+  # Data volumes - simple Docker-managed volumes for development
+  # For production bind mounts, override these in docker-compose.prod.yml
   mongodb_data:
     driver: local
-    driver_opts:
-      type: ${VOLUME_TYPE:-volume}
-      device: ${VOLUME_MONGODB_PATH:-mongodb_data}
-      o: ${VOLUME_OPTIONS:-}
 
   mongodb_config:
     driver: local
-    driver_opts:
-      type: ${VOLUME_TYPE:-volume}
-      device: ${VOLUME_MONGODB_CONFIG_PATH:-mongodb_config}
-      o: ${VOLUME_OPTIONS:-}
 
   redis_data:
     driver: local
-    driver_opts:
-      type: ${VOLUME_TYPE:-volume}
-      device: ${VOLUME_REDIS_PATH:-redis_data}
-      o: ${VOLUME_OPTIONS:-}
 
   minio_data:
     driver: local
-    driver_opts:
-      type: ${VOLUME_TYPE:-volume}
-      device: ${VOLUME_MINIO_PATH:-minio_data}
-      o: ${VOLUME_OPTIONS:-}
 
   # These volumes always use Docker-managed storage
   nginx_logs:

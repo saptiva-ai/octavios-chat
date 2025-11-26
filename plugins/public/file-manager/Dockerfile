@@ -26,22 +26,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Install Python dependencies
-COPY requirements.txt .
+COPY plugins/public/file-manager/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source code
-COPY src/ ./src/
+COPY plugins/public/file-manager/src/ ./src/
 
 # Environment variables
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8003
 
-# Create non-root user
-RUN useradd --create-home --shell /bin/bash --uid 1001 plugin_user \
-    && chown -R plugin_user:plugin_user /app
-
-USER plugin_user
+# Create non-root user (commented for development - volume mount permissions)
+# In production, uncomment the following lines for security
+# RUN useradd --create-home --shell /bin/bash --uid 1001 plugin_user \
+#     && chown -R plugin_user:plugin_user /app
+# USER plugin_user
 
 EXPOSE 8003
 

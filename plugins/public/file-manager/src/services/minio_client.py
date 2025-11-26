@@ -47,8 +47,10 @@ class MinioClient:
     def ensure_bucket(self) -> None:
         """Ensure the documents bucket exists."""
         try:
-            if not self.client.bucket_exists(self.bucket):
-                self.client.make_bucket(self.bucket, location=self.region)
+            # MinIO 7.2.x API: bucket_exists() is now a method with bucket parameter
+            found = self.client.bucket_exists(bucket_name=self.bucket)
+            if not found:
+                self.client.make_bucket(bucket_name=self.bucket, location=self.region)
                 logger.info("Created bucket", bucket=self.bucket)
             else:
                 logger.debug("Bucket exists", bucket=self.bucket)

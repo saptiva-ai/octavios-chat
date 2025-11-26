@@ -10,7 +10,8 @@ Note: This package shadows the sibling tools.py module. To import utilities
 from tools.py, use: `from src.services import tools as tools_module`
 """
 
-from .audit_file_tool import execute_audit_file_tool
+# NOTE: audit_file_tool moved to plugins/capital414-private (Plugin-First Architecture)
+# from .audit_file_tool import execute_audit_file_tool
 
 # Re-export helpers from sibling tools.py module.
 # This package shadows tools.py, so we manually load it to expose its utilities.
@@ -31,7 +32,7 @@ else:
     raise ImportError("Could not load tools.py module")
 
 __all__ = [
-    "execute_audit_file_tool",
+    # "execute_audit_file_tool",  # Moved to plugins/capital414-private
     "normalize_tools_state",
     "build_tools_context",
     "describe_tools_markdown",
