@@ -66,7 +66,7 @@
 - Chat multi-modelo (Turbo, Cortex, Ops, etc.) con SSE y chain-of-responsibility (`apps/backend/src/routers/chat/endpoints/message_endpoints.py`).
 - Integración MCP oficial (FastMCP) con lazy loading y telemetría (`apps/backend/src/mcp/server.py`).
 - Pipeline documental: subida segura, cache Redis y extracción multi-tier antes del RAG (`apps/backend/src/services/document_service.py`).
-- COPILOTO_414 coordina auditores de disclaimer, formato, logos, tipografía, gramática y consistencia semántica (`apps/backend/src/services/validation_coordinator.py`).
+- COPILOTO_414 coordina auditores de disclaimer, formato, logos, tipografía, gramática y consistencia semántica (`plugins/capital414-private/src/validation_coordinator.py`).
 - Frontend Next.js 14 + Zustand con herramientas de archivos, research y UI accesible (`apps/web/src/lib/stores/chat-store.ts`).
 - Seguridad empresarial: JWT con revocación en Redis, rate limiting y políticas CSP en Nginx (`apps/backend/src/middleware/auth.py`).
 
@@ -209,7 +209,7 @@ La cadena de dependencias garantiza inicio ordenado:
 | Backend Core | `apps/backend/` |
 | File Manager Plugin | `plugins/public/file-manager/` |
 | Capital414 Plugin | `plugins/capital414-private/` |
-| Backend FileManagerClient | `apps/backend/src/clients/file_manager.py` |
+| Backend FileManagerClient | `apps/backend/src/services/file_manager_client.py` |
 | Capital414 FileManagerClient | `plugins/capital414-private/src/clients/file_manager.py` |
 | Docker Compose | `infra/docker-compose.yml` |
 
@@ -410,8 +410,13 @@ flowchart TB
   - **Orquestación**: `AdaptiveRetrievalOrchestrator` selecciona estrategia óptima según tipo de query
 
 ### Cumplimiento COPILOTO_414
-- Coordinador async que ejecuta auditores de disclaimer, formato, tipografía, color, logo, gramática y consistencia (`apps/backend/src/services/validation_coordinator.py`).
-- Las políticas se resuelven dinámicamente y cada hallazgo se serializa a `ValidationReport` (Mongo + MinIO).
+- **Arquitectura**: Plugin privado independiente (`plugins/capital414-private/`) corriendo en puerto 8002
+- **Coordinador**: `ValidationCoordinator` ejecuta 8 auditores en paralelo de forma asíncrona
+- **Auditores**: Disclaimer, Format, Typography, Grammar, Logo, Color, Entity, Semantic
+- **Comunicación**: Backend invoca via MCP protocol o HTTP Client
+- **File Handling**: Plugin consume `file-manager` plugin para descargar PDFs temporales
+- **Persistencia**: Reportes se guardan en MongoDB + MinIO con políticas dinámicas
+- **Ubicación**: `plugins/capital414-private/src/validation_coordinator.py`
 
 ### Integración Audit File + Canvas (OpenCanvas)
 
@@ -420,7 +425,7 @@ Sistema de auditoría con visualización en canvas lateral inspirado en OpenCanv
 **Flujo de Auditoría con Canvas**:
 
 1. **Trigger**: Usuario escribe `"Auditar archivo: filename.pdf"` en el chat
-2. **Handler**: `AuditCommandHandler` (`apps/backend/src/domain/audit_handler.py`) intercepta el comando usando Chain of Responsibility
+2. **Handler**: `AuditCommandHandler` (`plugins/capital414-private/src/handlers/audit_handler.py`) intercepta el comando usando Chain of Responsibility
 3. **Ejecución**: Se ejecuta `validate_document()` con 8 auditores paralelos (disclaimer, format, typography, grammar, logo, color, entity, semantic)
 4. **Generación Dual de Contenido**:
    - **Human Summary** (para chat): Resumen conversacional y no técnico generado por `generate_human_summary()` (`apps/backend/src/services/summary_formatter.py`)
@@ -484,7 +489,7 @@ class Artifact(Document):
 ```
 
 **Referencias de código**:
-- Backend Handler: `apps/backend/src/domain/audit_handler.py:168-176` (creación artifact)
+- Backend Handler: `plugins/capital414-private/src/handlers/audit_handler.py:168-176` (creación artifact)
 - Frontend Context: `apps/web/src/context/CanvasContext.tsx`
 - Canvas Panel: `apps/web/src/components/canvas/canvas-panel.tsx`
 - Summary Formatter: `apps/backend/src/services/summary_formatter.py`
@@ -950,7 +955,7 @@ make setup-quick   # valores por defecto (CI/CD)
 ### 2. Levantar entorno
 ```bash
 make dev
-# Usa docker compose -p octavios-chat-capital414 (contenedores: octavios-chat-capital414-api, -web, etc.)
+# Usa docker compose -p capital414-chat (contenedores: capital414-chat-api, -web, etc.)
 ```
 Servicios:
 - Frontend http://localhost:3000
@@ -975,9 +980,9 @@ Ejecuta health checks de contenedores, API, DB y frontend.
 2. **Persistencia**: FastAPI guarda streaming en disco, mueve a MinIO y almacena metadatos en Mongo (`apps/backend/src/services/storage.py`, `apps/backend/src/services/minio_storage.py`).
 3. **Cache + Embeddings**: texto se guarda en Redis (1h TTL); chunks se convierten a embeddings y se almacenan en Qdrant para búsqueda semántica (`apps/backend/src/services/document_processing_service.py`).
 4. **Extracción RAG**: herramienta `get_segments` usa búsqueda semántica en Qdrant para recuperar chunks relevantes según la query del usuario (`apps/backend/src/mcp/tools/get_segments.py`).
-5. **Auditoría via Chat Command**: comando "Auditar archivo: filename.pdf" ejecuta `AuditCommandHandler` con 8 auditores paralelos vía `ValidationCoordinator` (`apps/backend/src/domain/audit_handler.py`, `apps/backend/src/services/validation_coordinator.py`).
+5. **Auditoría via Chat Command**: comando "Auditar archivo: filename.pdf" ejecuta `AuditCommandHandler` con 8 auditores paralelos vía `ValidationCoordinator` (`plugins/capital414-private/src/handlers/audit_handler.py`, `plugins/capital414-private/src/validation_coordinator.py`).
 6. **Generación Dual de Contenido**: se genera resumen humano para chat y reporte técnico para canvas (`apps/backend/src/services/summary_formatter.py`).
-7. **Artifact Creation**: reporte técnico se persiste como `Artifact` con metadata `tool_invocations` para detección frontend (`apps/backend/src/domain/audit_handler.py:168-176`).
+7. **Artifact Creation**: reporte técnico se persiste como `Artifact` con metadata `tool_invocations` para detección frontend (`plugins/capital414-private/src/handlers/audit_handler.py:168-176`).
 8. **Canvas Rendering**: `CanvasPanel` detecta artifact en metadata y renderiza el reporte técnico en panel lateral resizable (`apps/web/src/components/canvas/canvas-panel.tsx`).
 9. **Limpieza**: `ChatView` aplica una limpieza agresiva de adjuntos tras la respuesta exitosa, asegurando que no queden archivos huérfanos en la UI (`useFiles` con selectores).
 
@@ -1014,9 +1019,9 @@ El proyecto se valida principalmente desde el `Makefile`, lo que encapsula entor
 |---------|---------|----------|
 | `make test-all` | Full suite (Docker) | Ejecuta `test-api` + `test-web` + `test-sh` dentro de contenedores; ideal antes de PR. |
 | `make test` | Alias rápido | Invoca `test-api` + `test-web` + `test-sh` manteniendo los contenedores ya levantados. |
-| `make test-api` | API (contenedor `octavios-chat-capital414-api`) | Corre `pytest` con cobertura; acepta `FILE=...` y `ARGS=...` para casos específicos. |
+| `make test-api` | API (contenedor `capital414-chat-api`) | Corre `pytest` con cobertura; acepta `FILE=...` y `ARGS=...` para casos específicos. |
 | `make test-unit-host` | API (host/.venv) | Ejecuta pytest desde `.venv`, útil cuando no quieres depender de Docker. |
-| `make test-web` | Frontend | Lanza `pnpm test` en el contenedor `octavios-chat-capital414-web`; soporta `FILE` y `ARGS`. |
+| `make test-web` | Frontend | Lanza `pnpm test` en el contenedor `capital414-chat-web`; soporta `FILE` y `ARGS`. |
 | `make test-e2e` | Playwright | Corre la carpeta `tests/` usando la stack en marcha (`make dev`). |
 | `make test-mcp` | MCP | Suite dedicada (unit + integration); ver variantes `test-mcp-lazy`, `test-mcp-marker`, `test-mcp-diff`. |
 | `make lint` / `make lint-fix` | Calidad | Ruff + ESLint; `lint-fix` aplica autofixes seguros. |
@@ -1057,7 +1062,7 @@ El proyecto se valida principalmente desde el `Makefile`, lo que encapsula entor
    make shell-api  # (opcional) si quieres entrar al contenedor api
    ```
 2. **Backend (pytest)**  
-   - Contenedores: `make test-api` (usa `octavios-chat-capital414-api`) o `make test` para correr API + web en un solo paso.  
+   - Contenedores: `make test-api` (usa `capital414-chat-api`) o `make test` para correr API + web en un solo paso.  
    - Host/.venv: `make test-unit-host ARGS="-k streaming"` cuando necesites debugear sin Docker.  
    - Casos MCP: `make test-mcp`, `make test-mcp-lazy` o `make test-mcp-integration`.
 3. **Frontend (jest)**  
@@ -1105,47 +1110,77 @@ Vista rápida de carpetas raíz y submódulos más relevantes. La idea es poder 
 
 ```
 .
-├── apps
-│   ├── api
-│   │   ├── src
+├── apps/
+│   ├── backend/                 # 🟢 Core (Kernel) - Puerto 8000
+│   │   ├── src/
 │   │   │   ├── core/            # Config, logging, auth, telemetry
-│   │   │   ├── routers/         # FastAPI routers (chat, files, MCP…)
-│   │   │   ├── services/        # ChatService, ValidationCoordinator, storage
-│   │   │   ├── mcp/             # FastMCP server, lazy routes, tools
-│   │   │   └── domain/          # ChatContext, builders, handlers
-│   │   └── tests/               # Unit, integration, MCP suites
-│   └── web
+│   │   │   ├── routers/         # FastAPI routers (chat, auth, sessions)
+│   │   │   ├── services/        # ChatService, DocumentService, FileManagerClient
+│   │   │   ├── mcp/             # MCP client para comunicación con plugins
+│   │   │   └── domain/          # ChatContext, builders, message handlers
+│   │   ├── tests/               # Unit, integration tests
+│   │   └── Dockerfile           # Multi-stage: development + production
+│   └── web/                     # 🔵 Frontend - Puerto 3000
 │       ├── src/app/             # Next.js App Router
-│       ├── src/components/      # Chat UI, document review, files
+│       ├── src/components/      # Chat UI, canvas, document review
 │       ├── src/lib/             # Stores (Zustand), apiClient, MCP client
 │       └── __tests__/           # Jest + Testing Library
-├── backend/                      # Paquetes Python compartidos (MCP base)
-├── docs/                         # Arquitectura, auditoría, MCP y planes
-├── infra/                        # Docker Compose, Nginx, observabilidad
-├── packages/                     # Librerías TS compartidas (pnpm workspaces)
-├── scripts/                      # Deploy, troubleshooting, herramientas DevOps
-└── tests/                        # Playwright y utilidades e2e
+├── plugins/
+│   ├── public/                  # 🟠 Public Plugins (Open Source Ready)
+│   │   └── file-manager/        # Puerto 8003 - Upload/Download/Extract
+│   │       ├── src/
+│   │       │   ├── routers/     # upload.py, download.py, extract.py, health.py
+│   │       │   └── services/    # minio_client.py, redis_client.py, extraction_service.py
+│   │       ├── Dockerfile
+│   │       └── requirements.txt
+│   └── capital414-private/      # 🔴 Private Plugins (Proprietary)
+│       └── capital414-auditor/  # Puerto 8002 - COPILOTO_414 Compliance
+│           ├── src/
+│           │   ├── auditors/    # disclaimer, format, grammar, logo, typography, color
+│           │   ├── clients/     # file_manager_client.py (HTTP client)
+│           │   └── main.py      # MCP server definition
+│           ├── Dockerfile
+│           └── requirements.txt
+├── docs/                        # 📚 Documentación técnica
+│   ├── ARCHITECTURE_MIGRATION.md   # Monolito → Plugin-First explicado
+│   ├── TESTING_PLAN.md             # Plan de testing (10 secciones)
+│   └── ...
+├── infra/                       # 🗄️ Infrastructure
+│   ├── docker-compose.yml       # Orchestration (Backend, Plugins, MongoDB, Redis, MinIO, etc.)
+│   └── observability/           # Prometheus, Grafana, Alertmanager
+├── scripts/                     # 🔧 DevOps scripts
+│   └── ...
+├── envs/                        # 🔐 Environment variables
+│   └── .env                     # Local development config
+└── tests/                       # 🧪 End-to-end tests
+    └── playwright/              # E2E test suites
 ```
 
 | Ruta | Propósito | Patrones / Notas |
 |------|-----------|------------------|
-| `apps/backend/src` | Backend FastAPI, integra Chat + MCP + COPILOTO_414 | Clean Architecture (core/routers/services), Chain of Responsibility en chat, Builder para respuestas |
-| `apps/web/src` | Frontend Next.js 14 con App Router y Zustand | State pattern en stores, Gateway pattern en `lib/api-client.ts`, componentes UI críticos probados |
-| `apps/backend/src/mcp` | Servidor FastMCP, herramientas (audit_file, excel_analyzer, etc.) y rutas lazy | Adapter hacia FastAPI, Lazy loading para reducir contexto, integración con telemetría |
-| `apps/backend/src/services` | Servicios de dominio (ChatService, ValidationCoordinator, Storage, etc.) | Strategy + Orchestrator para chat/auditorías, integración con MinIO, Redis y SAPTIVA |
-| `docs/` | Documentación detallada (ARCHITECTURE, MCP, auditoría, planes de migración) | Diagramas Mermaid, reportes de fases, guías operativas |
-| `infra/` | Docker Compose, Nginx, observabilidad, pipelines de despliegue | Healthchecks por servicio, perfiles dev/prod, dashboards Prometheus/Grafana |
-| `scripts/` | Scripts bash/python para deploy, salud, limpieza, testing MCP | Automatizan tareas repetitivas (`make troubleshoot`, `deploy.sh`, etc.) |
-| `tests/` | Suites Playwright/E2E y utilidades adicionales | Escenarios end-to-end sobre el stack completo |
-| `Makefile` | Centro de comandos para contenedores, pruebas, seguridad, CI | Agrupa +120 targets (`make dev`, `make test-mcp`, `make test-api-file FILE=...`) y aplica políticas de entornos |
-| `envs/` | Variables locales, demo y producción (`.env`, `.env.local`, `.env.prod`) | El Makefile carga el archivo correcto según el target evitando mezclar credenciales |
-| `packages/` | Librerías TypeScript reutilizables (pnpm workspace) | UI tokens, hooks compartidos y clientes base |
+| `apps/backend/src` | **Core (Kernel)** - Backend ligero solo orquesta chat, auth y sesiones | Clean Architecture (core/routers/services), Chain of Responsibility en chat, Builder para respuestas. Delega a plugins via HTTP/MCP |
+| `apps/web/src` | **Frontend** - Next.js 14 con App Router, React Query y Zustand | State pattern en stores, Gateway pattern en `lib/api-client.ts`, Optimistic updates, componentes UI probados |
+| `plugins/public/file-manager/` | **Public Plugin** - Infraestructura de archivos (Upload/Download/Extract) | Expone endpoints REST, usa MinIO para storage, Redis para cache, independiente del core |
+| `plugins/capital414-private/` | **Private Plugin** - COPILOTO_414 compliance auditing | ValidationCoordinator ejecuta 8 auditores en paralelo, expone MCP tools, consume file-manager via HTTP client |
+| `apps/backend/src/services` | **Core Services** - ChatService, DocumentService, FileManagerClient | Strategy pattern para chat, HTTP clients para comunicación con plugins, NO contiene auditores (movidos a plugin) |
+| `apps/backend/src/mcp` | **MCP Client** - Comunicación con plugins MCP | Lazy loading, tool discovery, invocación remota de herramientas en plugins |
+| `docs/` | Documentación técnica (arquitectura, migración, testing) | ARCHITECTURE_MIGRATION.md explica Monolito → Plugin-First, diagramas Mermaid actualizados |
+| `infra/` | Docker Compose, observabilidad | Healthchecks por servicio, dependency chain (Infrastructure → Plugins → Core → Frontend), perfiles dev/prod |
+| `scripts/` | Scripts DevOps (deploy, health checks, troubleshooting) | Automatizan tareas repetitivas, testing MCP, validación de servicios |
+| `tests/` | Playwright E2E tests | Escenarios end-to-end sobre stack completo (Backend + Plugins + Frontend) |
+| `Makefile` | Centro de comandos (120+ targets) | `make dev`, `make test-all`, `make verify`, maneja entornos y perfiles |
+| `envs/` | Variables de entorno (.env) | Configuración para desarrollo local, nombres de proyecto actualizados |
 
-Referencias rápidas para navegar código:
-- `apps/backend/src/routers/chat` contiene los endpoints REST/SSE; cada handler llama a estrategias en `apps/backend/src/domain/message_handlers`.
-- `apps/backend/src/mcp` se divide en `tool.py` (contratos), `lazy_routes.py` (discover/load/invoke) y `tools/*` (implementaciones concretas).
-- `apps/web/src/lib` concentra stores Zustand, clientes HTTP/MCP y hooks reutilizables (imperativo revisar aquí antes de duplicar lógica en componentes).
-- `infra/docker-compose*.yml` define perfiles y nombres de contenedor (`octavios-chat-capital414-*`) usados por el Makefile.
+Referencias rápidas para navegar código (Plugin-First):
+- **Core Backend**: `apps/backend/src/routers/chat` → Endpoints REST/SSE, delega a `domain/message_handlers`
+- **File Manager Plugin**: `plugins/public/file-manager/src/routers/` → Upload, download, extract endpoints
+- **Capital414 Plugin**: `plugins/capital414-private/src/` → ValidationCoordinator, 8 auditores, MCP tools
+- **Plugin Communication**:
+  - Backend → File Manager: `apps/backend/src/services/file_manager_client.py` (HTTP client)
+  - Capital414 → File Manager: `plugins/capital414-private/src/clients/file_manager_client.py` (HTTP client)
+  - Backend → Capital414: `apps/backend/src/mcp/client.py` (MCP protocol)
+- **Frontend Stores**: `apps/web/src/lib/stores/` → Zustand state management con React Query
+- **Docker Orchestration**: `infra/docker-compose.yml` → Dependency chain + healthchecks (contenedores `capital414-chat-*`)
 
 Tips rápidos:
 - Variables y comandos centrales viven en el `Makefile`, por lo que la mayoría de los flujos (setup, dev, verify, debug) son accesibles vía `make`.
