@@ -279,6 +279,8 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_started
+      file-manager:
+        condition: service_healthy
 
     ports:
       - "${API_PORT:-8000}:8000"
@@ -454,8 +456,10 @@ services:
       - octavios-network
 
   # ========================================
-  # CAPITAL414 AUDITOR - MCP Plugin Service
+  # CAPITAL414 AUDITOR - MCP Plugin Service (Private)
   # ========================================
+  # Plugin-First Architecture: Private plugin for document auditing
+  # Consumes files from file-manager plugin via HTTP
   capital414-auditor:
     build:
       context: ..
@@ -468,6 +472,8 @@ services:
       - MCP_SERVER_NAME=capital414-auditor
       - MCP_SERVER_PORT=8002
       - LANGUAGETOOL_URL=http://languagetool:8010/v2/check
+      # Plugin-First: Get files from file-manager instead of direct MinIO
+      - FILE_MANAGER_URL=http://file-manager:8003
       - PYTHONPATH=/app/src
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:
@@ -479,6 +485,8 @@ services:
       - /tmp/capital414-reports:/tmp/capital414-reports
     depends_on:
       languagetool:
+        condition: service_healthy
+      file-manager:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8002/health')"]
