@@ -19,8 +19,8 @@ import yaml
 import structlog
 from dataclasses import dataclass, field
 
-from ..models.document import Document
-from .compliance_auditor import load_compliance_config
+from ..schemas.models import DocumentInput as Document
+from .auditors.compliance_auditor import load_compliance_config
 
 logger = structlog.get_logger(__name__)
 

@@ -29,6 +29,8 @@ from ...services.policy_manager import resolve_policy
 from ...services.minio_storage import get_minio_storage
 from ...services.minio_service import minio_service
 from ...models.document import Document, DocumentStatus
+from ...models.validation_report import ValidationReport
+from datetime import datetime
 
 logger = structlog.get_logger(__name__)
 
@@ -302,7 +304,42 @@ class AuditFileTool(Tool):
                 summary_keys=list(report.summary.keys()) if getattr(report, "summary", None) else "None"
             )
 
-            # 5. Construct Response
+            # 5. Save ValidationReport to MongoDB (Phase 2: persistence responsibility)
+            validation_report = ValidationReport(
+                document_id=str(doc.id),
+                user_id=user_id,
+                job_id=report.job_id,
+                status="done" if report.status == "done" else "error",
+                client_name=policy.client_name,
+                auditors_enabled={
+                    "disclaimer": enable_disclaimer,
+                    "format": enable_format,
+                    "typography": enable_typography,
+                    "grammar": enable_grammar,
+                    "logo": enable_logo,
+                    "color_palette": enable_color_palette,
+                    "entity_consistency": enable_entity_consistency,
+                    "semantic_consistency": enable_semantic_consistency,
+                },
+                findings=[f.model_dump() for f in (report.findings or [])],
+                summary=report.summary or {},
+                attachments=report.attachments or {},
+            )
+            await validation_report.insert()
+
+            # Link validation report to document
+            await doc.update({"$set": {
+                "validation_report_id": str(validation_report.id),
+                "updated_at": datetime.utcnow()
+            }})
+
+            logger.info(
+                "Validation report saved to MongoDB",
+                report_id=str(validation_report.id),
+                doc_id=doc_id
+            )
+
+            # 6. Construct Response
             return {
                 "job_id": report.job_id,
                 "status": report.status,
@@ -313,7 +350,7 @@ class AuditFileTool(Tool):
                 "findings": [f.model_dump() for f in report.findings],
                 "summary": report.summary,
                 "attachments": report.attachments,
-                "validation_report_id": str(report.job_id)
+                "validation_report_id": str(validation_report.id)
             }
 
         except Exception as e:

@@ -15,12 +15,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # OpenCV dependencies
-    libgl1-mesa-glx \
+    # OpenCV dependencies (libgl1 replaces deprecated libgl1-mesa-glx)
+    libgl1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
-    libxrender-dev \
+    libxrender1 \
     # Tesseract OCR
     tesseract-ocr \
     tesseract-ocr-spa \
@@ -34,13 +34,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copy requirements first (for Docker cache optimization)
-COPY requirements.txt .
+COPY plugins/capital414-private/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source code
-COPY src/ ./src/
+COPY plugins/capital414-private/src/ ./src/
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash appuser && \

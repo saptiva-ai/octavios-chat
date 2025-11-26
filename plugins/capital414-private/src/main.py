@@ -345,8 +345,24 @@ async def health_check() -> str:
 # FastAPI Integration (for uvicorn)
 # ============================================================================
 
-# Create FastAPI app from FastMCP
-app = mcp.get_app()
+from starlette.applications import Starlette
+from starlette.responses import JSONResponse
+from starlette.routing import Route
+
+
+async def http_health(request):
+    """HTTP health check endpoint."""
+    return JSONResponse({"status": "ok", "service": "capital414-auditor"})
+
+
+# Create Starlette app from FastMCP and add health route
+_mcp_app = mcp.http_app()
+app = Starlette(
+    routes=[
+        Route("/health", http_health, methods=["GET"]),
+    ] + _mcp_app.routes,
+    lifespan=_mcp_app.lifespan,  # Required for FastMCP task group initialization
+)
 
 
 def run():

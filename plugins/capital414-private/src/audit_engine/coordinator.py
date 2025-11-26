@@ -24,6 +24,9 @@ import structlog
 
 from ..schemas.models import PageFragment, DocumentInput
 from ..schemas.audit_message import Finding, ValidationReportResponse
+
+# Type alias for compatibility with existing code
+Document = DocumentInput
 from .auditors.compliance_auditor import audit_disclaimers, load_compliance_config
 from .auditors.format_auditor import audit_format
 from .auditors.typography_auditor import audit_typography

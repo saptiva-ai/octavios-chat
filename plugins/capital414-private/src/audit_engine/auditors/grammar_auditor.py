@@ -11,9 +11,12 @@ from uuid import uuid4
 
 import structlog
 
-from ...schemas.models import Document
+from ...schemas.models import DocumentInput
 from ...schemas.audit_message import Finding, Location, Evidence
 from .languagetool_client import languagetool_client
+
+# Type alias for compatibility
+Document = DocumentInput
 
 logger = structlog.get_logger(__name__)
 

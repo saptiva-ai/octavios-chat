@@ -28,8 +28,7 @@ from .chat_context import ChatContext, ChatProcessingResult, MessageMetadata
 from ..models.document import Document, DocumentStatus
 from ..models.validation_report import ValidationReport
 from ..models.artifact import Artifact, ArtifactType
-from ..services.validation_coordinator import validate_document
-from ..services.policy_manager import resolve_policy
+from ..mcp.tools.audit_file import AuditFileTool
 from ..services.minio_storage import get_minio_storage
 from ..services.report_generator import generate_audit_report_pdf
 from ..services.summary_formatter import (
@@ -128,23 +127,29 @@ class AuditCommandHandler(MessageHandler):
                     user_message
                 )
 
-            # Get PDF path (materialize from MinIO if needed)
-            pdf_path, temp_pdf_path = await self._get_pdf_path(target_doc)
+            # Delegate to MCP Tool for validation
+            logger.info(
+                "Delegating validation to AuditFileTool (MCP)",
+                doc_id=str(target_doc.id),
+                user_id=user_id
+            )
 
-            if not pdf_path:
-                return await self._create_error_response(
-                    "No se pudo recuperar el PDF para auditoría.",
-                    "pdf_not_found",
-                    chat_service,
-                    chat_session,
-                    context,
-                    start_time,
-                    user_message
-                )
+            audit_tool = AuditFileTool()
+            tool_result = await audit_tool.execute(
+                payload={
+                    "doc_id": str(target_doc.id),
+                    "user_id": user_id,
+                    "policy_id": "auto"  # Auto-detect policy
+                },
+                context={
+                    "user_id": user_id,
+                    "session_id": str(chat_session.id)
+                }
+            )
 
-            # Execute validation
-            validation_report = await self._execute_validation(
-                target_doc, pdf_path, user_id, chat_session
+            # Retrieve saved ValidationReport from database
+            validation_report = await ValidationReport.find_one(
+                ValidationReport.job_id == tool_result["job_id"]
             )
 
             # Generate report URL (MinIO or on-demand endpoint)
@@ -181,13 +186,7 @@ class AuditCommandHandler(MessageHandler):
                 report_id=str(validation_report.id)
             )
 
-            # Cleanup temp PDF if created
-            if temp_pdf_path and temp_pdf_path.exists():
-                try:
-                    temp_pdf_path.unlink()
-                    logger.debug("Temporary PDF cleaned up", doc_id=str(target_doc.id))
-                except Exception as cleanup_exc:
-                    logger.warning("Failed to cleanup temporary PDF", error=str(cleanup_exc))
+            # Note: Temp PDF cleanup is now handled by AuditFileTool
 
             logger.info(
                 "Audit completed successfully",
@@ -315,128 +314,8 @@ class AuditCommandHandler(MessageHandler):
         )
         return None
 
-    async def _get_pdf_path(self, document: Document) -> tuple[Optional[Path], Optional[Path]]:
-        """Get PDF path, materializing from MinIO if needed."""
-        minio_storage = get_minio_storage()
-
-        if not minio_storage:
-            logger.error(
-                "MinIO storage not available",
-                doc_id=str(document.id)
-            )
-            return None, None
-
-        try:
-            # Try to materialize document from MinIO
-            logger.info(
-                "Materializing document from MinIO",
-                doc_id=str(document.id),
-                minio_key=document.minio_key,
-                minio_bucket=document.minio_bucket,
-                filename=document.filename
-            )
-
-            pdf_path, is_temp = minio_storage.materialize_document(
-                document.minio_key,
-                filename=document.filename,
-                bucket=document.minio_bucket,
-            )
-
-            temp_pdf_path = pdf_path if is_temp else None
-
-            logger.info(
-                "Document materialized successfully",
-                doc_id=str(document.id),
-                pdf_path=str(pdf_path),
-                is_temp=is_temp
-            )
-
-            return pdf_path, temp_pdf_path
-
-        except Exception as storage_exc:
-            logger.error(
-                "Failed to materialize PDF from MinIO",
-                doc_id=str(document.id),
-                minio_key=document.minio_key,
-                filename=document.filename,
-                error=str(storage_exc),
-                exc_type=type(storage_exc).__name__,
-                exc_info=True
-            )
-            return None, None
-
-    async def _execute_validation(
-        self,
-        document: Document,
-        pdf_path: Path,
-        user_id: str,
-        chat_session
-    ) -> ValidationReport:
-        """Execute document validation and save report."""
-        # Resolve policy
-        policy = await resolve_policy("auto", document=document)
-
-        # Run validation
-        logger.info(
-            "Running validation",
-            doc_id=str(document.id),
-            filename=document.filename,
-            policy_id=policy.id
-        )
-
-        report = await validate_document(
-            document=document,
-            pdf_path=pdf_path,
-            client_name=policy.client_name,
-            enable_disclaimer=True,
-            enable_format=True,
-            enable_typography=True,
-            enable_grammar=True,
-            enable_logo=True,
-            enable_color_palette=True,
-            enable_entity_consistency=True,
-            enable_semantic_consistency=True,
-            policy_config=policy.to_compliance_config(),
-            policy_id=policy.id,
-            policy_name=policy.name
-        )
-
-        # Save validation report to MongoDB
-        validation_report = ValidationReport(
-            document_id=str(document.id),
-            user_id=user_id,
-            job_id=report.job_id,
-            status="done" if report.status == "done" else "error",
-            client_name=policy.client_name,
-            auditors_enabled={
-                "disclaimer": True,
-                "format": True,
-                "typography": True,
-                "grammar": True,
-                "logo": True,
-                "color_palette": True,
-                "entity_consistency": True,
-                "semantic_consistency": True,
-            },
-            findings=[f.model_dump() for f in (report.findings or [])],
-            summary=report.summary or {},
-            attachments=report.attachments or {},
-        )
-        await validation_report.insert()
-
-        # Link validation report to document
-        await document.update({"$set": {
-            "validation_report_id": str(validation_report.id),
-            "updated_at": datetime.utcnow()
-        }})
-
-        logger.info(
-            "Validation report saved",
-            report_id=str(validation_report.id),
-            findings_count=len(report.findings)
-        )
-
-        return validation_report
+    # Phase 2 Refactoring: Removed _get_pdf_path() and _execute_validation()
+    # These responsibilities are now delegated to AuditFileTool (MCP)
 
     async def _generate_report_url(self, validation_report: ValidationReport, document: Document) -> str:
         """Generate PDF report and upload to MinIO or fallback to on-demand endpoint."""
