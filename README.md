@@ -1074,7 +1074,7 @@ sequenceDiagram
     API-->>Dropzone: Findings + summary
 ```
 
-Funcionamiento: se sigue un pipeline en etapas (Upload → Persistencia → Cache → Auditoría). Cada componente aplica validaciones específicas (Dropzone verifica tipos, Storage aplica límites, ValidationCoordinator ejecuta auditores configurables) y usa patrones como Strategy + Orchestrator para combinar hallazgos antes de devolverlos a la UI.
+Pipeline en etapas: Upload → Persistencia → Cache → Auditoría. Dropzone valida tipo/tamaño, Storage limita y limpia, File Manager persiste en MinIO/Redis, y ValidationCoordinator orquesta los auditores antes de responder a la UI.
 
 ### Flujo de Audit Command + Canvas (Plugin-First)
 
@@ -1135,26 +1135,10 @@ sequenceDiagram
     Canvas-->>User: Panel lateral con reporte técnico
 ```
 
-**Flujo explicado (Plugin-First Architecture)**:
-
-1. **Detección en Backend Core**: `POST /api/chat` recibe comando "Auditar archivo:" y lo delega al Capital414 Plugin vía MCP Protocol
-2. **Invocación MCP**: Backend Core usa `MCPClient.call_tool("audit_document_full")` para invocar al plugin
-3. **Procesamiento en Capital414 Plugin** (Port 8002):
-   - `AuditCommandHandler.can_handle()` detecta comando usando Chain of Responsibility
-   - Handler consume **File Manager Plugin** (Port 8001) vía HTTP Client para descargar PDF
-   - `ValidationCoordinator` ejecuta 8 auditores en paralelo (disclaimer, format, typography, grammar, logo, color, entity, semantic)
-4. **Generación Dual en Capital414**:
-   - `generate_human_summary()`: Resumen conversacional para chat (sin jerga técnica)
-   - `format_executive_summary_as_markdown()`: Reporte técnico completo para canvas
-5. **Persistencia**: Se crea `Artifact` con el reporte técnico y se guarda en MongoDB
-6. **Respuesta MCP**: Capital414 devuelve resultado vía MCP Protocol al Backend Core
-7. **Metadata Injection**: Backend Core inyecta `tool_invocations` con `create_artifact` en `decision_metadata`
-8. **Frontend Detection**: `ChatMessage` detecta `tool_invocations` y extrae `artifact.id`
-9. **Canvas Rendering**: `CanvasPanel` obtiene el artifact y renderiza el contenido técnico usando `MarkdownRenderer`
-
-**Resultado**: Usuario ve resumen amigable en el chat y detalles técnicos completos en el panel lateral sin saturar la conversación.
-
-**Ventaja Plugin-First**: Backend Core es ligero (solo orchestration), Capital414 Plugin contiene toda la lógica de auditoría aislada, y consume File Manager Plugin para operaciones de archivos - separación de responsabilidades completa.
+**Flujo resumido**:
+- Core detecta el comando y lo delega vía MCP a Capital414.
+- Capital414 baja el PDF desde File Manager, ejecuta 8 auditores y genera resumen humano + reporte técnico (markdown).
+- Se crea un Artifact con el reporte, se inyecta en `tool_invocations` y el frontend lo pinta: chat muestra el resumen, canvas el reporte.
 
 ### Lazy loading MCP (descubrimiento → invocación)
 
@@ -1219,15 +1203,11 @@ make verify
 Ejecuta health checks de contenedores, API, DB y frontend.
 
 ## Flujo de documentos y auditoría
-1. **Upload**: dropzone valida tipo/tamaño y envía multi-part (`apps/web/src/components/document-review/FileDropzone.tsx`).
-2. **Persistencia**: FastAPI guarda streaming en disco, mueve a MinIO y almacena metadatos en Mongo (`apps/backend/src/services/storage.py`, `apps/backend/src/services/minio_storage.py`).
-3. **Cache + Embeddings**: texto se guarda en Redis (1h TTL); chunks se convierten a embeddings y se almacenan en Qdrant para búsqueda semántica (`apps/backend/src/services/document_processing_service.py`).
-4. **Extracción RAG**: herramienta `get_segments` usa búsqueda semántica en Qdrant para recuperar chunks relevantes según la query del usuario (`apps/backend/src/mcp/tools/get_segments.py`).
-5. **Auditoría via Chat Command**: comando "Auditar archivo: filename.pdf" ejecuta `AuditCommandHandler` con 8 auditores paralelos vía `ValidationCoordinator` (`plugins/capital414-private/src/handlers/audit_handler.py`, `plugins/capital414-private/src/validation_coordinator.py`).
-6. **Generación Dual de Contenido**: se genera resumen humano para chat y reporte técnico para canvas (`apps/backend/src/services/summary_formatter.py`).
-7. **Artifact Creation**: reporte técnico se persiste como `Artifact` con metadata `tool_invocations` para detección frontend (`plugins/capital414-private/src/handlers/audit_handler.py:168-176`).
-8. **Canvas Rendering**: `CanvasPanel` detecta artifact en metadata y renderiza el reporte técnico en panel lateral resizable (`apps/web/src/components/canvas/canvas-panel.tsx`).
-9. **Limpieza**: `ChatView` aplica una limpieza agresiva de adjuntos tras la respuesta exitosa, asegurando que no queden archivos huérfanos en la UI (`useFiles` con selectores).
+1. Upload validado en dropzone → FastAPI guarda y envía a MinIO con metadatos en Mongo.
+2. Redis cachea texto; Qdrant guarda embeddings para RAG (`document_processing_service.py`).
+3. `get_segments` expone la búsqueda semántica como herramienta MCP.
+4. Comando "Auditar archivo" dispara `AuditCommandHandler` + `ValidationCoordinator` (8 auditores) y genera resumen humano + reporte técnico.
+5. Se crea un Artifact con el reporte (referenciado en `tool_invocations`) y el canvas lo renderiza; la UI limpia adjuntos tras responder.
 
 > **Nota RAG**: Sistema completo con Qdrant vector DB (embeddings 384-dim usando `paraphrase-multilingual-MiniLM-L12-v2`, cosine similarity con threshold 0.7, chunking inteligente con 500 tokens/chunk y 100 tokens overlap para preservar contexto). Ver configuración detallada en `docs/RAG_CONFIGURATION.md`.
 
