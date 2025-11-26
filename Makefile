@@ -118,9 +118,10 @@ dev:
 	@echo "$(GREEN)🟢  Services started $(NC)"
 	@echo "$(GREEN)🟢━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@echo "  $(BLUE)🔵 Frontend:  $(YELLOW)http://localhost:3000$(NC)"
-	@echo "  $(BLUE)🔵 Backend:   $(YELLOW)http://localhost:8000$(NC)"
-	@echo "  $(BLUE)🔵 Docs:      $(YELLOW)http://localhost:8000/docs$(NC)"
+	@echo "  $(BLUE)🔵 Frontend:     $(YELLOW)http://localhost:3000$(NC)"
+	@echo "  $(BLUE)🔵 Backend:      $(YELLOW)http://localhost:8000$(NC)"
+	@echo "  $(BLUE)🔵 File Manager: $(YELLOW)http://localhost:8003$(NC)"
+	@echo "  $(BLUE)🔵 Docs:         $(YELLOW)http://localhost:8000/docs$(NC)"
 	@echo ""
 	@echo "$(YELLOW)🟡 Waiting for services to be healthy...$(NC)"
 	@sleep 5
@@ -172,6 +173,12 @@ health:
 	@echo ""
 	@printf "  $(YELLOW)🟡 Backend Health:     $(NC)"
 	@if curl -sf http://localhost:8000/api/health > /dev/null 2>&1; then \
+		echo "$(GREEN)🟢 Healthy$(NC)"; \
+	else \
+		echo "$(RED)🔴 Unhealthy$(NC)"; \
+	fi
+	@printf "  $(YELLOW)🟡 File Manager:       $(NC)"
+	@if curl -sf http://localhost:8003/health > /dev/null 2>&1; then \
 		echo "$(GREEN)🟢 Healthy$(NC)"; \
 	else \
 		echo "$(RED)🔴 Unhealthy$(NC)"; \
