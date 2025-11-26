@@ -82,7 +82,7 @@ OctaviOS usa arquitectura **Plugin-First**: núcleo mínimo que orquesta y plugi
 ### Diagrama de Containers y Dependencias
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#94a3b8','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#475569','textColor': '#1f2937','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
 flowchart TB
     subgraph Frontend["🎨 Frontend Layer"]
         web["Next.js 14 Web<br/>Port: 3000<br/>Zustand + React Query"]:::frontend
@@ -380,7 +380,7 @@ Vista macro de los componentes: primero un mapa de patrones/contendores y luego 
 Arquitectura **Plugin-First** en una vista: Core ligero que delega en plugins y comparte patrones transversales (Chain of Responsibility, Builder, HTTP Client, MCP).
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#94a3b8','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#475569','textColor': '#1f2937','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
 flowchart TB
     user((Usuarios)):::dark --> web["Frontend<br/>Next.js 14 + React Query<br/>Port 3000"]:::frontend
 
@@ -445,7 +445,7 @@ flowchart TB
 Vista detallada de la **arquitectura Plugin-First**: core liviano y plugins especializados.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#94a3b8','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#475569','textColor': '#1f2937','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
 flowchart TB
     user((Usuarios)):::light --> web_ui
 
@@ -539,7 +539,7 @@ flowchart TB
 Diagrama que muestra la **integración Plugin-First** con servicios externos, persistencia distribuida, y observabilidad centralizada.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#94a3b8','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#475569','textColor': '#1f2937','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
 flowchart TB
     subgraph Core["🟢 Backend Core (Port 8000)"]
         chat_core["ChatService<br/>StreamingHandler<br/>SSE Events"]:::core
@@ -762,7 +762,7 @@ Arquitectura reactiva moderna con React Query + Zustand, optimistic updates, y e
 **Arquitectura Reactiva**:
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#94a3b8','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#475569','textColor': '#1f2937','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a'}}}%%
 flowchart TB
     User[("👤 Usuario")]
 
@@ -874,7 +874,7 @@ Todo implementa **State Pattern** (Zustand), **Gateway Pattern** (clients), **Ob
 Arquitectura **Plugin-First** mostrando Backend Core (Kernel ligero) delegando operaciones especializadas a plugins independientes.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#94a3b8','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#475569','textColor': '#1f2937','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
 flowchart TB
     client[HTTP/SSE Client]:::gray --> middleware
 
@@ -987,7 +987,7 @@ flowchart TB
 Conexiones clave: REST, SSE y MCP; se incluyen dependencias externas (LLMs y herramientas) y dónde se instrumenta.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#94a3b8','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#475569','textColor': '#1f2937','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
 flowchart LR
     user((Usuario)):::light --> web_ui["Next.js UI"]:::dark
     web_ui -->|REST /api| api_gateway["FastAPI Gateway"]:::dark
@@ -1022,7 +1022,7 @@ Este diagrama resume la interacción **cliente-servidor**: Next.js usa REST para
 Secuencia completa del envío de un mensaje streaming desde el cliente hasta SAPTIVA y de regreso mediante SSE.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'actorBorder': '#94a3b8','actorBkg': '#f8fafc','actorTextColor': '#0f172a','signalColor': '#38bdf8','signalTextColor': '#0f172a','activationBorderColor': '#cbd5e1','activationBkgColor': '#e2e8f0','sequenceNumberColor': '#0ea5e9'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'actorBorder': '#94a3b8','actorBkg': '#f8fafc','actorTextColor': '#0f172a','signalColor': '#475569','signalTextColor': '#1f2937','activationBorderColor': '#cbd5e1','activationBkgColor': '#e2e8f0','sequenceNumberColor': '#0ea5e9'}}}%%
 sequenceDiagram
     participant UI as Next.js Client
     participant API as FastAPI /api/chat
@@ -1050,7 +1050,7 @@ Funcionamiento: el request crea un `ChatContext`, el `StreamingHandler` lanza un
 Secuencia de subida de archivos, persistencia y ejecución del coordinador COPILOTO_414.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'actorBorder': '#94a3b8','actorBkg': '#f8fafc','actorTextColor': '#0f172a','signalColor': '#38bdf8','signalTextColor': '#0f172a','activationBorderColor': '#cbd5e1','activationBkgColor': '#e2e8f0','sequenceNumberColor': '#0ea5e9'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'actorBorder': '#94a3b8','actorBkg': '#f8fafc','actorTextColor': '#0f172a','signalColor': '#475569','signalTextColor': '#1f2937','activationBorderColor': '#cbd5e1','activationBkgColor': '#e2e8f0','sequenceNumberColor': '#0ea5e9'}}}%%
 sequenceDiagram
     participant Dropzone as FileDropzone (Next.js)
     participant API as FastAPI /api/files/upload
@@ -1081,7 +1081,7 @@ Funcionamiento: se sigue un pipeline en etapas (Upload → Persistencia → Cach
 Secuencia completa desde el comando "Auditar archivo:" hasta la renderización dual (chat + canvas) mostrando la **arquitectura Plugin-First**.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'actorBorder': '#94a3b8','actorBkg': '#f8fafc','actorTextColor': '#0f172a','signalColor': '#38bdf8','signalTextColor': '#0f172a','activationBorderColor': '#cbd5e1','activationBkgColor': '#e2e8f0','sequenceNumberColor': '#0ea5e9'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'actorBorder': '#94a3b8','actorBkg': '#f8fafc','actorTextColor': '#0f172a','signalColor': '#475569','signalTextColor': '#1f2937','activationBorderColor': '#cbd5e1','activationBkgColor': '#e2e8f0','sequenceNumberColor': '#0ea5e9'}}}%%
 sequenceDiagram
     participant User as Usuario
     participant Chat as ChatView
@@ -1161,7 +1161,7 @@ sequenceDiagram
 Flujo HTTP que sigue el frontend para descubrir, cargar e invocar herramientas MCP sin cargar todo el contexto.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#94a3b8','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#475569','textColor': '#1f2937','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
 flowchart LR
     Client["Next.js MCPClient"]:::dark -->|GET /api/mcp/lazy/discover| Discover["FastAPI Lazy Router"]:::dark
     Discover --> Cache["In-memory tool cache"]:::gray
