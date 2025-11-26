@@ -764,35 +764,35 @@ Arquitectura reactiva moderna con React Query + Zustand, optimistic updates, y e
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#0f172a','lineColor': '#111827','textColor': '#111827','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a'}}}%%
 flowchart TB
-    User[("👤 Usuario")]
+    User[("👤 Usuario")]:::user
 
     subgraph UI["Capa de Presentación"]
-        ChatView["ChatView Component"]
-        MessageList["Message List"]
-        ChatInput["Chat Input"]
+        ChatView["ChatView Component"]:::ui
+        MessageList["Message List"]:::ui
+        ChatInput["Chat Input"]:::ui
     end
 
     subgraph Reactive["Capa Reactiva (Hooks)"]
-        useChatMessages["useChatMessages<br/>(React Query)"]
-        useChatMetadata["useChatMetadata<br/>(Metadata)"]
-        useSendMessage["useSendMessage<br/>(Optimistic)"]
+        useChatMessages["useChatMessages<br/>(React Query)"]:::reactive
+        useChatMetadata["useChatMetadata<br/>(Metadata)"]:::reactive
+        useSendMessage["useSendMessage<br/>(Optimistic)"]:::reactive
     end
 
     subgraph Cache["React Query Cache"]
-        QueryCache["Query Cache<br/>60s staleTime<br/>SWR pattern"]
+        QueryCache["Query Cache<br/>60s staleTime<br/>SWR pattern"]:::cache
     end
 
     subgraph Sync["Zustand Sync Layer"]
-        ChatStore["chat-store<br/>(UI State)"]
-        setMessages["setMessages()"]
-        setHydrated["setHydratedStatus()"]
+        ChatStore["chat-store<br/>(UI State)"]:::sync
+        setMessages["setMessages()"]:::sync
+        setHydrated["setHydratedStatus()"]:::sync
     end
 
     subgraph Network["Network Layer"]
-        APIClient["API Client<br/>(HTTP + SSE)"]
+        APIClient["API Client<br/>(HTTP + SSE)"]:::network
     end
 
-    Backend[("🔌 FastAPI Backend")]
+    Backend[("🔌 FastAPI Backend")]:::backend
 
     User -->|"Envía mensaje"| ChatInput
     ChatInput -->|"mutate()"| useSendMessage
@@ -811,10 +811,13 @@ flowchart TB
     ChatView -->|"Metadata"| useChatMetadata
     useChatMetadata -->|"Read"| ChatStore
 
-    style User fill:#c7f0ff,stroke:#0ea5e9,color:#0f172a
-    style Backend fill:#ffe0a3,stroke:#f59e0b,color:#0f172a
-    style QueryCache fill:#f8fafc,stroke:#cbd5e1,color:#0f172a
-    style ChatStore fill:#c6f6d5,stroke:#16a34a,color:#0f172a
+    classDef user fill:#c7f0ff,stroke:#0ea5e9,color:#0f172a;
+    classDef ui fill:#c7f0ff,stroke:#0ea5e9,color:#0f172a;
+    classDef reactive fill:#f8fafc,stroke:#cbd5e1,color:#0f172a;
+    classDef cache fill:#e5e7eb,stroke:#94a3b8,color:#0f172a;
+    classDef sync fill:#f8fafc,stroke:#cbd5e1,color:#0f172a;
+    classDef network fill:#c6f6d5,stroke:#16a34a,color:#0f172a;
+    classDef backend fill:#ffe0a3,stroke:#f59e0b,color:#0f172a;
 ```
 
 **Capas de la Arquitectura**:
