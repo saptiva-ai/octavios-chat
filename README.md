@@ -139,11 +139,11 @@ flowchart TB
     %% Core to Private Plugins (optional MCP integration)
     backend -.->|"MCP Protocol<br/>(optional)"| capital414
 
-    classDef frontend fill:#3b82f6,stroke:#1e40af,color:#ffffff
-    classDef core fill:#10b981,stroke:#059669,color:#ffffff
-    classDef plugin_public fill:#f59e0b,stroke:#d97706,color:#111111
-    classDef plugin_private fill:#ef4444,stroke:#dc2626,color:#ffffff
-    classDef infra fill:#6b7280,stroke:#4b5563,color:#ffffff
+    classDef frontend fill:#e3f2fd,stroke:#90caf9,color:#111111
+    classDef core fill:#fff3e0,stroke:#ffcc80,color:#111111
+    classDef plugin_public fill:#e8f5e9,stroke:#a5d6a7,color:#111111
+    classDef plugin_private fill:#ffebee,stroke:#ef9a9a,color:#111111
+    classDef infra fill:#f3e5f5,stroke:#ce93d8,color:#111111
 ```
 
 ### Service Dependency Chain
@@ -430,12 +430,12 @@ flowchart TB
     capital414 --> observability
 
     classDef dark fill:#111111,stroke:#4b5563,color:#f9fafb;
-    classDef frontend fill:#3b82f6,stroke:#1e40af,color:#ffffff;
-    classDef core fill:#10b981,stroke:#059669,color:#ffffff;
-    classDef plugin_public fill:#f59e0b,stroke:#d97706,color:#111111;
-    classDef plugin_private fill:#ef4444,stroke:#dc2626,color:#ffffff;
+    classDef frontend fill:#e3f2fd,stroke:#90caf9,color:#111111;
+    classDef core fill:#fff3e0,stroke:#ffcc80,color:#111111;
+    classDef plugin_public fill:#e8f5e9,stroke:#a5d6a7,color:#111111;
+    classDef plugin_private fill:#ffebee,stroke:#ef9a9a,color:#111111;
     classDef light fill:#ffffff,stroke:#4b5563,color:#111111;
-    classDef infra fill:#6b7280,stroke:#4b5563,color:#ffffff;
+    classDef infra fill:#f3e5f5,stroke:#ce93d8,color:#111111;
     classDef gray fill:#e5e7eb,stroke:#4b5563,color:#111111;
 ```
 
@@ -530,11 +530,11 @@ flowchart TB
     validation_coord --> mongo
     auditores --> languagetool
 
-    classDef frontend fill:#3b82f6,stroke:#1e40af,color:#ffffff;
-    classDef core fill:#10b981,stroke:#059669,color:#ffffff;
-    classDef plugin_public fill:#f59e0b,stroke:#d97706,color:#ffffff;
-    classDef plugin_private fill:#ef4444,stroke:#dc2626,color:#ffffff;
-    classDef infra fill:#6b7280,stroke:#4b5563,color:#ffffff;
+    classDef frontend fill:#e3f2fd,stroke:#90caf9,color:#111111;
+    classDef core fill:#fff3e0,stroke:#ffcc80,color:#111111;
+    classDef plugin_public fill:#e8f5e9,stroke:#a5d6a7,color:#111111;
+    classDef plugin_private fill:#ffebee,stroke:#ef9a9a,color:#111111;
+    classDef infra fill:#f3e5f5,stroke:#ce93d8,color:#111111;
 ```
 
 **Flujo Plugin-First**:
@@ -635,11 +635,11 @@ flowchart TB
     otel --> grafana
     logs --> grafana
 
-    classDef core fill:#10b981,stroke:#059669,color:#ffffff;
-    classDef plugin_public fill:#f59e0b,stroke:#d97706,color:#ffffff;
-    classDef plugin_private fill:#ef4444,stroke:#dc2626,color:#ffffff;
-    classDef external fill:#8b5cf6,stroke:#7c3aed,color:#ffffff;
-    classDef infra fill:#6b7280,stroke:#4b5563,color:#ffffff;
+    classDef core fill:#fff3e0,stroke:#ffcc80,color:#111111;
+    classDef plugin_public fill:#e8f5e9,stroke:#a5d6a7,color:#111111;
+    classDef plugin_private fill:#ffebee,stroke:#ef9a9a,color:#111111;
+    classDef external fill:#f3e5f5,stroke:#ce93d8,color:#111111;
+    classDef infra fill:#f3e5f5,stroke:#ce93d8,color:#111111;
 ```
 
 **Arquitectura de integración Plugin-First**:
@@ -1008,11 +1008,11 @@ flowchart TB
     chat_svc --> aletheia
     auditores --> languagetool
 
-    classDef core fill:#10b981,stroke:#059669,color:#ffffff;
-    classDef plugin_public fill:#f59e0b,stroke:#d97706,color:#ffffff;
-    classDef plugin_private fill:#ef4444,stroke:#dc2626,color:#ffffff;
-    classDef external fill:#8b5cf6,stroke:#7c3aed,color:#ffffff;
-    classDef infra fill:#6b7280,stroke:#4b5563,color:#ffffff;
+    classDef core fill:#fff3e0,stroke:#ffcc80,color:#111111;
+    classDef plugin_public fill:#e8f5e9,stroke:#a5d6a7,color:#111111;
+    classDef plugin_private fill:#ffebee,stroke:#ef9a9a,color:#111111;
+    classDef external fill:#f3e5f5,stroke:#ce93d8,color:#111111;
+    classDef infra fill:#f3e5f5,stroke:#ce93d8,color:#111111;
     classDef gray fill:#e5e7eb,stroke:#4b5563,color:#111111;
 ```
 
