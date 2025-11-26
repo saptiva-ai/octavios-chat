@@ -970,12 +970,13 @@ flowchart TB
     auditores --> languagetool
 
     class Routers routers;
-    classDef core fill:#ffe0a3,stroke:#f59e0b,color:#0f172a;
-    classDef plugin_public fill:#c6f6d5,stroke:#16a34a,color:#0f172a;
-    classDef plugin_private fill:#fed7e2,stroke:#fb7185,color:#0f172a;
-    classDef external fill:#ddd6fe,stroke:#7c3aed,color:#0f172a;
-    classDef infra fill:#e5e7eb,stroke:#94a3b8,color:#0f172a;
-    classDef gray fill:#f8fafc,stroke:#cbd5e1,color:#0f172a;
+    style Routers fill:#ffffff,stroke:#111827,color:#111827;
+    classDef core fill:#ffe0a3,stroke:#f59e0b,color:#111827;
+    classDef plugin_public fill:#c6f6d5,stroke:#16a34a,color:#111827;
+    classDef plugin_private fill:#fed7e2,stroke:#fb7185,color:#111827;
+    classDef external fill:#e5e7eb,stroke:#94a3b8,color:#111827;
+    classDef infra fill:#e5e7eb,stroke:#94a3b8,color:#111827;
+    classDef gray fill:#f8fafc,stroke:#cbd5e1,color:#111827;
     classDef routers fill:#ffe0a3,stroke:#f59e0b,color:#111827;
 ```
 
