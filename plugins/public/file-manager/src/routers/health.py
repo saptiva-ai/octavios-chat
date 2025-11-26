@@ -29,7 +29,8 @@ async def health_check():
     # Check MinIO
     try:
         minio = get_minio_client()
-        minio.client.bucket_exists(minio.bucket)
+        # MinIO 7.2.x API: bucket_exists() requires named parameter
+        minio.client.bucket_exists(bucket_name=minio.bucket)
         status["dependencies"]["minio"] = "connected"
     except Exception as e:
         status["dependencies"]["minio"] = f"error: {str(e)}"
@@ -59,7 +60,8 @@ async def readiness_check():
     """
     try:
         minio = get_minio_client()
-        minio.client.bucket_exists(minio.bucket)
+        # MinIO 7.2.x API: bucket_exists() requires named parameter
+        minio.client.bucket_exists(bucket_name=minio.bucket)
         return {"ready": True}
     except Exception:
         return {"ready": False}
