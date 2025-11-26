@@ -408,6 +408,42 @@ services:
       - octavios-network
 
 # ========================================
+  # CAPITAL414 AUDITOR - MCP Plugin Service
+  # ========================================
+  capital414-auditor:
+    build:
+      context: ..
+      dockerfile: plugins/capital414-private/Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-capital414-auditor
+    restart: unless-stopped
+    env_file:
+      - ../envs/.env
+    environment:
+      - MCP_SERVER_NAME=capital414-auditor
+      - MCP_SERVER_PORT=8002
+      - LANGUAGETOOL_URL=http://languagetool:8010/v2/check
+      - PYTHONPATH=/app/src
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "${CAPITAL414_AUDITOR_PORT:-8002}:8002"
+    volumes:
+      # Hot reload in development
+      - ../plugins/capital414-private/src:/app/src
+      # Shared temp directory for PDF reports
+      - /tmp/capital414-reports:/tmp/capital414-reports
+    depends_on:
+      languagetool:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8002/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - octavios-network
+
+# ========================================
 # VOLUMES
 # ========================================
 volumes:
