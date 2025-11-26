@@ -21,8 +21,8 @@ set -o pipefail
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 REPORT_FILE="audit-report-${TIMESTAMP}.json"
 REPORT_MD="audit-report-${TIMESTAMP}.md"
-PROJECT_ROOT="${PROJECT_ROOT:-/home/user/octavios-chat}"
-COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-octavios-chat}"
+PROJECT_ROOT="${PROJECT_ROOT:-/home/jf/capital414-chat}"
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-octavios-chat-capital414}"
 
 # Colors for terminal output
 RED='\033[0;31m'

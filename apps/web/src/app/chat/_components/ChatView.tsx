@@ -1028,8 +1028,11 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                   }
                   const decisionArtifact = (parsedContent.decision || {})
                     .audit_artifact;
-                  if (response && !response.artifact && decisionArtifact) {
-                    response = { ...response, artifact: decisionArtifact };
+                  if (!(response as any).artifact && decisionArtifact) {
+                    response = {
+                      ...response,
+                      artifact: decisionArtifact,
+                    } as any;
                   }
                 }
               } catch {

@@ -66,7 +66,7 @@ Cloudflare offers 4 SSL modes:
 
 ```bash
 # From your local machine
-cd /home/jazielflo/Proyects/client-project-chat
+cd /home/jazielflo/Proyects/capital414-chat
 ./scripts/deploy-cloudflare-414.sh
 ```
 
@@ -121,7 +121,7 @@ For production, upgrade to Full (Strict) SSL for better security:
 3. **Run SSL setup on server:**
    ```bash
    ssh jf@34.172.67.93
-   cd /home/jf/client-project-chat
+   cd /home/jf/capital414-chat
    ./scripts/setup-ssl-414.sh
    ```
 
@@ -159,14 +159,14 @@ For production, upgrade to Full (Strict) SSL for better security:
 3. **Install on Server:**
    ```bash
    ssh jf@34.172.67.93
-   cd /home/jf/client-project-chat
+   cd /home/jf/capital414-chat
 
    # Create SSL directory
    mkdir -p data/ssl
 
    # Copy certificates (from your local machine)
-   scp /tmp/origin-cert.pem jf@34.172.67.93:/home/jf/client-project-chat/data/ssl/fullchain.pem
-   scp /tmp/origin-key.pem jf@34.172.67.93:/home/jf/client-project-chat/data/ssl/privkey.pem
+   scp /tmp/origin-cert.pem jf@34.172.67.93:/home/jf/capital414-chat/data/ssl/fullchain.pem
+   scp /tmp/origin-key.pem jf@34.172.67.93:/home/jf/capital414-chat/data/ssl/privkey.pem
 
    # Secure permissions
    chmod 600 data/ssl/privkey.pem
@@ -176,7 +176,7 @@ For production, upgrade to Full (Strict) SSL for better security:
 4. **Update Docker Compose:**
    ```bash
    # On server
-   cd /home/jf/client-project-chat
+   cd /home/jf/capital414-chat
 
    # Use the 414.saptiva.com docker-compose with SSL
    docker compose -f infra/docker-compose.414.saptiva.com.yml up -d
@@ -255,7 +255,7 @@ Cloudflare → SSL/TLS → Edge Certificates
 
 2. Check nginx logs:
    ```bash
-   docker logs client-project-chat-nginx
+   docker logs capital414-chat-nginx
    ```
 
 3. Verify port 80 is open:

@@ -501,7 +501,7 @@ export class MCPClient {
   // ========================================================================
 
   /**
-   * Audit a file using Document Audit compliance validation.
+   * Audit a file using COPILOTO_414 compliance validation.
    *
    * @param docId - Document ID to validate
    * @param options - Validation options

@@ -7,12 +7,24 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![Next.js](https://img.shields.io/badge/Next.js-14-black.svg)](https://nextjs.org/)
 
-> Plataforma conversacional lista para producción con chat streaming, RAG, auditoría Document Audit y herramientas MCP sobre FastAPI + Next.js.
+> Plataforma conversacional lista para producción con chat streaming, RAG, auditoría COPILOTO_414 y herramientas MCP sobre FastAPI + Next.js.
 
 ## Tabla de contenidos
 - [Saptiva OctaviOS Chat](#saptiva-octavios-chat)
   - [Tabla de contenidos](#tabla-de-contenidos)
   - [Resumen rápido](#resumen-rápido)
+  - [Arquitectura Plugin-First (Micro-Kernel)](#arquitectura-plugin-first-micro-kernel)
+    - [Filosofía de Diseño](#filosofía-de-diseño)
+    - [Diagrama de Containers y Dependencias](#diagrama-de-containers-y-dependencias)
+    - [Service Dependency Chain](#service-dependency-chain)
+    - [Beneficios de Plugin-First](#beneficios-de-plugin-first)
+    - [Comunicación entre Plugins](#comunicación-entre-plugins)
+    - [Ports and URLs](#ports-and-urls)
+    - [Referencias de Código](#referencias-de-código)
+    - [Comunicación entre Servicios (Código)](#comunicación-entre-servicios-código)
+      - [Backend Core → File Manager Plugin (HTTP Client)](#backend-core--file-manager-plugin-http-client)
+      - [Backend Core → Capital414 Plugin (MCP Protocol)](#backend-core--capital414-plugin-mcp-protocol)
+      - [Capital414 Plugin → File Manager Plugin (HTTP Client)](#capital414-plugin--file-manager-plugin-http-client)
   - [Visión de alto nivel](#visión-de-alto-nivel)
     - [Mapa de arquitectura (alto nivel)](#mapa-de-arquitectura-alto-nivel)
     - [Contenedores principales](#contenedores-principales)
@@ -20,15 +32,17 @@
   - [Stack y capacidades](#stack-y-capacidades)
     - [Plataforma conversacional](#plataforma-conversacional)
     - [Documentos y RAG](#documentos-y-rag)
-    - [Cumplimiento Document Audit](#cumplimiento-document-audit)
+    - [Cumplimiento COPILOTO\_414](#cumplimiento-copiloto_414)
+    - [Integración Audit File + Canvas (OpenCanvas)](#integración-audit-file--canvas-opencanvas)
     - [Model Context Protocol (MCP)](#model-context-protocol-mcp)
     - [Seguridad y observabilidad](#seguridad-y-observabilidad)
   - [Arquitectura](#arquitectura)
     - [Frontend (Next.js 14)](#frontend-nextjs-14)
-    - [Backend (FastAPI + MCP)](#backend-fastapi--mcp)
+    - [Backend Core + Plugins (Plugin-First Architecture)](#backend-core--plugins-plugin-first-architecture)
     - [Integración Frontend ↔ Backend](#integración-frontend--backend)
     - [Flujo de chat (secuencia)](#flujo-de-chat-secuencia)
     - [Pipeline de ingestión y auditoría](#pipeline-de-ingestión-y-auditoría)
+    - [Flujo de Audit Command + Canvas (Plugin-First)](#flujo-de-audit-command--canvas-plugin-first)
     - [Lazy loading MCP (descubrimiento → invocación)](#lazy-loading-mcp-descubrimiento--invocación)
   - [Inicio rápido](#inicio-rápido)
     - [Prerrequisitos](#prerrequisitos)
@@ -52,244 +66,621 @@
   - [Licencia y soporte](#licencia-y-soporte)
 
 ## Resumen rápido
-- Chat multi-modelo (Turbo, Cortex, Ops, etc.) con SSE y chain-of-responsibility (`apps/api/src/routers/chat/endpoints/message_endpoints.py`).
-- Integración MCP oficial (FastMCP) con lazy loading y telemetría (`apps/api/src/mcp/server.py`).
-- Pipeline documental: subida segura, cache Redis y extracción multi-tier antes del RAG (`apps/api/src/services/document_service.py`).
-- Document Audit coordina auditores de disclaimer, formato, logos, tipografía, gramática y consistencia semántica (`apps/api/src/services/validation_coordinator.py`).
+- **Arquitectura Plugin-First (Micro-Kernel)**: Core ligero orquesta plugins públicos (File Manager) y privados (Capital414) como microservicios independientes.
+- Chat multi-modelo (Turbo, Cortex, Ops, etc.) con SSE y chain-of-responsibility (`apps/backend/src/routers/chat/endpoints/message_endpoints.py`).
+- Integración MCP oficial (FastMCP) con lazy loading y telemetría (`apps/backend/src/mcp/server.py`).
+- Pipeline documental: subida segura, cache Redis y extracción multi-tier antes del RAG (`apps/backend/src/services/document_service.py`).
+- COPILOTO_414 coordina auditores de disclaimer, formato, logos, tipografía, gramática y consistencia semántica (`plugins/capital414-private/src/validation_coordinator.py`).
 - Frontend Next.js 14 + Zustand con herramientas de archivos, research y UI accesible (`apps/web/src/lib/stores/chat-store.ts`).
-- Seguridad empresarial: JWT con revocación en Redis, rate limiting y políticas CSP en Nginx (`apps/api/src/middleware/auth.py`).
+- Seguridad empresarial: JWT con revocación en Redis, rate limiting y políticas CSP en Nginx (`apps/backend/src/middleware/auth.py`).
+
+## Arquitectura Plugin-First (Micro-Kernel)
+
+OctaviOS usa arquitectura **Plugin-First**: núcleo mínimo que orquesta y plugins aislados para escalar y versionar sin fricción.
+
+### Filosofía de Diseño
+
+- **Antes (monolito)**: un solo backend manejaba chat, archivos, auditorías, embeddings y storage; cada cambio implicaba rebuild total.
+- **Ahora (plugin-first)**: core ligero para chat/auth; plugins públicos reutilizables (File Manager, browsing, memory); plugins privados con lógica Capital414 o asesoría bancaria.
+
+### Diagrama de Containers y Dependencias
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#f8fafc','primaryBorderColor': '#38bdf8','primaryTextColor': '#111827','lineColor': '#111827','textColor': '#111827','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
+flowchart TB
+    subgraph Frontend["🎨 Frontend Layer"]
+        web["Next.js 14 Web<br/>Port: 3000<br/>Zustand + React Query"]:::frontend
+    end
+
+    subgraph Core["⚙️ Core Layer (Kernel)"]
+        backend["Backend Core<br/>Port: 8000<br/>Chat · Auth · Orchestration"]:::core
+    end
+
+    subgraph PublicPlugins["🔌 Public Plugins (Open Source Ready)"]
+        filemanager["File Manager Plugin<br/>Port: 8001<br/>Upload · Download · Extract"]:::plugin_public
+    end
+
+    subgraph PrivatePlugins["🔒 Private Plugins (Proprietary)"]
+        capital414["Capital414 Auditor<br/>Port: 8002<br/>COPILOTO_414 Compliance"]:::plugin_private
+    end
+
+    subgraph Infrastructure["🗄️ Infrastructure Layer"]
+        mongo[("MongoDB<br/>Port: 27017<br/>Sessions · Messages")]:::infra
+        redis[("Redis<br/>Port: 6379<br/>Cache · JWT Blacklist")]:::infra
+        minio[("MinIO<br/>Port: 9000<br/>S3 Object Storage")]:::infra
+        qdrant[("Qdrant<br/>Port: 6333<br/>Vector Database")]:::infra
+        languagetool["LanguageTool<br/>Port: 8010<br/>Grammar Check"]:::infra
+    end
+
+    %% User to Frontend
+    user((👤 User)) --> web
+
+    %% Frontend to Core
+    web -->|"HTTP/SSE"| backend
+
+    %% Core depends on Public Plugins
+    backend -.->|"Depends on<br/>(health check)"| filemanager
+
+    %% Private Plugins depend on Public Plugins
+    capital414 -.->|"Depends on<br/>(health check)"| filemanager
+
+    %% Backend to Infrastructure
+    backend --> mongo
+    backend --> redis
+
+    %% File Manager to Infrastructure
+    filemanager --> minio
+    filemanager --> redis
+
+    %% Capital414 to Infrastructure
+    capital414 --> languagetool
+    capital414 -->|"HTTP Client"| filemanager
+
+    %% Core to Private Plugins (optional MCP integration)
+    backend -.->|"MCP Protocol<br/>(optional)"| capital414
+
+    classDef frontend fill:#c7f0ff,stroke:#0ea5e9,color:#0f172a
+    classDef core fill:#ffe0a3,stroke:#f59e0b,color:#0f172a
+    classDef plugin_public fill:#c6f6d5,stroke:#16a34a,color:#0f172a
+    classDef plugin_private fill:#fed7e2,stroke:#fb7185,color:#0f172a
+    classDef infra fill:#e5e7eb,stroke:#94a3b8,color:#0f172a
+```
+
+### Service Dependency Chain
+
+La cadena de dependencias garantiza inicio ordenado:
+
+```
+1. Infrastructure Layer
+   └─> MongoDB, Redis, MinIO, Qdrant, LanguageTool (parallel start)
+
+2. Public Plugins Layer
+   └─> File Manager (depends on: MinIO healthy, Redis healthy)
+
+3. Core Layer
+   └─> Backend (depends on: MongoDB healthy, Redis healthy, File Manager healthy)
+
+4. Private Plugins Layer
+   └─> Capital414 Auditor (depends on: File Manager healthy, LanguageTool healthy)
+
+5. Frontend Layer
+   └─> Next.js Web (depends on: Backend healthy)
+```
+
+### Beneficios de Plugin-First
+
+| Ventaja | Descripción |
+|---------|-------------|
+| **Desacoplamiento** | Plugins se desarrollan, prueban y despliegan independientemente |
+| **Escalabilidad Horizontal** | Escalar solo el plugin que necesita más recursos (ej: File Manager) |
+| **Open Source Ready** | Plugins públicos pueden liberarse sin exponer lógica de negocio |
+| **Hot Swap** | Reemplazar implementaciones (ej: MinIO File Manager → Google Drive Plugin) |
+| **Ownership Claro** | Cada plugin tiene un owner, CI/CD y versioning independiente |
+
+### Comunicación entre Plugins
+
+**HTTP Client Pattern** (Actual):
+- Core y Capital414 tienen `FileManagerClient` que consume File Manager via HTTP REST
+- Ejemplo: `await file_manager_client.download_to_temp(minio_key)` en Capital414
+
+**MCP Protocol** (Futuro - Opcional):
+- Plugins pueden exponerse como MCP servers para mayor flexibilidad
+- Core puede descubrir y consumir herramientas de plugins via MCP lazy loading
+
+### Ports and URLs
+
+| Service | Port | Internal URL | External URL |
+|---------|------|--------------|--------------|
+| Frontend (Next.js) | 3000 | - | http://localhost:3000 |
+| Backend Core | 8000 | http://backend:8000 | http://localhost:8000 |
+| File Manager | 8001 | http://file-manager:8001 | http://localhost:8001 |
+| Capital414 | 8002 | http://file-auditor:8002 | http://localhost:8002 |
+| MongoDB | 27017 | mongodb://<mongo-host>:27017 | - |
+| Redis | 6379 | redis://<redis-host>:6379 | - |
+| MinIO | 9000 | http://minio:9000 | http://localhost:9000 |
+| MinIO Console | 9001 | - | http://localhost:9001 |
+| Qdrant | 6333 | http://qdrant:6333 | http://localhost:6333 |
+| LanguageTool | 8010 | http://languagetool:8010 | - |
+
+### Referencias de Código
+
+| Componente | Path |
+|------------|------|
+| Backend Core | `apps/backend/` |
+| File Manager Plugin | `plugins/public/file-manager/` |
+| Capital414 Plugin | `plugins/capital414-private/` |
+| Backend FileManagerClient | `apps/backend/src/services/file_manager_client.py` |
+| Capital414 FileManagerClient | `plugins/capital414-private/src/clients/file_manager.py` |
+| Docker Compose | `infra/docker-compose.yml` |
+
+### Comunicación entre Servicios (Código)
+
+La arquitectura Plugin-First usa **HTTP Client Pattern** y **MCP Protocol** para comunicación inter-servicios. Aquí ejemplos de código real:
+
+#### Backend Core → File Manager Plugin (HTTP Client)
+
+```python
+# apps/backend/src/services/file_manager_client.py
+from httpx import AsyncClient, Timeout
+from structlog import get_logger
+
+logger = get_logger(__name__)
+
+class FileManagerClient:
+    def __init__(self, base_url: str = "http://file-manager:8001"):
+        self.base_url = base_url
+        self.client = AsyncClient(timeout=Timeout(30.0))
+
+    async def upload_file(
+        self,
+        file: UploadFile,
+        user_id: str,
+        session_id: str
+    ) -> dict:
+        """Upload file to File Manager Plugin via HTTP."""
+        logger.info("Uploading file to File Manager", filename=file.filename)
+
+        files = {"file": (file.filename, file.file, file.content_type)}
+        data = {"user_id": user_id, "session_id": session_id}
+
+        response = await self.client.post(
+            f"{self.base_url}/upload",
+            files=files,
+            data=data
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def download_file(self, minio_key: str) -> bytes:
+        """Download file from File Manager Plugin."""
+        logger.info("Downloading file from File Manager", minio_key=minio_key)
+
+        response = await self.client.get(
+            f"{self.base_url}/download/{minio_key}"
+        )
+        response.raise_for_status()
+        return response.content
+```
+
+**Uso en Backend Core**:
+```python
+# apps/backend/src/routers/files.py
+from services.file_manager_client import get_file_manager_client
+
+@router.post("/upload")
+async def upload_file_endpoint(
+    file: UploadFile = File(...),
+    fm_client: FileManagerClient = Depends(get_file_manager_client)
+):
+    # Backend Core delega a File Manager Plugin
+    result = await fm_client.upload_file(file, user_id, session_id)
+    return result
+```
+
+#### Backend Core → Capital414 Plugin (MCP Protocol)
+
+```python
+# apps/backend/src/mcp/client.py
+from mcp import ClientSession
+from structlog import get_logger
+
+logger = get_logger(__name__)
+
+class MCPClient:
+    def __init__(self, server_url: str = "http://file-auditor:8002"):
+        self.server_url = server_url
+        self.session = ClientSession(server_url)
+
+    async def call_tool(
+        self,
+        tool_name: str,
+        arguments: dict
+    ) -> dict:
+        """Invoke MCP tool on Capital414 Plugin."""
+        logger.info("Invoking MCP tool", tool_name=tool_name)
+
+        result = await self.session.call_tool(
+            name=tool_name,
+            arguments=arguments
+        )
+        return result
+```
+
+**Uso en Backend Core**:
+```python
+# apps/backend/src/routers/chat.py
+from mcp.client import get_mcp_client
+
+@router.post("/chat")
+async def chat_endpoint(
+    message: str,
+    mcp_client: MCPClient = Depends(get_mcp_client)
+):
+    # Detectar comando de auditoría
+    if message.startswith("Auditar archivo:"):
+        # Backend Core delega a Capital414 Plugin vía MCP
+        result = await mcp_client.call_tool(
+            tool_name="audit_document_full",
+            arguments={"minio_key": doc_key, "policy_id": "copiloto_414"}
+        )
+        return result
+```
+
+#### Capital414 Plugin → File Manager Plugin (HTTP Client)
+
+```python
+# plugins/capital414-private/src/clients/file_manager.py
+from httpx import AsyncClient
+
+class FileManagerClient:
+    def __init__(self, base_url: str = "http://file-manager:8001"):
+        self.base_url = base_url
+        self.client = AsyncClient()
+
+    async def download_to_temp(self, minio_key: str) -> str:
+        """Download PDF from File Manager for audit processing."""
+        response = await self.client.get(
+            f"{self.base_url}/download/{minio_key}"
+        )
+        response.raise_for_status()
+
+        # Save to temp file for audit processing
+        temp_path = f"/tmp/{minio_key}"
+        with open(temp_path, "wb") as f:
+            f.write(response.content)
+
+        return temp_path
+```
+
+**Uso en Capital414 Plugin**:
+```python
+# plugins/capital414-private/src/handlers/audit_handler.py
+from clients.file_manager import get_file_manager_client
+
+class AuditCommandHandler:
+    def __init__(self, fm_client: FileManagerClient):
+        self.fm_client = fm_client
+
+    async def handle(self, doc_key: str):
+        # Capital414 consume File Manager Plugin para obtener PDF
+        pdf_path = await self.fm_client.download_to_temp(doc_key)
+
+        # Ejecutar auditoría con PDF local
+        report = await self.coordinator.validate_document(pdf_path)
+        return report
+```
+
+**Ventajas de esta arquitectura**:
+- **Desacoplamiento**: Cada servicio solo conoce la URL del otro, no sus implementaciones
+- **Testabilidad**: Fácil mockear `FileManagerClient` o `MCPClient` en tests
+- **Escalabilidad**: Cada plugin puede tener múltiples réplicas detrás de un load balancer
+- **Dependency Inversion**: Backend Core depende de abstracciones (interfaces), no de implementaciones concretas
 
 ## Visión de alto nivel
 
 Vista macro de los componentes: primero un mapa de patrones/contendores y luego vistas específicas de contenedores e integraciones.
 
 ### Mapa de arquitectura (alto nivel)
-Diagrama que resume cómo los patrones principales (Chain of Responsibility, Builder, Adapter y Observer) atraviesan los contenedores, incluyendo streaming audit y MCP tools.
+Arquitectura **Plugin-First** en una vista: Core ligero que delega en plugins y comparte patrones transversales (Chain of Responsibility, Builder, HTTP Client, MCP).
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#111111','primaryBorderColor': '#4b5563','primaryTextColor': '#f9fafb','lineColor': '#4b5563','secondaryColor': '#ffffff','secondaryBorderColor': '#4b5563','secondaryTextColor': '#111111','tertiaryColor': '#d1d5db','tertiaryBorderColor': '#4b5563','tertiaryTextColor': '#111111'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#f8fafc','primaryBorderColor': '#cbd5e1','primaryTextColor': '#111827','lineColor': '#111827','textColor': '#111827','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#111827','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#111827'}}}%%
 flowchart TB
-    user((Usuarios internos)):::dark --> web["Next.js 14<br/>App Router + Zustand<br/>SSE Streaming"]:::light
-    web --> gateway["FastAPI Gateway<br/>Auth JWT + Blacklist<br/>Rate limit · Telemetry"]:::light
+    user((Usuarios)):::dark --> web["Frontend<br/>Next.js 14 + React Query<br/>Port 3000"]:::frontend
 
-    gateway --> chat["Chat Router<br/>Chain of Responsibility<br/>SSE Events"]:::light
-    gateway --> mcp["FastMCP Adapter<br/>Lazy Loading<br/>5 Tools Productivas"]:::light
-    gateway --> audit_stream["Streaming Audit Handler<br/>Real-time Progress<br/>SSE Events"]:::light
+    web --> core["Backend Core (Kernel)<br/>Chat · Auth · Orchestration<br/>Port 8000"]:::core
 
-    chat --> builder["ChatResponseBuilder<br/>Builder Pattern"]:::light
-    mcp --> tools["MCP Tools<br/>audit_file · excel_analyzer<br/>viz_tool · deep_research<br/>extract_document_text"]:::light
-    audit_stream --> coordinator["Document Audit Coordinator<br/>8 Auditores Especializados"]:::light
+    core --> filemanager["File Manager Plugin<br/>Upload · Download · Extract<br/>Port 8001"]:::plugin_public
+    core -.->|"MCP Protocol"| capital414["Capital414 Plugin<br/>COPILOTO_414 Audits<br/>Port 8002"]:::plugin_private
 
-    builder --> persistence[(Mongo · Redis · MinIO<br/>Ports & Adapters<br/>JWT Blacklist · Cache)]:::gray
-    tools --> persistence
+    capital414 -->|"HTTP Client"| filemanager
+
+    subgraph "Core Services"
+        chat_svc["ChatService<br/>Chain of Responsibility"]:::light
+        file_client["FileManagerClient<br/>HTTP Client Pattern"]:::light
+    end
+
+    subgraph "File Manager Services"
+        minio_ops["MinIO Operations<br/>S3 Compatible"]:::light
+        extraction["Text Extraction<br/>pypdf → SDK → OCR"]:::light
+    end
+
+    subgraph "Capital414 Services"
+        coordinator["ValidationCoordinator<br/>8 Auditores Paralelos"]:::light
+        fm_client["FileManagerClient<br/>Download PDFs"]:::light
+    end
+
+    core --> chat_svc
+    core --> file_client
+    filemanager --> minio_ops
+    filemanager --> extraction
+    capital414 --> coordinator
+    capital414 --> fm_client
+
+    file_client -.->|"Delega"| filemanager
+    fm_client -.->|"Delega"| filemanager
+
+    chat_svc --> persistence[(MongoDB · Redis<br/>Sessions · Messages<br/>JWT Blacklist)]:::infra
+    minio_ops --> storage[(MinIO S3<br/>Documents · Reports<br/>Thumbnails)]:::infra
     coordinator --> persistence
+    coordinator --> storage
 
-    gateway --> observers["Observer Layer<br/>Prometheus · OTel · Structlog<br/>MCP Metrics"]:::light
-    mcp --> observers
-    audit_stream --> observers
+    chat_svc --> observability["Observability<br/>Prometheus · OTel<br/>Structlog"]:::gray
+    filemanager --> observability
+    capital414 --> observability
 
-    classDef dark fill:#111111,stroke:#4b5563,color:#f9fafb;
-    classDef light fill:#ffffff,stroke:#4b5563,color:#111111;
-    classDef gray fill:#e5e7eb,stroke:#4b5563,color:#111111;
+    classDef dark fill:#0f172a,stroke:#38bdf8,color:#e2e8f0;
+    classDef frontend fill:#c7f0ff,stroke:#0ea5e9,color:#0f172a;
+    classDef core fill:#ffe0a3,stroke:#f59e0b,color:#111827;
+    classDef plugin_public fill:#c6f6d5,stroke:#16a34a,color:#111827;
+    classDef plugin_private fill:#fed7e2,stroke:#fb7185,color:#111827;
+    classDef light fill:#ffffff,stroke:#cbd5e1,color:#0f172a;
+    classDef infra fill:#e5e7eb,stroke:#94a3b8,color:#111827;
+    classDef gray fill:#f8fafc,stroke:#cbd5e1,color:#0f172a;
 ```
 
-Los usuarios llegan al App Router (State pattern con Zustand) que soporta SSE para streaming. FastAPI Gateway aplica autenticación JWT con blacklist, rate limiting e instrumentación. Tres flujos principales: **Chat** con SSE streaming (`Chain of Responsibility` + `Builder`), **MCP** con lazy loading y 5 herramientas productivas (`Adapter`), y **Streaming Audit** con progreso en tiempo real (`Orchestrator`). Todos escriben en persistencia mediante `Ports & Adapters`, mientras la capa `Observer` captura métricas/logs incluyendo telemetría MCP.
+**Arquitectura en acción**:
+- Frontend (3000) conversa con el Core (8000) por REST/SSE.
+- Core delega archivos a File Manager (8001) y auditorías a Capital414 (8002) vía HTTP/MCP.
+- Mongo/Redis cubren sesiones y cache; MinIO guarda archivos y reportes.
+- Observabilidad única con Prometheus + OTel + structlog en todos los servicios.
 
 ### Contenedores principales
-Diagrama detallado que muestra el flujo usuario → frontend → backend → servicios de estado, incluyendo componentes nuevos como thumbnails y streaming handlers.
+Vista detallada de la **arquitectura Plugin-First**: core liviano y plugins especializados.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#111111','primaryBorderColor': '#4b5563','primaryTextColor': '#f9fafb','lineColor': '#4b5563','secondaryColor': '#ffffff','secondaryBorderColor': '#4b5563','secondaryTextColor': '#111111','tertiaryColor': '#d1d5db','tertiaryBorderColor': '#4b5563','tertiaryTextColor': '#111111'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#111827','lineColor': '#111827','textColor': '#111827','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
 flowchart TB
     user((Usuarios)):::light --> web_ui
 
-    subgraph Frontend["Frontend (Next.js 14 + App Router)"]
-        web_ui["ChatView<br/>ChatMessage<br/>CompactChatComposer"]:::light
-        web_components["PreviewAttachment<br/>ThumbnailImage<br/>CodeBlock"]:::light
-        web_clients["HTTP/MCP Clients<br/>+ Zustand Stores<br/>SSE Handler"]:::light
+    subgraph Frontend["🔵 Frontend (Next.js 14 + App Router) - Port 3000"]
+        web_ui["ChatView<br/>ChatMessage<br/>CompactChatComposer"]:::frontend
+        web_components["PreviewAttachment<br/>ThumbnailImage<br/>CodeBlock"]:::frontend
+        web_clients["HTTP/SSE Clients<br/>+ Zustand Stores<br/>React Query"]:::frontend
     end
 
     web_ui --> web_components
     web_components --> web_clients
     web_clients --> gateway
 
-    subgraph API["Backend (FastAPI + FastMCP)"]
-        gateway["Gateway Middleware<br/>Auth JWT + Blacklist<br/>CORS · RateLimit<br/>Telemetry"]:::dark
+    subgraph Core["🟢 Backend Core (Kernel) - Port 8000"]
+        gateway["Gateway Middleware<br/>Auth JWT + Blacklist<br/>CORS · RateLimit<br/>Telemetry"]:::core
 
-        subgraph Handlers["Request Handlers"]
-            chat_chain["Chat Router<br/>StreamingHandler<br/>Chain of Responsibility"]:::light
-            mcp_lazy["MCP Lazy Routes<br/>Discover/Load/Invoke<br/>98% Context Reduction"]:::light
-            audit_stream["Streaming Audit<br/>Real-time SSE Progress<br/>8 Auditores Paralelos"]:::light
+        subgraph Handlers["Request Handlers (Thin Layer)"]
+            chat_router["Chat Router<br/>StreamingHandler<br/>SSE Response"]:::core
+            file_router["File Router<br/>Delegates to File Manager"]:::core
+            audit_router["Audit Router<br/>Delegates to Capital414"]:::core
         end
 
-        subgraph Services["Domain Services"]
-            response_builder["ChatResponseBuilder<br/>Builder Pattern"]:::light
-            doc_service["DocumentService<br/>Multi-tier Extraction<br/>Cache + Thumbnails"]:::light
-            validation_coord["ValidationCoordinator<br/>Document Audit<br/>Orchestrator Pattern"]:::light
-            context_mgr["ContextManager<br/>SessionContext<br/>Email Service"]:::light
+        subgraph CoreServices["Core Services (Orchestration Only)"]
+            chat_service["ChatService<br/>LLM Orchestration"]:::core
+            fm_client["FileManagerClient<br/>HTTP Client Pattern"]:::core
+            session_mgr["SessionManager<br/>Auth · Context"]:::core
         end
     end
 
-    gateway --> chat_chain
-    gateway --> mcp_lazy
-    gateway --> audit_stream
+    gateway --> chat_router
+    gateway --> file_router
+    gateway --> audit_router
 
-    chat_chain --> response_builder
-    mcp_lazy --> doc_service
-    audit_stream --> validation_coord
+    chat_router --> chat_service
+    file_router --> fm_client
+    audit_router -.->|"MCP Protocol"| capital414_service
 
-    response_builder --> context_mgr
-    doc_service --> context_mgr
-
-    subgraph Data["Persistencia & Cache"]
-        mongo[(MongoDB + Beanie<br/>Sessions · Messages<br/>Documents · Reports)]:::light
-        redis[(Redis<br/>Cache · JWT Blacklist<br/>MCP Registry · Sessions)]:::light
-        minio[(MinIO S3<br/>Documents · Reports<br/>Thumbnails)]:::light
+    subgraph FileManager["🟠 File Manager Plugin (Public) - Port 8001"]
+        fm_routes["Upload · Download<br/>Extract · Thumbnails"]:::plugin_public
+        fm_extraction["Multi-tier Extraction<br/>pypdf → PDF SDK → OCR"]:::plugin_public
+        fm_minio["MinIO Client<br/>S3 Operations"]:::plugin_public
     end
 
-    response_builder --> mongo
-    response_builder --> redis
-    doc_service --> minio
-    doc_service --> redis
+    fm_client -->|"HTTP Client"| fm_routes
+    fm_routes --> fm_extraction
+    fm_extraction --> fm_minio
+
+    subgraph Capital414["🔴 Capital414 Plugin (Private) - Port 8002"]
+        capital414_service["MCP Server<br/>Tool: audit_document_full"]:::plugin_private
+        validation_coord["ValidationCoordinator<br/>COPILOTO_414<br/>Orchestrator Pattern"]:::plugin_private
+        auditores["8 Auditores Paralelos<br/>Disclaimer · Format · Grammar<br/>Typography · Logo · Color · Entity · Semantic"]:::plugin_private
+        c414_fm_client["FileManagerClient<br/>Download PDF for Audit"]:::plugin_private
+    end
+
+    capital414_service --> validation_coord
+    validation_coord --> auditores
+    auditores --> c414_fm_client
+    c414_fm_client -->|"HTTP Client"| fm_routes
+
+    subgraph Infrastructure["⚙️ Infrastructure Layer"]
+        mongo[(MongoDB + Beanie<br/>Sessions · Messages<br/>Documents · Reports)]:::infra
+        redis[(Redis<br/>Cache · JWT Blacklist<br/>MCP Registry · Sessions)]:::infra
+        minio[(MinIO S3<br/>Documents · Reports<br/>Thumbnails · PDFs)]:::infra
+        languagetool["LanguageTool<br/>Grammar Auditor"]:::infra
+    end
+
+    chat_service --> mongo
+    chat_service --> redis
+    session_mgr --> redis
+    fm_minio --> minio
     validation_coord --> mongo
-    validation_coord --> minio
-    context_mgr --> redis
+    auditores --> languagetool
 
-    classDef dark fill:#111111,stroke:#4b5563,color:#f9fafb;
-    classDef light fill:#ffffff,stroke:#4b5563,color:#111111;
-    classDef gray fill:#e5e7eb,stroke:#4b5563,color:#111111;
+    classDef frontend fill:#c7f0ff,stroke:#0ea5e9,color:#0f172a;
+    classDef core fill:#ffe0a3,stroke:#f59e0b,color:#0f172a;
+    classDef plugin_public fill:#c6f6d5,stroke:#16a34a,color:#0f172a;
+    classDef plugin_private fill:#fed7e2,stroke:#fb7185,color:#0f172a;
+    classDef infra fill:#e5e7eb,stroke:#94a3b8,color:#0f172a;
 ```
 
-El frontend utiliza componentes especializados (ChatMessage con thumbnails, PreviewAttachment con audit button, CodeBlock para syntax highlighting) que se comunican mediante clientes HTTP/MCP con handlers SSE. El Gateway aplica middleware transversales (Auth JWT con blacklist en Redis, CORS, RateLimit, Telemetry). Tres handlers principales: **Chat** con streaming SSE, **MCP** con lazy loading (98% reducción de contexto), y **Streaming Audit** con progreso en tiempo real de 8 auditores. Los servicios de dominio implementan patrones específicos (Builder, Orchestrator) y toda la persistencia queda abstraída mediante Ports & Adapters en Mongo/Redis/MinIO.
+**Flujo Plugin-First** (resumen):
+1. Frontend → Core (8000).
+2. Core delega: archivos a File Manager (8001), auditorías a Capital414 (8002) vía HTTP/MCP.
+3. File Manager gestiona upload/extract/thumbnails contra MinIO/Redis.
+4. Capital414 orquesta auditores COPILOTO_414 y consume File Manager.
+5. Infra común (Mongo, Redis, MinIO, LanguageTool) compartida por quien la necesita.
+
+**Por qué sirve**: Core liviano, plugins escalan y versionan aparte, File Manager es open-source ready y Capital414 queda aislado con su ciclo propio.
 
 ### Integraciones y observabilidad
-Diagrama completo que muestra servicios externos (LLMs, herramientas), persistencia, y stack de observabilidad con métricas MCP.
+Diagrama que muestra la **integración Plugin-First** con servicios externos, persistencia distribuida, y observabilidad centralizada.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#111111','primaryBorderColor': '#4b5563','primaryTextColor': '#f9fafb','lineColor': '#4b5563','secondaryColor': '#ffffff','secondaryBorderColor': '#4b5563','secondaryTextColor': '#111111','tertiaryColor': '#d1d5db','tertiaryBorderColor': '#4b5563','tertiaryTextColor': '#111111'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#111827','lineColor': '#111827','textColor': '#111827','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
 flowchart TB
-    subgraph Core["Núcleo API (FastAPI + FastMCP)"]
-        chat_core["Chat Service<br/>StreamingHandler<br/>SSE Events"]:::dark
-        mcp_core["FastMCP Server<br/>5 Tools Productivas<br/>Lazy Loading"]:::dark
-        audit_core["Document Audit<br/>8 Auditores Streaming<br/>ValidationCoordinator"]:::dark
-        doc_core["Document Service<br/>Extraction Multi-tier<br/>Thumbnail Generation"]:::dark
+    subgraph Core["🟢 Backend Core (Port 8000)"]
+        chat_core["ChatService<br/>StreamingHandler<br/>SSE Events"]:::core
+        auth_core["Auth Service<br/>JWT + Blacklist<br/>Session Mgmt"]:::core
+        fm_client_core["FileManagerClient<br/>HTTP Client"]:::core
     end
 
-    subgraph External["Servicios Externos"]
-        saptiva["SAPTIVA LLMs<br/>Turbo · Cortex · Ops"]:::gray
-        aletheia["Aletheia Research<br/>Deep Research API"]:::gray
-        languagetool["LanguageTool<br/>Grammar Checking"]:::gray
-        smtp["SMTP Service<br/>Email Notifications"]:::gray
+    subgraph FileManager["🟠 File Manager Plugin (Port 8001)"]
+        fm_service["Upload/Download/Extract<br/>Multi-tier Extraction<br/>Thumbnail Generation"]:::plugin_public
     end
 
-    subgraph Storage["Almacenamiento"]
-        mongo["MongoDB<br/>Sessions · Messages<br/>Documents · Reports"]:::gray
-        redis["Redis<br/>Cache · JWT Blacklist<br/>MCP Registry"]:::gray
-        minio["MinIO S3<br/>Files · Reports<br/>Thumbnails"]:::gray
+    subgraph Capital414["🔴 Capital414 Plugin (Port 8002)"]
+        audit_service["MCP Server<br/>COPILOTO_414"]:::plugin_private
+        validation_coord["ValidationCoordinator<br/>8 Auditores Streaming"]:::plugin_private
     end
 
-    subgraph Observability["Stack de Observabilidad"]
-        prom["Prometheus<br/>Request Metrics<br/>MCP Invocations"]:::gray
-        otel["OpenTelemetry<br/>Distributed Traces<br/>Spans"]:::gray
-        logs["Structlog<br/>JSON Logs<br/>Context Info"]:::gray
-        grafana["Grafana<br/>Dashboards<br/>Alerting"]:::gray
+    subgraph External["🌐 Servicios Externos"]
+        saptiva["SAPTIVA LLMs<br/>Turbo · Cortex · Ops"]:::external
+        aletheia["Aletheia Research<br/>Deep Research API"]:::external
+        languagetool["LanguageTool<br/>Grammar Checking"]:::external
+        smtp["SMTP Service<br/>Email Notifications"]:::external
     end
 
+    subgraph Storage["💾 Almacenamiento Distribuido"]
+        mongo["MongoDB<br/>Core: Sessions · Messages<br/>Capital414: Reports"]:::infra
+        redis["Redis<br/>Core: Cache · JWT Blacklist<br/>FileManager: Extract Cache"]:::infra
+        minio["MinIO S3<br/>FileManager: Files · Thumbnails<br/>Capital414: Reports"]:::infra
+    end
+
+    subgraph Observability["📊 Stack de Observabilidad"]
+        prom["Prometheus<br/>Request Metrics<br/>MCP Invocations"]:::infra
+        otel["OpenTelemetry<br/>Distributed Traces<br/>Spans"]:::infra
+        logs["Structlog<br/>JSON Logs<br/>Context Info"]:::infra
+        grafana["Grafana<br/>Dashboards<br/>Alerting"]:::infra
+    end
+
+    %% Plugin-First Communication
+    chat_core -->|"HTTP Client"| fm_service
+    fm_client_core -->|"HTTP Client"| fm_service
+    chat_core -.->|"MCP Protocol"| audit_service
+    audit_service --> validation_coord
+    validation_coord -->|"HTTP Client"| fm_service
+
+    %% External Service Connections
     chat_core --> saptiva
     chat_core --> aletheia
-    mcp_core --> saptiva
-    mcp_core --> doc_core
-    audit_core --> languagetool
-    doc_core --> smtp
+    validation_coord --> languagetool
+    fm_service --> smtp
 
+    %% Storage Connections (Distributed)
     chat_core --> mongo
     chat_core --> redis
-    mcp_core --> redis
-    doc_core --> minio
-    doc_core --> redis
-    audit_core --> mongo
-    audit_core --> minio
+    auth_core --> redis
+    fm_service --> minio
+    fm_service --> redis
+    validation_coord --> mongo
+    validation_coord --> minio
 
+    %% Observability (Centralized)
     chat_core --> prom
     chat_core --> otel
     chat_core --> logs
-    mcp_core --> prom
-    mcp_core --> otel
-    audit_core --> logs
-    doc_core --> logs
+    fm_service --> prom
+    fm_service --> logs
+    audit_service --> otel
+    validation_coord --> logs
 
     prom --> grafana
     otel --> grafana
+    logs --> grafana
 
-    classDef dark fill:#111111,stroke:#4b5563,color:#f9fafb;
-    classDef light fill:#ffffff,stroke:#4b5563,color:#111111;
-    classDef gray fill:#e5e7eb,stroke:#4b5563,color:#111111;
+    classDef core fill:#ffe0a3,stroke:#f59e0b,color:#0f172a;
+    classDef plugin_public fill:#c6f6d5,stroke:#16a34a,color:#0f172a;
+    classDef plugin_private fill:#fed7e2,stroke:#fb7185,color:#0f172a;
+    classDef external fill:#e5e7eb,stroke:#94a3b8,color:#111827;
+    classDef infra fill:#e5e7eb,stroke:#94a3b8,color:#0f172a;
 ```
 
-**Arquitectura de integración completa**: El núcleo API integra 4 servicios principales (Chat con SSE streaming, FastMCP con 5 herramientas, Document Audit con 8 auditores streaming, y Document Service con extracción multi-tier). Se conecta a servicios externos (SAPTIVA LLMs multi-modelo, Aletheia Research, LanguageTool, SMTP), usa almacenamiento triple (MongoDB para datos estructurados, Redis para cache/blacklist/registry, MinIO para archivos/thumbnails), y se monitoriza end-to-end mediante Prometheus (métricas de request + invocaciones MCP), OpenTelemetry (traces distribuidos), Structlog (logs JSON contextuales) y Grafana (dashboards + alertas).
-
-**Patrones y componentes clave**
-- *Chain of Responsibility + Strategy*: `apps/api/src/routers/chat/endpoints/message_endpoints.py` delega en `domain/message_handlers` para escoger streaming/simple.
-- *Builder Pattern*: `ChatResponseBuilder` compone respuestas enriquecidas con metadatos (`apps/api/src/domain/chat_response_builder.py`).
-- *Lazy Loading / Adapter*: `MCPFastAPIAdapter` expone herramientas FastMCP vía REST con telemetría y auth (`apps/api/src/mcp/fastapi_adapter.py`).
-- *Background Reaper*: `Storage` elimina documentos expirados/controla uso de disco (`apps/api/src/services/storage.py`).
-- *Coordinador + Auditores*: `validation_coordinator.py` orquesta múltiples validadores especializados para Document Audit.
+**Claves de integración**:
+- Core (8000) solo orquesta chat/auth y clientes HTTP/MCP; no ejecuta operaciones pesadas.
+- File Manager (8001) maneja upload/download/extract multi-tier y thumbnails contra MinIO/Redis.
+- Capital414 (8002) corre COPILOTO_414 con 8 auditores en paralelo y baja PDFs vía File Manager.
+- Externos: SAPTIVA, Aletheia, LanguageTool, SMTP; observabilidad única con Prometheus + OTel + structlog + Grafana.
+- Patrones: Chain of Responsibility en chat, Builder para respuestas, adapter MCP/HTTP, reaper de storage y coordinador de auditores.
 
 ## Stack y capacidades
 
 ### Plataforma conversacional
-- **Streaming + fallback**: SSE via `StreamingHandler` y respuestas síncronas con builder de mensajes (`apps/api/src/routers/chat/handlers/streaming_handler.py`).
-- **Contexto inteligente**: `ChatService` recupera historial Beanie, normaliza herramientas y arma prompts para SAPTIVA (`apps/api/src/services/chat_service.py`).
+- **Streaming + fallback**: SSE via `StreamingHandler` y respuestas síncronas con builder de mensajes (`apps/backend/src/routers/chat/handlers/streaming_handler.py`).
+- **Contexto inteligente**: `ChatService` recupera historial Beanie, normaliza herramientas y arma prompts para SAPTIVA (`apps/backend/src/services/chat_service.py`).
 - **UI reactiva**: Zustand gestiona selección de chat, modelos y herramientas con hidratación SWR (`apps/web/src/lib/stores/chat-store.ts`).
 
 ### Documentos y RAG
-- **Ingesta segura**: archivos se guardan en disco temporal con límites de tamaño y "reaper" (`apps/api/src/services/storage.py`).
-- **Persistencia primaria**: objetos se escriben en MinIO con rutas por usuario/chat y metadatos (`apps/api/src/services/minio_storage.py`).
-- **Cache de texto**: Redis almacena extractos 1h y valida ownership antes de usarlos en prompts (`apps/api/src/services/document_service.py`).
-- **RAG con Qdrant Vector DB**: Sistema completo de búsqueda semántica usando Qdrant como base de datos vectorial (`apps/api/src/services/qdrant_service.py`):
+- **Ingesta segura**: archivos se guardan en disco temporal con límites de tamaño y "reaper" (`apps/backend/src/services/storage.py`).
+- **Persistencia primaria**: objetos se escriben en MinIO con rutas por usuario/chat y metadatos (`apps/backend/src/services/minio_storage.py`).
+- **Cache de texto**: Redis almacena extractos 1h y valida ownership antes de usarlos en prompts (`apps/backend/src/services/document_service.py`).
+- **RAG con Qdrant Vector DB**: Sistema completo de búsqueda semántica usando Qdrant como base de datos vectorial (`apps/backend/src/services/qdrant_service.py`):
   - **Embeddings**: Modelo `paraphrase-multilingual-MiniLM-L12-v2` (384 dimensiones) para generación de embeddings
   - **Chunking inteligente**: 500 tokens por chunk con 100 tokens de overlap (20%) para preservar contexto
   - **Búsqueda semántica**: Cosine similarity con threshold configurable (0.7 por defecto)
   - **Aislamiento de contexto**: Filtrado obligatorio por `session_id` para prevenir fugas de información entre conversaciones
   - **Estrategias adaptativas**: `SemanticSearchStrategy` y `OverviewStrategy` para diferentes tipos de consultas
-  - **Herramienta MCP**: `get_segments` (`apps/api/src/mcp/tools/get_segments.py`) expone búsqueda semántica como herramienta productiva
+  - **Herramienta MCP**: `get_segments` (`apps/backend/src/mcp/tools/get_segments.py`) expone búsqueda semántica como herramienta productiva
   - **Orquestación**: `AdaptiveRetrievalOrchestrator` selecciona estrategia óptima según tipo de query
 
-### Cumplimiento Document Audit
-- Coordinador async que ejecuta auditores de disclaimer, formato, tipografía, color, logo, gramática y consistencia (`apps/api/src/services/validation_coordinator.py`).
-- Las políticas se resuelven dinámicamente y cada hallazgo se serializa a `ValidationReport` (Mongo + MinIO).
+### Cumplimiento COPILOTO_414
+- **Arquitectura**: Plugin privado independiente (`plugins/capital414-private/`) corriendo en puerto 8002
+- **Coordinador**: `ValidationCoordinator` ejecuta 8 auditores en paralelo de forma asíncrona
+- **Auditores**: Disclaimer, Format, Typography, Grammar, Logo, Color, Entity, Semantic
+- **Comunicación**: Backend invoca via MCP protocol o HTTP Client
+- **File Handling**: Plugin consume `file-manager` plugin para descargar PDFs temporales
+- **Persistencia**: Reportes se guardan en MongoDB + MinIO con políticas dinámicas
+- **Ubicación**: `plugins/capital414-private/src/validation_coordinator.py`
 
 ### Integración Audit File + Canvas (OpenCanvas)
 
-Sistema de auditoría con visualización en canvas lateral inspirado en OpenCanvas de OpenAI. Permite ejecutar auditorías Document Audit y visualizar resultados técnicos detallados sin saturar el chat.
+Auditoría COPILOTO_414 con panel lateral tipo OpenCanvas: el chat recibe el resumen humano y el canvas muestra el reporte técnico.
 
-**Flujo de Auditoría con Canvas**:
+**Flujo resumido**:
+1. Usuario envía `"Auditar archivo: filename.pdf"`.
+2. `AuditCommandHandler` (`plugins/capital414-private/src/handlers/audit_handler.py`) detecta el comando y descarga el PDF desde File Manager.
+3. `ValidationCoordinator` ejecuta 8 auditores en paralelo (disclaimer, format, typography, grammar, logo, color, entity, semantic).
+4. Se generan dos salidas: `generate_human_summary()` para chat y `format_executive_summary_as_markdown()` para canvas (`apps/backend/src/services/summary_formatter.py`).
+5. Se crea un `Artifact` con el reporte técnico y se devuelve en `tool_invocations` (`plugins/capital414-private/src/handlers/audit_handler.py:168-176`).
+6. Frontend renderiza el resumen en chat y abre `CanvasPanel` (`apps/web/src/components/canvas/canvas-panel.tsx`) con el artifact vía `CanvasContext`.
 
-1. **Trigger**: Usuario escribe `"Auditar archivo: filename.pdf"` en el chat
-2. **Handler**: `AuditCommandHandler` (`apps/api/src/domain/audit_handler.py`) intercepta el comando usando Chain of Responsibility
-3. **Ejecución**: Se ejecuta `validate_document()` con 8 auditores paralelos (disclaimer, format, typography, grammar, logo, color, entity, semantic)
-4. **Generación Dual de Contenido**:
-   - **Human Summary** (para chat): Resumen conversacional y no técnico generado por `generate_human_summary()` (`apps/api/src/services/summary_formatter.py`)
-   - **Technical Report** (para canvas): Reporte técnico completo en Markdown generado por `format_executive_summary_as_markdown()`
-5. **Creación de Artifact**: Se crea un `Artifact` (modelo Beanie) con tipo `MARKDOWN` conteniendo el reporte técnico completo
-6. **Metadata Injection**: El handler incluye `tool_invocations` con `create_artifact` en `decision_metadata` (línea 215-224)
-7. **Frontend Detection**: El componente `ChatMessage` detecta `tool_invocations` en metadata y extrae `artifact.id`
-8. **Canvas Rendering**:
-   - `CanvasContext` (`apps/web/src/context/CanvasContext.tsx`) gestiona estado del canvas
-   - `CanvasPanel` (`apps/web/src/components/canvas/canvas-panel.tsx`) renderiza el artifact usando `MarkdownRenderer`
-   - `AuditDetailView` muestra el reporte técnico completo con tabs, badges de severidad y descarga de PDF
-
-**Separación de Contenidos (Dual Summary)**:
+**Separación de contenidos**:
 
 | Ubicación | Contenido | Propósito | Formato |
 |-----------|-----------|-----------|---------|
-| **Chat** | Human Summary | Resumen amigable, no técnico, conversacional | Texto plano con emoji |
-| **Canvas** | Technical Report | Reporte detallado con findings, severidades, páginas | Markdown estructurado |
+| **Chat** | Human Summary | Resumen conversacional | Texto plano con emoji |
+| **Canvas** | Technical Report | Hallazgos + severidades + páginas | Markdown estructurado |
 
 **Arquitectura de Artifacts**:
 
 ```python
-# apps/api/src/models/artifact.py
+# apps/backend/src/models/artifact.py
 class Artifact(Document):
     id: str                          # UUID
     user_id: str                     # Owner
@@ -301,12 +692,9 @@ class Artifact(Document):
 ```
 
 **Beneficios del Canvas**:
-
-- ✅ **Experiencia de usuario limpia**: Chat muestra solo resumen ejecutivo, canvas muestra detalles técnicos
-- ✅ **Contexto preservado**: Canvas permanece abierto mientras el usuario navega el chat
-- ✅ **Ownership por chat**: Canvas se cierra automáticamente al cambiar de conversación (líneas 47-65 CanvasContext)
-- ✅ **Versionado**: Los artifacts mantienen historial de versiones para iteraciones
-- ✅ **Extensibilidad**: El sistema de artifacts soporta markdown, código y gráficos (preparado para futuras expansiones)
+- ✅ Chat limpio con resumen ejecutivo; detalles técnicos viven en el canvas.
+- ✅ Canvas mantiene contexto por chat y se cierra al cambiar de conversación.
+- ✅ Artifacts versionan reportes y soportan markdown, código o gráficos.
 
 **Ejemplo de Tool Invocation**:
 
@@ -330,29 +718,29 @@ class Artifact(Document):
 ```
 
 **Referencias de código**:
-- Backend Handler: `apps/api/src/domain/audit_handler.py:168-176` (creación artifact)
+- Backend Handler: `plugins/capital414-private/src/handlers/audit_handler.py:168-176` (creación artifact)
 - Frontend Context: `apps/web/src/context/CanvasContext.tsx`
 - Canvas Panel: `apps/web/src/components/canvas/canvas-panel.tsx`
-- Summary Formatter: `apps/api/src/services/summary_formatter.py`
+- Summary Formatter: `apps/backend/src/services/summary_formatter.py`
 
 ### Model Context Protocol (MCP)
-- Servidor FastMCP único con 5 herramientas productivas (`apps/api/src/mcp/server.py`).
-- Adaptador HTTP asegura auth y telemetría (`apps/api/src/mcp/fastapi_adapter.py`).
-- Lazy routing reduce el contexto (discover → load → invoke) (`apps/api/src/mcp/lazy_routes.py`).
+- Servidor FastMCP único con 5 herramientas productivas (`apps/backend/src/mcp/server.py`).
+- Adaptador HTTP asegura auth y telemetría (`apps/backend/src/mcp/fastapi_adapter.py`).
+- Lazy routing reduce el contexto (discover → load → invoke) (`apps/backend/src/mcp/lazy_routes.py`).
 - Cliente frontend expone list/get/invoke/health con cancelaciones (`apps/web/src/lib/mcp/client.ts`).
 - **Buenas prácticas Anthropic**:
-  - `Tool.invoke` valida JSON Schema y normaliza errores (`apps/api/src/mcp/tool.py`), evitando prompts mal formados.
-  - Scopes `mcp:tools.*` / `mcp:admin.*` derivados de `MCP_ADMIN_USERS` protegen rutas sensibles (`apps/api/src/mcp/security.py`).
-  - Telemetría y rate limiting dedicados para rutas `/mcp/lazy/*` (Observer pattern) + métricas Prometheus (`apps/api/src/mcp/metrics.py`).
-  - Versionado centralizado (`apps/api/src/mcp/versioning.py`) y compatibilidad hacia atrás en los contratos `schema_version`.
-  - Herramientas documentadas con esquemas y ejemplos (`apps/api/src/mcp/tools/*`) y cubiertas por `make test-mcp`, `make test-mcp-marker`.
+  - `Tool.invoke` valida JSON Schema y normaliza errores (`apps/backend/src/mcp/tool.py`), evitando prompts mal formados.
+  - Scopes `mcp:tools.*` / `mcp:admin.*` derivados de `MCP_ADMIN_USERS` protegen rutas sensibles (`apps/backend/src/mcp/security.py`).
+  - Telemetría y rate limiting dedicados para rutas `/mcp/lazy/*` (Observer pattern) + métricas Prometheus (`apps/backend/src/mcp/metrics.py`).
+  - Versionado centralizado (`apps/backend/src/mcp/versioning.py`) y compatibilidad hacia atrás en los contratos `schema_version`.
+  - Herramientas documentadas con esquemas y ejemplos (`apps/backend/src/mcp/tools/*`) y cubiertas por `make test-mcp`, `make test-mcp-marker`.
   - Checklist Senior AI: valida scopes antes de montar la herramienta, instrumenta cada invocación (`metrics_collector.track_invocation`), agrega tracing en `FastMCPAdapter`, y prueba rutas `discover/load/invoke` con `scripts/test_mcp_tools.sh`.
 
 ### Seguridad y observabilidad
-- **JWT + lista negra** en Redis (`apps/api/src/middleware/auth.py`, `apps/api/src/services/cache_service.py`).
-- **Rate limiting** por IP y cabeceras de control (`apps/api/src/middleware/rate_limit.py`).
-- **Secret manager** opcional y computed fields (`apps/api/src/core/config.py`).
-- **Telemetry + tracing** con OTEL/Prometheus/structlog (`apps/api/src/core/telemetry.py`).
+- **JWT + lista negra** en Redis (`apps/backend/src/middleware/auth.py`, `apps/backend/src/services/cache_service.py`).
+- **Rate limiting** por IP y cabeceras de control (`apps/backend/src/middleware/rate_limit.py`).
+- **Secret manager** opcional y computed fields (`apps/backend/src/core/config.py`).
+- **Telemetry + tracing** con OTEL/Prometheus/structlog (`apps/backend/src/core/telemetry.py`).
 - **Scopes MCP**: define `MCP_ADMIN_USERS` (usernames o correos separados por comas) para otorgar scopes `mcp:admin.*` en rutas sensibles (`/mcp/lazy/stats`, `/unload`), mientras el resto conserva sólo `mcp:tools.*`.
 
 ## Arquitectura
@@ -378,36 +766,37 @@ Arquitectura reactiva moderna con React Query + Zustand, optimistic updates, y e
 **Arquitectura Reactiva**:
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#111827','lineColor': '#111827','textColor': '#111827','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
 flowchart TB
-    User[("👤 Usuario")]
+    User[("👤 Usuario")]:::user
 
     subgraph UI["Capa de Presentación"]
-        ChatView["ChatView Component"]
-        MessageList["Message List"]
-        ChatInput["Chat Input"]
+        ChatView["ChatView Component"]:::ui
+        MessageList["Message List"]:::ui
+        ChatInput["Chat Input"]:::ui
     end
 
     subgraph Reactive["Capa Reactiva (Hooks)"]
-        useChatMessages["useChatMessages<br/>(React Query)"]
-        useChatMetadata["useChatMetadata<br/>(Metadata)"]
-        useSendMessage["useSendMessage<br/>(Optimistic)"]
+        useChatMessages["useChatMessages<br/>(React Query)"]:::reactive
+        useChatMetadata["useChatMetadata<br/>(Metadata)"]:::reactive
+        useSendMessage["useSendMessage<br/>(Optimistic)"]:::reactive
     end
 
     subgraph Cache["React Query Cache"]
-        QueryCache["Query Cache<br/>60s staleTime<br/>SWR pattern"]
+        QueryCache["Query Cache<br/>60s staleTime<br/>SWR pattern"]:::cache
     end
 
     subgraph Sync["Zustand Sync Layer"]
-        ChatStore["chat-store<br/>(UI State)"]
-        setMessages["setMessages()"]
-        setHydrated["setHydratedStatus()"]
+        ChatStore["chat-store<br/>(UI State)"]:::sync
+        setMessages["setMessages()"]:::sync
+        setHydrated["setHydratedStatus()"]:::sync
     end
 
     subgraph Network["Network Layer"]
-        APIClient["API Client<br/>(HTTP + SSE)"]
+        APIClient["API Client<br/>(HTTP + SSE)"]:::network
     end
 
-    Backend[("🔌 FastAPI Backend")]
+    Backend[("🔌 FastAPI Backend")]:::backend
 
     User -->|"Envía mensaje"| ChatInput
     ChatInput -->|"mutate()"| useSendMessage
@@ -426,10 +815,13 @@ flowchart TB
     ChatView -->|"Metadata"| useChatMetadata
     useChatMetadata -->|"Read"| ChatStore
 
-    style User fill:#e3f2fd
-    style Backend fill:#fff3e0
-    style QueryCache fill:#f3e5f5
-    style ChatStore fill:#e8f5e9
+    classDef user fill:#c7f0ff,stroke:#0ea5e9,color:#0f172a;
+    classDef ui fill:#c7f0ff,stroke:#0ea5e9,color:#0f172a;
+    classDef reactive fill:#f8fafc,stroke:#cbd5e1,color:#0f172a;
+    classDef cache fill:#e5e7eb,stroke:#94a3b8,color:#0f172a;
+    classDef sync fill:#f8fafc,stroke:#cbd5e1,color:#0f172a;
+    classDef network fill:#c6f6d5,stroke:#16a34a,color:#0f172a;
+    classDef backend fill:#0f172a,stroke:#38bdf8,color:#e2e8f0;
 ```
 
 **Capas de la Arquitectura**:
@@ -470,7 +862,7 @@ flowchart TB
 2. **Chat Interface**:
    - **ChatView** orquesta toda la UI con handler SSE integrado y limpieza agresiva de adjuntos.
    - **Logic**: Manejo robusto de estados de carga para chats borradores (`draft`) y temporales, evitando bloqueos de UI.
-   - **Message Display**: ChatMessage con thumbnails/audit, StreamingMessage con typing real-time, FileReviewMessage y MessageAuditCard para Document Audit
+   - **Message Display**: ChatMessage con thumbnails/audit, StreamingMessage con typing real-time, FileReviewMessage y MessageAuditCard para COPILOTO_414
    - **Message Input**: CompactChatComposer con auto-submit para auditoría, PreviewAttachment con botón de audit, ThumbnailImage con fetch autenticado
    - **Content Display**: MarkdownMessage con syntax highlighting y CodeBlock con detección de lenguaje
 
@@ -485,123 +877,127 @@ flowchart TB
 
 Todo implementa **State Pattern** (Zustand), **Gateway Pattern** (clients), **Observer Pattern** (SSE), y **Strategy Pattern** (message handlers).
 
-### Backend (FastAPI + MCP)
-Arquitectura server-side simplificada mostrando el flujo principal desde middleware hasta persistencia, con énfasis en servicios core y MCP.
+### Backend Core + Plugins (Plugin-First Architecture)
+Arquitectura **Plugin-First** mostrando Backend Core (Kernel ligero) delegando operaciones especializadas a plugins independientes.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#111111','primaryBorderColor': '#4b5563','primaryTextColor': '#f9fafb','lineColor': '#4b5563','secondaryColor': '#ffffff','secondaryBorderColor': '#4b5563','secondaryTextColor': '#111111','tertiaryColor': '#d1d5db','tertiaryBorderColor': '#4b5563','tertiaryTextColor': '#111111'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#cbd5e1','primaryBorderColor': '#cbd5e1','primaryTextColor': '#111827','lineColor': '#111827','textColor': '#111827','secondaryColor': '#ffffff','secondaryBorderColor': '#111827','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#111827','tertiaryTextColor': '#0f172a'}}}%%
 flowchart TB
     client[HTTP/SSE Client]:::gray --> middleware
 
-    subgraph Middleware["Middleware Stack"]
-        middleware["Gateway → Auth → RateLimit → Cache → Telemetry"]:::dark
-    end
-
-    middleware --> routers
-
-    subgraph Routers["API Routers"]
-        chat_r["Chat Routes<br/>/api/chat · /api/sessions"]:::light
-        files_r["File Routes<br/>/api/files/* · /api/documents/*"]:::light
-        mcp_r["MCP Routes<br/>/mcp/lazy/* · /mcp/admin/*"]:::dark
-        auth_r["Auth Routes<br/>/api/auth/*"]:::light
-    end
-
-    routers --> chat_r
-    routers --> files_r
-    routers --> mcp_r
-    routers --> auth_r
-
-    subgraph Processing["Processing Layer"]
-        handlers["Request Handlers<br/>Streaming · Message · Audit"]:::dark
-
-        subgraph CoreServices["Core Services"]
-            chat_svc["ChatService<br/>Builder Pattern"]:::light
-            doc_svc["DocumentService<br/>pypdf→SDK→OCR"]:::light
+    subgraph BackendCore["🟢 Backend Core (Port 8000) - Kernel Ligero"]
+        subgraph Middleware["Middleware Stack"]
+            middleware["Gateway → Auth → RateLimit → Cache → Telemetry"]:::core
         end
 
-        subgraph COPILOTO["Document Audit"]
-            validator["ValidationCoordinator<br/>8 Auditors Parallel"]:::light
+        middleware --> routers
+
+        subgraph Routers["API Routers (Thin Layer)"]
+            chat_r["Chat Routes<br/>/api/chat · /api/sessions"]:::core
+            files_r["File Routes<br/>/api/files/* (delegates)"]:::core
+            audit_r["Audit Routes<br/>/api/audit/* (delegates)"]:::core
+            auth_r["Auth Routes<br/>/api/auth/*"]:::core
         end
 
-        subgraph MCP["MCP Server"]
-            mcp_core["FastMCP Core<br/>5 Tools · Lazy Load"]:::light
+        routers --> chat_r
+        routers --> files_r
+        routers --> audit_r
+        routers --> auth_r
+
+        subgraph CoreServices["Core Services (Orchestration Only)"]
+            chat_svc["ChatService<br/>Builder Pattern<br/>LLM Orchestration"]:::core
+            fm_client["FileManagerClient<br/>HTTP Client Pattern"]:::core
+            session_svc["SessionService<br/>Auth · Context"]:::core
         end
+
+        chat_r --> chat_svc
+        files_r --> fm_client
+        audit_r -.->|"MCP Protocol"| capital414_mcp
+        auth_r --> session_svc
     end
 
-    chat_r --> handlers
-    files_r --> doc_svc
-    mcp_r --> mcp_core
+    subgraph FileManagerPlugin["🟠 File Manager Plugin (Port 8001) - Public"]
+        fm_api["REST API<br/>/upload · /download · /extract"]:::plugin_public
 
-    handlers --> chat_svc
-    handlers --> validator
-    mcp_core --> validator
-    mcp_core --> doc_svc
+        subgraph FileManagerServices["File Manager Services"]
+            extraction["Multi-tier Extraction<br/>pypdf → PDF SDK → OCR"]:::plugin_public
+            thumbnails["Thumbnail Generation<br/>Image Processing"]:::plugin_public
+            fm_minio["MinIO Client<br/>S3 Operations"]:::plugin_public
+        end
 
-    subgraph Storage["Storage Layer"]
-        storage_svc["Storage Services<br/>MinIO · Thumbnails · Email"]:::light
+        fm_api --> extraction
+        fm_api --> thumbnails
+        extraction --> fm_minio
+        thumbnails --> fm_minio
     end
 
-    doc_svc --> storage_svc
-    validator --> storage_svc
+    fm_client -->|"HTTP Client"| fm_api
 
-    subgraph Persistence["Persistence (Ports & Adapters)"]
-        mongo[("MongoDB<br/>Sessions · Docs · Reports")]:::gray
-        redis[("Redis<br/>Cache · Tokens · Registry")]:::gray
-        minio[("MinIO S3<br/>Files · Reports · Thumbs")]:::gray
+    subgraph Capital414Plugin["🔴 Capital414 Plugin (Port 8002) - Private"]
+        capital414_mcp["MCP Server<br/>Tool: audit_document_full"]:::plugin_private
+
+        subgraph COPILOTO["COPILOTO_414"]
+            validator["ValidationCoordinator<br/>Orchestrator Pattern"]:::plugin_private
+            auditores["8 Auditors Parallel<br/>Disclaimer · Format · Grammar<br/>Typography · Logo · Color<br/>Entity · Semantic"]:::plugin_private
+        end
+
+        c414_fm_client["FileManagerClient<br/>Download PDF"]:::plugin_private
+
+        capital414_mcp --> validator
+        validator --> auditores
+        auditores --> c414_fm_client
+    end
+
+    c414_fm_client -->|"HTTP Client"| fm_api
+
+    subgraph Persistence["💾 Persistence (Ports & Adapters)"]
+        mongo[("MongoDB<br/>Core: Sessions · Messages<br/>Capital414: Reports")]:::infra
+        redis[("Redis<br/>Core: Cache · JWT Blacklist<br/>FileManager: Extract Cache")]:::infra
+        minio[("MinIO S3<br/>FileManager: Files · Thumbs<br/>Capital414: Reports")]:::infra
     end
 
     chat_svc --> mongo
     chat_svc --> redis
-    doc_svc --> mongo
-    doc_svc --> redis
-    validator --> mongo
-    storage_svc --> minio
-    mcp_core --> redis
+    session_svc --> redis
     middleware --> redis
+    fm_minio --> minio
+    validator --> mongo
 
-    subgraph External["External APIs"]
-        saptiva["SAPTIVA LLMs"]:::gray
-        aletheia["Aletheia"]:::gray
-        languagetool["LanguageTool"]:::gray
+    subgraph External["🌐 External APIs"]
+        saptiva["SAPTIVA LLMs<br/>Turbo · Cortex · Ops"]:::external
+        aletheia["Aletheia Research<br/>Deep Research"]:::external
+        languagetool["LanguageTool<br/>Grammar Checking"]:::external
     end
 
     chat_svc --> saptiva
-    mcp_core --> aletheia
-    validator --> languagetool
+    chat_svc --> aletheia
+    auditores --> languagetool
 
-    classDef dark fill:#111111,stroke:#4b5563,color:#f9fafb;
-    classDef light fill:#ffffff,stroke:#4b5563,color:#111111;
-    classDef gray fill:#e5e7eb,stroke:#4b5563,color:#111111;
+    class Routers routers;
+    style Routers fill:#ffffff,stroke:#111827,color:#111827;
+    classDef core fill:#ffe0a3,stroke:#f59e0b,color:#111827;
+    classDef plugin_public fill:#c6f6d5,stroke:#16a34a,color:#111827;
+    classDef plugin_private fill:#fed7e2,stroke:#fb7185,color:#111827;
+    classDef external fill:#e5e7eb,stroke:#94a3b8,color:#111827;
+    classDef infra fill:#e5e7eb,stroke:#94a3b8,color:#111827;
+    classDef gray fill:#f8fafc,stroke:#cbd5e1,color:#111827;
+    classDef routers fill:#ffe0a3,stroke:#f59e0b,color:#111827;
 ```
 
-**Arquitectura backend simplificada en 6 capas**:
+**Capa a capa**:
+- **Core 8000**: middleware (auth, rate-limit, cache, telemetry), routers delgados y servicios de orquestación. No ejecuta trabajos pesados.
+- **File Manager 8001**: REST `/upload|download|extract`, extracción multi-tier + thumbnails, persiste en MinIO/Redis.
+- **Capital414 8002**: MCP tool `audit_document_full`, ValidationCoordinator con 8 auditores, descarga PDFs vía File Manager y persiste reportes en Mongo/MinIO.
 
-1. **Middleware Stack**: Gateway ASGI → Auth JWT + Blacklist → RateLimit → CacheControl → Telemetry - Todas las políticas transversales en una capa unificada
+**Ventajas**: core simple, plugins escalan y versionan aparte, File Manager publicable, Capital414 aislado y con inversión de dependencias (HTTP/MCP).
 
-2. **API Routers**: 4 grupos principales (Chat, Files, MCP, Auth) - Enrutamiento por dominio con validaciones
-
-3. **Processing Layer**:
-   - **Request Handlers**: Streaming (SSE), Message (Strategy), Audit (Progress)
-   - **Core Services**: ChatService (Builder pattern), DocumentService (multi-tier extraction pypdf→SDK→OCR)
-   - **Document Audit**: ValidationCoordinator con 8 auditores paralelos (Disclaimer, Format, Grammar, Logo, Typography, Color, Entity, Semantic)
-   - **MCP Server**: FastMCP core con 5 herramientas productivas + lazy loading (98% reducción contexto)
-
-4. **Storage Layer**: Servicios de almacenamiento (MinIO operations, Thumbnail generation, Email delivery) - Abstracción de operaciones de storage
-
-5. **Persistence (Ports & Adapters)**:
-   - **MongoDB**: Sessions, Messages, Documents, Reports (Beanie ODM)
-   - **Redis**: Cache (1h TTL), JWT Blacklist, MCP Registry, Session State
-   - **MinIO S3**: Files, Audit Reports, Thumbnails (organized by user/chat)
-
-6. **External APIs**: SAPTIVA LLMs (Turbo/Cortex/Ops), Aletheia Research, LanguageTool
-
-**Patrones clave**: Chain of Responsibility (routing), Builder (ChatService), Strategy (handlers), Orchestrator (Document Audit), Adapter (MCP), Lazy Loading (tools), Ports & Adapters (persistence).
+**Patrones clave**: HTTP Client inter-plugin, MCP tools, Builder en ChatService, Orchestrator en ValidationCoordinator, adapters de persistencia, micro-kernel para separar concerns.
 
 ### Integración Frontend ↔ Backend
 Conexiones clave: REST, SSE y MCP; se incluyen dependencias externas (LLMs y herramientas) y dónde se instrumenta.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#111111','primaryBorderColor': '#4b5563','primaryTextColor': '#111111','lineColor': '#4b5563','secondaryColor': '#ffffff','secondaryBorderColor': '#4b5563','secondaryTextColor': '#111111','tertiaryColor': '#d1d5db','tertiaryBorderColor': '#4b5563','tertiaryTextColor': '#111111'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#111827','lineColor': '#111827','textColor': '#111827','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
 flowchart LR
     user((Usuario)):::light --> web_ui["Next.js UI"]:::dark
     web_ui -->|REST /api| api_gateway["FastAPI Gateway"]:::dark
@@ -615,19 +1011,19 @@ flowchart LR
 
     streaming --> chat_service
     mcp_adapter --> fastmcp["FastMCP Server"]:::dark
-    fastmcp --> validation["Document Audit Auditors"]:::light
+    fastmcp --> validation["COPILOTO_414 Auditors"]:::light
     validation --> languagetool["LanguageTool"]:::light
     fastmcp --> aletheia["Aletheia Research"]:::light
 
     api_gateway --> telemetry["OTel + Prometheus"]:::gray
     fastmcp --> telemetry
 
-    classDef dark fill:#111111,stroke:#4b5563,color:#f9fafb;
-    classDef light fill:#ffffff,stroke:#4b5563,color:#111111;
-    classDef gray fill:#e5e7eb,stroke:#4b5563,color:#111111;
+    classDef dark fill:#0f172a,stroke:#38bdf8,color:#e2e8f0;
+    classDef light fill:#ffffff,stroke:#cbd5e1,color:#0f172a;
+    classDef gray fill:#f8fafc,stroke:#cbd5e1,color:#0f172a;
 ```
 
-Este diagramas refleja la interacción **cliente-servidor**: Next.js usa REST para acciones cortas, SSE para streaming y MCP para herramientas avanzadas. FastAPI actúa como Gateway y delega en ChatService/FastMCP, mientras Redis y Mongo sirven como contexto persistente. El módulo de telemetría instrumenta ambos entrypoints para tener métricas y trazas en tiempo real.
+Este diagrama resume la interacción **cliente-servidor**: Next.js usa REST para acciones cortas, SSE para streaming y MCP para herramientas avanzadas. FastAPI actúa como gateway y delega en ChatService/FastMCP; Redis y Mongo aportan contexto persistente; telemetría captura métricas y trazas en ambos entrypoints.
 
 `infra/docker-compose.yml` levanta todos los servicios (Mongo, Redis, FastAPI, Next.js, MinIO, LanguageTool, Playwright y Nginx opcional) con healthchecks y perfiles.
 
@@ -636,7 +1032,7 @@ Este diagramas refleja la interacción **cliente-servidor**: Next.js usa REST pa
 Secuencia completa del envío de un mensaje streaming desde el cliente hasta SAPTIVA y de regreso mediante SSE.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'actorBorder': '#4b5563','actorBkg': '#f9fafb','actorTextColor': '#111111','signalColor': '#4b5563','signalTextColor': '#111111','activationBorderColor': '#4b5563','activationBkgColor': '#d1d5db','sequenceNumberColor': '#4b5563'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'actorBorder': '#94a3b8','actorBkg': '#f8fafc','actorTextColor': '#111827','signalColor': '#111827','signalTextColor': '#111827','activationBorderColor': '#cbd5e1','activationBkgColor': '#e2e8f0','sequenceNumberColor': '#0ea5e9'}}}%%
 sequenceDiagram
     participant UI as Next.js Client
     participant API as FastAPI /api/chat
@@ -661,10 +1057,10 @@ Funcionamiento: el request crea un `ChatContext`, el `StreamingHandler` lanza un
 
 ### Pipeline de ingestión y auditoría
 
-Secuencia de subida de archivos, persistencia y ejecución del coordinador Document Audit.
+Secuencia de subida de archivos, persistencia y ejecución del coordinador COPILOTO_414.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'actorBorder': '#4b5563','actorBkg': '#f9fafb','actorTextColor': '#111111','signalColor': '#4b5563','signalTextColor': '#111111','activationBorderColor': '#4b5563','activationBkgColor': '#d1d5db','sequenceNumberColor': '#4b5563'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'actorBorder': '#94a3b8','actorBkg': '#f8fafc','actorTextColor': '#111827','signalColor': '#111827','signalTextColor': '#111827','activationBorderColor': '#cbd5e1','activationBkgColor': '#e2e8f0','sequenceNumberColor': '#0ea5e9'}}}%%
 sequenceDiagram
     participant Dropzone as FileDropzone (Next.js)
     participant API as FastAPI /api/files/upload
@@ -672,7 +1068,7 @@ sequenceDiagram
     participant MinIO as MinIO S3
     participant Mongo as MongoDB
     participant Redis as Redis Cache
-    participant Auditor as Document Audit
+    participant Auditor as COPILOTO_414
 
     Dropzone->>API: multipart/form-data
     API->>Storage: save_upload()
@@ -688,31 +1084,39 @@ sequenceDiagram
     API-->>Dropzone: Findings + summary
 ```
 
-Funcionamiento: se sigue un pipeline en etapas (Upload → Persistencia → Cache → Auditoría). Cada componente aplica validaciones específicas (Dropzone verifica tipos, Storage aplica límites, ValidationCoordinator ejecuta auditores configurables) y usa patrones como Strategy + Orchestrator para combinar hallazgos antes de devolverlos a la UI.
+Pipeline en etapas: Upload → Persistencia → Cache → Auditoría. Dropzone valida tipo/tamaño, Storage limita y limpia, File Manager persiste en MinIO/Redis, y ValidationCoordinator orquesta los auditores antes de responder a la UI.
 
-### Flujo de Audit Command + Canvas
+### Flujo de Audit Command + Canvas (Plugin-First)
 
-Secuencia completa desde el comando "Auditar archivo:" hasta la renderización dual (chat + canvas).
+Secuencia completa desde el comando "Auditar archivo:" hasta la renderización dual (chat + canvas) mostrando la **arquitectura Plugin-First**.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'actorBorder': '#4b5563','actorBkg': '#f9fafb','actorTextColor': '#111111','signalColor': '#4b5563','signalTextColor': '#111111','activationBorderColor': '#4b5563','activationBkgColor': '#d1d5db','sequenceNumberColor': '#4b5563'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'actorBorder': '#94a3b8','actorBkg': '#f8fafc','actorTextColor': '#111827','signalColor': '#111827','signalTextColor': '#111827','activationBorderColor': '#cbd5e1','activationBkgColor': '#e2e8f0','sequenceNumberColor': '#0ea5e9'}}}%%
 sequenceDiagram
     participant User as Usuario
     participant Chat as ChatView
-    participant API as POST /api/chat
-    participant Handler as AuditCommandHandler
-    participant Coordinator as ValidationCoordinator
-    participant MinIO as MinIO Storage
-    participant Formatter as SummaryFormatter
-    participant ArtifactDB as Artifact Model
+    participant BackendCore as Backend Core<br/>(Port 8000)
+    participant MCPClient as MCP Client
+    participant Capital414 as Capital414 Plugin<br/>(Port 8002)
+    participant Handler as AuditCommandHandler<br/>(en Capital414)
+    participant Coordinator as ValidationCoordinator<br/>(en Capital414)
+    participant FileManager as File Manager Plugin<br/>(Port 8001)
+    participant Formatter as SummaryFormatter<br/>(en Capital414)
+    participant ArtifactDB as Artifact Model<br/>(MongoDB)
     participant Canvas as Canvas Panel
 
     User->>Chat: "Auditar archivo: doc.pdf"
-    Chat->>API: POST con mensaje + file_ids
-    API->>Handler: can_handle() → True
+    Chat->>BackendCore: POST /api/chat con mensaje + file_ids
+
+    Note over BackendCore,Capital414: Backend Core delega a Capital414 Plugin
+    BackendCore->>MCPClient: call_tool("audit_document_full")
+    MCPClient->>Capital414: MCP Protocol invocation
+
+    Note over Capital414,FileManager: Capital414 Plugin ejecuta auditoría
+    Capital414->>Handler: can_handle() → True
     Handler->>Handler: _find_target_document()
-    Handler->>MinIO: materialize_document()
-    MinIO-->>Handler: pdf_path
+    Handler->>FileManager: HTTP GET /download/{doc_id}
+    FileManager-->>Handler: pdf_bytes
     Handler->>Coordinator: validate_document(8 auditores)
     Coordinator-->>Handler: ValidationReport
 
@@ -725,9 +1129,11 @@ sequenceDiagram
     Handler->>ArtifactDB: Artifact.insert()
     ArtifactDB-->>Handler: artifact.id
 
-    Handler-->>API: ChatProcessingResult {<br/>  content: human_summary,<br/>  metadata: {<br/>    tool_invocations: [{<br/>      tool_name: "create_artifact",<br/>      result: {id, title, type}<br/>    }]<br/>  }<br/>}
+    Handler-->>Capital414: Audit result + artifact_id
+    Capital414-->>MCPClient: MCP response
+    MCPClient-->>BackendCore: ChatProcessingResult {<br/>  content: human_summary,<br/>  metadata: {<br/>    tool_invocations: [{<br/>      tool_name: "create_artifact",<br/>      result: {id, title, type}<br/>    }]<br/>  }<br/>}
 
-    API-->>Chat: Response with metadata
+    BackendCore-->>Chat: Response with metadata
 
     Note over Chat,Canvas: Frontend Detection & Rendering
     Chat->>Chat: Detecta tool_invocations
@@ -739,27 +1145,17 @@ sequenceDiagram
     Canvas-->>User: Panel lateral con reporte técnico
 ```
 
-**Flujo explicado**:
-
-1. **Detección**: `AuditCommandHandler.can_handle()` detecta comando "Auditar archivo:" usando Chain of Responsibility
-2. **Materialización**: Documento se descarga de MinIO si no existe localmente
-3. **Validación**: `ValidationCoordinator` ejecuta 8 auditores en paralelo (disclaimer, format, typography, grammar, logo, color, entity, semantic)
-4. **Generación Dual**:
-   - `generate_human_summary()`: Resumen conversacional para chat (sin jerga técnica)
-   - `format_executive_summary_as_markdown()`: Reporte técnico completo para canvas
-5. **Persistencia**: Se crea `Artifact` con el reporte técnico y se guarda en MongoDB
-6. **Metadata Injection**: `tool_invocations` con `create_artifact` se incluye en `decision_metadata`
-7. **Frontend Detection**: `ChatMessage` detecta `tool_invocations` y extrae `artifact.id`
-8. **Canvas Rendering**: `CanvasPanel` obtiene el artifact y renderiza el contenido técnico usando `MarkdownRenderer`
-
-**Resultado**: Usuario ve resumen amigable en el chat y detalles técnicos completos en el panel lateral sin saturar la conversación.
+**Flujo resumido**:
+- Core detecta el comando y lo delega vía MCP a Capital414.
+- Capital414 baja el PDF desde File Manager, ejecuta 8 auditores y genera resumen humano + reporte técnico (markdown).
+- Se crea un Artifact con el reporte, se inyecta en `tool_invocations` y el frontend lo pinta: chat muestra el resumen, canvas el reporte.
 
 ### Lazy loading MCP (descubrimiento → invocación)
 
 Flujo HTTP que sigue el frontend para descubrir, cargar e invocar herramientas MCP sin cargar todo el contexto.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#111111','primaryBorderColor': '#4b5563','primaryTextColor': '#111111','lineColor': '#4b5563','secondaryColor': '#ffffff','secondaryBorderColor': '#4b5563','secondaryTextColor': '#111111','tertiaryColor': '#d1d5db','tertiaryBorderColor': '#4b5563','tertiaryTextColor': '#111111'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#111827','lineColor': '#111827','textColor': '#111827','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
 flowchart LR
     Client["Next.js MCPClient"]:::dark -->|GET /api/mcp/lazy/discover| Discover["FastAPI Lazy Router"]:::dark
     Discover --> Cache["In-memory tool cache"]:::gray
@@ -772,9 +1168,9 @@ flowchart LR
     MCP --> Auth["Auth dependency (get_current_user)"]:::light
     Invoker --> Client
 
-    classDef dark fill:#111111,stroke:#4b5563,color:#f9fafb;
-    classDef light fill:#ffffff,stroke:#4b5563,color:#111111;
-    classDef gray fill:#e5e7eb,stroke:#4b5563,color:#111111;
+    classDef dark fill:#0f172a,stroke:#38bdf8,color:#e2e8f0;
+    classDef light fill:#ffffff,stroke:#cbd5e1,color:#0f172a;
+    classDef gray fill:#f8fafc,stroke:#cbd5e1,color:#0f172a;
 ```
 
 Funcionamiento: el `MCPClient` implementa un ciclo Discover → Load → Invoke. El módulo `Discover` expone un registro ligero, `Loader` materializa la herramienta bajo demanda (Lazy Loading) y `Invoker` la ejecuta envolviendo la llamada con autenticación y telemetría. El caché evita cargar specs completas en cada request, logrando el 98 % de reducción de contexto declarado.
@@ -796,11 +1192,11 @@ make setup-quick   # valores por defecto (CI/CD)
 ### 2. Levantar entorno
 ```bash
 make dev
-# Usa docker compose -p octavios-chat-client-project (contenedores: octavios-chat-client-project-api, -web, etc.)
+# Usa docker compose -p capital414-chat (contenedores: capital414-chat-api, -web, etc.)
 ```
 Servicios:
 - Frontend http://localhost:3000
-- Backend http://localhost:8001/api
+- Backend http://localhost:8000/api
 - MinIO http://localhost:9001 (console)
 - Mongo/Redis/LangTool corren en la misma red docker.
 
@@ -817,28 +1213,24 @@ make verify
 Ejecuta health checks de contenedores, API, DB y frontend.
 
 ## Flujo de documentos y auditoría
-1. **Upload**: dropzone valida tipo/tamaño y envía multi-part (`apps/web/src/components/document-review/FileDropzone.tsx`).
-2. **Persistencia**: FastAPI guarda streaming en disco, mueve a MinIO y almacena metadatos en Mongo (`apps/api/src/services/storage.py`, `apps/api/src/services/minio_storage.py`).
-3. **Cache + Embeddings**: texto se guarda en Redis (1h TTL); chunks se convierten a embeddings y se almacenan en Qdrant para búsqueda semántica (`apps/api/src/services/document_processing_service.py`).
-4. **Extracción RAG**: herramienta `get_segments` usa búsqueda semántica en Qdrant para recuperar chunks relevantes según la query del usuario (`apps/api/src/mcp/tools/get_segments.py`).
-5. **Auditoría via Chat Command**: comando "Auditar archivo: filename.pdf" ejecuta `AuditCommandHandler` con 8 auditores paralelos vía `ValidationCoordinator` (`apps/api/src/domain/audit_handler.py`, `apps/api/src/services/validation_coordinator.py`).
-6. **Generación Dual de Contenido**: se genera resumen humano para chat y reporte técnico para canvas (`apps/api/src/services/summary_formatter.py`).
-7. **Artifact Creation**: reporte técnico se persiste como `Artifact` con metadata `tool_invocations` para detección frontend (`apps/api/src/domain/audit_handler.py:168-176`).
-8. **Canvas Rendering**: `CanvasPanel` detecta artifact en metadata y renderiza el reporte técnico en panel lateral resizable (`apps/web/src/components/canvas/canvas-panel.tsx`).
-9. **Limpieza**: `ChatView` aplica una limpieza agresiva de adjuntos tras la respuesta exitosa, asegurando que no queden archivos huérfanos en la UI (`useFiles` con selectores).
+1. Upload validado en dropzone → FastAPI guarda y envía a MinIO con metadatos en Mongo.
+2. Redis cachea texto; Qdrant guarda embeddings para RAG (`document_processing_service.py`).
+3. `get_segments` expone la búsqueda semántica como herramienta MCP.
+4. Comando "Auditar archivo" dispara `AuditCommandHandler` + `ValidationCoordinator` (8 auditores) y genera resumen humano + reporte técnico.
+5. Se crea un Artifact con el reporte (referenciado en `tool_invocations`) y el canvas lo renderiza; la UI limpia adjuntos tras responder.
 
 > **Nota RAG**: Sistema completo con Qdrant vector DB (embeddings 384-dim usando `paraphrase-multilingual-MiniLM-L12-v2`, cosine similarity con threshold 0.7, chunking inteligente con 500 tokens/chunk y 100 tokens overlap para preservar contexto). Ver configuración detallada en `docs/RAG_CONFIGURATION.md`.
 
 ## Herramientas MCP
 | Herramienta | Categoría | Descripción | Entrada principal |
 |-------------|-----------|-------------|-------------------|
-| `audit_file` | Compliance | Ejecuta Document Audit con selección de política y auditores opcionales | `doc_id`, `policy_id`, flags |
+| `audit_file` | Compliance | Ejecuta COPILOTO_414 con selección de política y auditores opcionales | `doc_id`, `policy_id`, flags |
 | `excel_analyzer` | Datos | Perfilado, agregaciones y validaciones de planillas | `doc_id`, `operations`, `aggregate_columns` |
 | `viz_tool` | Insights | Genera voz narrativa + gráficos ligeros a partir de tablas | `prompt`, `data_source` |
 | `deep_research` | Investigación | Orquesta iteraciones con Aletheia y devuelve hallazgos+fuentes | `query`, `depth`, `max_iterations` |
 | `extract_document_text` | RAG | Extrae texto multi-tier con cache TTL configurable | `doc_id`, `method`, `page_numbers` |
 
-Todas viven en `apps/api/src/mcp/server.py` y comparten telemetría/seguridad gracias al adaptador FastAPI.
+Todas viven en `apps/backend/src/mcp/server.py` y comparten telemetría/seguridad gracias al adaptador FastAPI.
 
 ## Frontend
 - Next.js 14 (app router) con Tailwind, React Server Components y streaming UI (`apps/web/src/app/...`).
@@ -847,10 +1239,10 @@ Todas viven en `apps/api/src/mcp/server.py` y comparten telemetría/seguridad gr
 - Componentes accesibles y testados (jest + Testing Library) para chat composer, adjuntos y listas virtualizadas (`apps/web/src/components/chat`).
 
 ## Backend
-- FastAPI modular con routers especializados (`apps/api/src/routers`).
-- Diseño por dominios + patrones (builder, strategy, chain-of-responsibility) en chat y sesión (`apps/api/src/domain`, `apps/api/src/services`).
+- FastAPI modular con routers especializados (`apps/backend/src/routers`).
+- Diseño por dominios + patrones (builder, strategy, chain-of-responsibility) en chat y sesión (`apps/backend/src/domain`, `apps/backend/src/services`).
 - Integraciones externas encapsuladas (SAPTIVA, Aletheia, MinIO, LanguageTool).
-- Base de datos con Beanie ODM, índices y validaciones (`apps/api/src/models`).
+- Base de datos con Beanie ODM, índices y validaciones (`apps/backend/src/models`).
 
 ## Pruebas y calidad
 
@@ -860,9 +1252,9 @@ El proyecto se valida principalmente desde el `Makefile`, lo que encapsula entor
 |---------|---------|----------|
 | `make test-all` | Full suite (Docker) | Ejecuta `test-api` + `test-web` + `test-sh` dentro de contenedores; ideal antes de PR. |
 | `make test` | Alias rápido | Invoca `test-api` + `test-web` + `test-sh` manteniendo los contenedores ya levantados. |
-| `make test-api` | API (contenedor `octavios-chat-client-project-api`) | Corre `pytest` con cobertura; acepta `FILE=...` y `ARGS=...` para casos específicos. |
+| `make test-api` | API (contenedor `capital414-chat-api`) | Corre `pytest` con cobertura; acepta `FILE=...` y `ARGS=...` para casos específicos. |
 | `make test-unit-host` | API (host/.venv) | Ejecuta pytest desde `.venv`, útil cuando no quieres depender de Docker. |
-| `make test-web` | Frontend | Lanza `pnpm test` en el contenedor `octavios-chat-client-project-web`; soporta `FILE` y `ARGS`. |
+| `make test-web` | Frontend | Lanza `pnpm test` en el contenedor `capital414-chat-web`; soporta `FILE` y `ARGS`. |
 | `make test-e2e` | Playwright | Corre la carpeta `tests/` usando la stack en marcha (`make dev`). |
 | `make test-mcp` | MCP | Suite dedicada (unit + integration); ver variantes `test-mcp-lazy`, `test-mcp-marker`, `test-mcp-diff`. |
 | `make lint` / `make lint-fix` | Calidad | Ruff + ESLint; `lint-fix` aplica autofixes seguros. |
@@ -903,7 +1295,7 @@ El proyecto se valida principalmente desde el `Makefile`, lo que encapsula entor
    make shell-api  # (opcional) si quieres entrar al contenedor api
    ```
 2. **Backend (pytest)**  
-   - Contenedores: `make test-api` (usa `octavios-chat-client-project-api`) o `make test` para correr API + web en un solo paso.  
+   - Contenedores: `make test-api` (usa `capital414-chat-api`) o `make test` para correr API + web en un solo paso.  
    - Host/.venv: `make test-unit-host ARGS="-k streaming"` cuando necesites debugear sin Docker.  
    - Casos MCP: `make test-mcp`, `make test-mcp-lazy` o `make test-mcp-integration`.
 3. **Frontend (jest)**  
@@ -924,17 +1316,17 @@ El proyecto se valida principalmente desde el `Makefile`, lo que encapsula entor
    ```
 
 ### Dónde agregar nuevas pruebas
-- **API**: `apps/api/tests/unit` para unitarias puras, `apps/api/tests/integration` para pruebas con Mongo/Redis (usa fixtures de `conftest.py`), `apps/api/tests/mcp` para herramientas MCP.
+- **API**: `apps/backend/tests/unit` para unitarias puras, `apps/backend/tests/integration` para pruebas con Mongo/Redis (usa fixtures de `conftest.py`), `apps/backend/tests/mcp` para herramientas MCP.
 - **Frontend**: `apps/web/src/components/**/__tests__` (Testing Library) o `apps/web/__tests__` para flujos de páginas. Usa `pnpm test -- FileName`.
 - **Playwright**: `tests/` agrupa escenarios end-to-end; cada spec se ejecuta contra la stack levantada (`make dev`). Puedes crear nuevos specs y reutilizar fixtures de `tests/utils`.
 
 Consejos:
 - `make debug-logs-errors` ayuda cuando un test falla dentro de contenedores.
-- Usa `pytest -k <pattern>` desde `apps/api` si necesitas filtrar una prueba específica (`make shell-api` → `pytest tests/unit/test_chat_service.py -k "happy_path"`).
+- Usa `pytest -k <pattern>` desde `apps/backend` si necesitas filtrar una prueba específica (`make shell-api` → `pytest tests/unit/test_chat_service.py -k "happy_path"`).
 - Para pruebas que dependen de configuraciones específicas (.env), ajusta `envs/.env.local` y reinicia los servicios con `make reload-env`.
 
 ## Observabilidad y DevOps
-- Logs estructurados via structlog + OpenTelemetry exporters (`apps/api/src/core/logging.py`, `apps/api/src/core/telemetry.py`).
+- Logs estructurados via structlog + OpenTelemetry exporters (`apps/backend/src/core/logging.py`, `apps/backend/src/core/telemetry.py`).
 - Dashboards y alertas en `infra/observability/` (Prometheus + Grafana + Alertmanager).
 - Makefile con más de 100 objetivos: rebuild, debug, despliegues, backups (`Makefile`).
 - Scripts operativos en `scripts/` cubren deploy, rollback, health-check y limpieza de cachés.
@@ -951,47 +1343,77 @@ Vista rápida de carpetas raíz y submódulos más relevantes. La idea es poder 
 
 ```
 .
-├── apps
-│   ├── api
-│   │   ├── src
+├── apps/
+│   ├── backend/                 # 🟢 Core (Kernel) - Puerto 8000
+│   │   ├── src/
 │   │   │   ├── core/            # Config, logging, auth, telemetry
-│   │   │   ├── routers/         # FastAPI routers (chat, files, MCP…)
-│   │   │   ├── services/        # ChatService, ValidationCoordinator, storage
-│   │   │   ├── mcp/             # FastMCP server, lazy routes, tools
-│   │   │   └── domain/          # ChatContext, builders, handlers
-│   │   └── tests/               # Unit, integration, MCP suites
-│   └── web
+│   │   │   ├── routers/         # FastAPI routers (chat, auth, sessions)
+│   │   │   ├── services/        # ChatService, DocumentService, FileManagerClient
+│   │   │   ├── mcp/             # MCP client para comunicación con plugins
+│   │   │   └── domain/          # ChatContext, builders, message handlers
+│   │   ├── tests/               # Unit, integration tests
+│   │   └── Dockerfile           # Multi-stage: development + production
+│   └── web/                     # 🔵 Frontend - Puerto 3000
 │       ├── src/app/             # Next.js App Router
-│       ├── src/components/      # Chat UI, document review, files
+│       ├── src/components/      # Chat UI, canvas, document review
 │       ├── src/lib/             # Stores (Zustand), apiClient, MCP client
 │       └── __tests__/           # Jest + Testing Library
-├── backend/                      # Paquetes Python compartidos (MCP base)
-├── docs/                         # Arquitectura, auditoría, MCP y planes
-├── infra/                        # Docker Compose, Nginx, observabilidad
-├── packages/                     # Librerías TS compartidas (pnpm workspaces)
-├── scripts/                      # Deploy, troubleshooting, herramientas DevOps
-└── tests/                        # Playwright y utilidades e2e
+├── plugins/
+│   ├── public/                  # 🟠 Public Plugins (Open Source Ready)
+│   │   └── file-manager/        # Puerto 8001 - Upload/Download/Extract
+│   │       ├── src/
+│   │       │   ├── routers/     # upload.py, download.py, extract.py, health.py
+│   │       │   └── services/    # minio_client.py, redis_client.py, extraction_service.py
+│   │       ├── Dockerfile
+│   │       └── requirements.txt
+│   └── capital414-private/      # 🔴 Private Plugins (Proprietary)
+│       └── file-auditor/  # Puerto 8002 - COPILOTO_414 Compliance
+│           ├── src/
+│           │   ├── auditors/    # disclaimer, format, grammar, logo, typography, color
+│           │   ├── clients/     # file_manager_client.py (HTTP client)
+│           │   └── main.py      # MCP server definition
+│           ├── Dockerfile
+│           └── requirements.txt
+├── docs/                        # 📚 Documentación técnica
+│   ├── ARCHITECTURE_MIGRATION.md   # Monolito → Plugin-First explicado
+│   ├── TESTING_PLAN.md             # Plan de testing (10 secciones)
+│   └── ...
+├── infra/                       # 🗄️ Infrastructure
+│   ├── docker-compose.yml       # Orchestration (Backend, Plugins, MongoDB, Redis, MinIO, etc.)
+│   └── observability/           # Prometheus, Grafana, Alertmanager
+├── scripts/                     # 🔧 DevOps scripts
+│   └── ...
+├── envs/                        # 🔐 Environment variables
+│   └── .env                     # Local development config
+└── tests/                       # 🧪 End-to-end tests
+    └── playwright/              # E2E test suites
 ```
 
 | Ruta | Propósito | Patrones / Notas |
 |------|-----------|------------------|
-| `apps/api/src` | Backend FastAPI, integra Chat + MCP + Document Audit | Clean Architecture (core/routers/services), Chain of Responsibility en chat, Builder para respuestas |
-| `apps/web/src` | Frontend Next.js 14 con App Router y Zustand | State pattern en stores, Gateway pattern en `lib/api-client.ts`, componentes UI críticos probados |
-| `apps/api/src/mcp` | Servidor FastMCP, herramientas (audit_file, excel_analyzer, etc.) y rutas lazy | Adapter hacia FastAPI, Lazy loading para reducir contexto, integración con telemetría |
-| `apps/api/src/services` | Servicios de dominio (ChatService, ValidationCoordinator, Storage, etc.) | Strategy + Orchestrator para chat/auditorías, integración con MinIO, Redis y SAPTIVA |
-| `docs/` | Documentación detallada (ARCHITECTURE, MCP, auditoría, planes de migración) | Diagramas Mermaid, reportes de fases, guías operativas |
-| `infra/` | Docker Compose, Nginx, observabilidad, pipelines de despliegue | Healthchecks por servicio, perfiles dev/prod, dashboards Prometheus/Grafana |
-| `scripts/` | Scripts bash/python para deploy, salud, limpieza, testing MCP | Automatizan tareas repetitivas (`make troubleshoot`, `deploy.sh`, etc.) |
-| `tests/` | Suites Playwright/E2E y utilidades adicionales | Escenarios end-to-end sobre el stack completo |
-| `Makefile` | Centro de comandos para contenedores, pruebas, seguridad, CI | Agrupa +120 targets (`make dev`, `make test-mcp`, `make test-api-file FILE=...`) y aplica políticas de entornos |
-| `envs/` | Variables locales, demo y producción (`.env`, `.env.local`, `.env.prod`) | El Makefile carga el archivo correcto según el target evitando mezclar credenciales |
-| `packages/` | Librerías TypeScript reutilizables (pnpm workspace) | UI tokens, hooks compartidos y clientes base |
+| `apps/backend/src` | **Core (Kernel)** - Backend ligero solo orquesta chat, auth y sesiones | Clean Architecture (core/routers/services), Chain of Responsibility en chat, Builder para respuestas. Delega a plugins via HTTP/MCP |
+| `apps/web/src` | **Frontend** - Next.js 14 con App Router, React Query y Zustand | State pattern en stores, Gateway pattern en `lib/api-client.ts`, Optimistic updates, componentes UI probados |
+| `plugins/public/file-manager/` | **Public Plugin** - Infraestructura de archivos (Upload/Download/Extract) | Expone endpoints REST, usa MinIO para storage, Redis para cache, independiente del core |
+| `plugins/capital414-private/` | **Private Plugin** - COPILOTO_414 compliance auditing | ValidationCoordinator ejecuta 8 auditores en paralelo, expone MCP tools, consume file-manager via HTTP client |
+| `apps/backend/src/services` | **Core Services** - ChatService, DocumentService, FileManagerClient | Strategy pattern para chat, HTTP clients para comunicación con plugins, NO contiene auditores (movidos a plugin) |
+| `apps/backend/src/mcp` | **MCP Client** - Comunicación con plugins MCP | Lazy loading, tool discovery, invocación remota de herramientas en plugins |
+| `docs/` | Documentación técnica (arquitectura, migración, testing) | ARCHITECTURE_MIGRATION.md explica Monolito → Plugin-First, diagramas Mermaid actualizados |
+| `infra/` | Docker Compose, observabilidad | Healthchecks por servicio, dependency chain (Infrastructure → Plugins → Core → Frontend), perfiles dev/prod |
+| `scripts/` | Scripts DevOps (deploy, health checks, troubleshooting) | Automatizan tareas repetitivas, testing MCP, validación de servicios |
+| `tests/` | Playwright E2E tests | Escenarios end-to-end sobre stack completo (Backend + Plugins + Frontend) |
+| `Makefile` | Centro de comandos (120+ targets) | `make dev`, `make test-all`, `make verify`, maneja entornos y perfiles |
+| `envs/` | Variables de entorno (.env) | Configuración para desarrollo local, nombres de proyecto actualizados |
 
-Referencias rápidas para navegar código:
-- `apps/api/src/routers/chat` contiene los endpoints REST/SSE; cada handler llama a estrategias en `apps/api/src/domain/message_handlers`.
-- `apps/api/src/mcp` se divide en `tool.py` (contratos), `lazy_routes.py` (discover/load/invoke) y `tools/*` (implementaciones concretas).
-- `apps/web/src/lib` concentra stores Zustand, clientes HTTP/MCP y hooks reutilizables (imperativo revisar aquí antes de duplicar lógica en componentes).
-- `infra/docker-compose*.yml` define perfiles y nombres de contenedor (`octavios-chat-client-project-*`) usados por el Makefile.
+Referencias rápidas para navegar código (Plugin-First):
+- **Core Backend**: `apps/backend/src/routers/chat` → Endpoints REST/SSE, delega a `domain/message_handlers`
+- **File Manager Plugin**: `plugins/public/file-manager/src/routers/` → Upload, download, extract endpoints
+- **Capital414 Plugin**: `plugins/capital414-private/src/` → ValidationCoordinator, 8 auditores, MCP tools
+- **Plugin Communication**:
+  - Backend → File Manager: `apps/backend/src/services/file_manager_client.py` (HTTP client)
+  - Capital414 → File Manager: `plugins/capital414-private/src/clients/file_manager_client.py` (HTTP client)
+  - Backend → Capital414: `apps/backend/src/mcp/client.py` (MCP protocol)
+- **Frontend Stores**: `apps/web/src/lib/stores/` → Zustand state management con React Query
+- **Docker Orchestration**: `infra/docker-compose.yml` → Dependency chain + healthchecks (contenedores `capital414-chat-*`)
 
 Tips rápidos:
 - Variables y comandos centrales viven en el `Makefile`, por lo que la mayoría de los flujos (setup, dev, verify, debug) son accesibles vía `make`.
@@ -1000,7 +1422,7 @@ Tips rápidos:
 
 ## Documentación adicional
 - `docs/ARCHITECTURE.md`: detalle técnico Back/Front/MCP.
-- `docs/AUDIT_SYSTEM_ARCHITECTURE.md`: Document Audit end-to-end.
+- `docs/AUDIT_SYSTEM_ARCHITECTURE.md`: COPILOTO_414 end-to-end.
 - `docs/MCP_ARCHITECTURE.md` y `docs/MCP_TOOLS_GUIDE.md`: guías para herramientas.
 - `docs/TROUBLESHOOTING.md`: recetas extendidas.
 

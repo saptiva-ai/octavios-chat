@@ -1,11 +1,14 @@
 #!/bin/bash
 # Husky pre-commit hook for Octavius 2.0
-# Runs: 1) Secrets detection, 2) Linting & formatting
+# Runs: 1) Python cache cleanup, 2) Secrets detection, 3) Linting & formatting
 
 set -e
 
 # Navigate to project root
 cd "$(git rev-parse --show-toplevel)"
+
+# STEP 0: Cleanup Python caches (silent, always succeeds)
+bash scripts/cleanup-python-cache.sh || true
 
 # STEP 1: Run secrets detection
 echo "🔒 Running secrets detection..."

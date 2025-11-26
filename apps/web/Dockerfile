@@ -91,8 +91,8 @@ FROM base AS builder
 
 # Build-time environment variables (with production defaults)
 # IMPORTANT: Do NOT include /api suffix - routes already include it
-ARG NEXT_PUBLIC_API_URL
-ARG NEXT_PUBLIC_APP_NAME="Saptiva Copilot OS"
+ARG NEXT_PUBLIC_API_URL=https://414.saptiva.com
+ARG NEXT_PUBLIC_APP_NAME="Saptiva Copilot OS - Capital 414"
 ARG NEXT_PUBLIC_MAX_FILE_SIZE_MB=50
 ARG NEXT_PUBLIC_FEATURE_WEB_SEARCH=false
 ARG NEXT_PUBLIC_FEATURE_DEEP_RESEARCH=false

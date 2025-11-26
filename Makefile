@@ -13,7 +13,7 @@ ifneq (,$(wildcard envs/.env))
     export
 endif
 
-PROJECT_NAME := octavios-chat
+PROJECT_NAME := octavios-chat-capital414
 COMPOSE := docker compose -p $(PROJECT_NAME) -f infra/docker-compose.yml
 
 # Colors
@@ -88,24 +88,24 @@ help:
 
 setup:
 	@echo "$(YELLOW)🔧 Setting up project...$(NC)"
-	@chmod +x scripts/setup/*.sh
-	@./scripts/setup/interactive-env-setup.sh development
+	@chmod +x scripts/*.sh
+	@./scripts/interactive-env-setup.sh development
 	@echo "$(GREEN)✅ Setup complete. Run 'make dev' to start.$(NC)"
 
 env-check:
 	@echo "$(YELLOW)🔍 Validating environment variables...$(NC)"
-	@chmod +x scripts/setup/env-checker.sh
-	@./scripts/setup/env-checker.sh warn
+	@chmod +x scripts/env-checker.sh
+	@./scripts/env-checker.sh warn
 
 env-info:
 	@echo "$(YELLOW)📋 Environment variables information...$(NC)"
-	@chmod +x scripts/setup/env-checker.sh
-	@./scripts/setup/env-checker.sh info
+	@chmod +x scripts/env-checker.sh
+	@./scripts/env-checker.sh info
 
 env-strict:
 	@echo "$(YELLOW)🔒 Strict environment validation...$(NC)"
-	@chmod +x scripts/setup/env-checker.sh
-	@./scripts/setup/env-checker.sh strict
+	@chmod +x scripts/env-checker.sh
+	@./scripts/env-checker.sh strict
 
 dev:
 	@echo "$(YELLOW)🟡 Starting development environment...$(NC)"
@@ -118,9 +118,10 @@ dev:
 	@echo "$(GREEN)🟢  Services started $(NC)"
 	@echo "$(GREEN)🟢━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@echo "  $(BLUE)🔵 Frontend:  $(YELLOW)http://localhost:3000$(NC)"
-	@echo "  $(BLUE)🔵 API:       $(YELLOW)http://localhost:8001$(NC)"
-	@echo "  $(BLUE)🔵 Docs:      $(YELLOW)http://localhost:8001/docs$(NC)"
+	@echo "  $(BLUE)🔵 Frontend:     $(YELLOW)http://localhost:3000$(NC)"
+	@echo "  $(BLUE)🔵 Backend:      $(YELLOW)http://localhost:8000$(NC)"
+	@echo "  $(BLUE)🔵 File Manager: $(YELLOW)http://localhost:8001$(NC)"
+	@echo "  $(BLUE)🔵 Docs:         $(YELLOW)http://localhost:8000/docs$(NC)"
 	@echo ""
 	@echo "$(YELLOW)🟡 Waiting for services to be healthy...$(NC)"
 	@sleep 5
@@ -156,7 +157,7 @@ shell:
 ifndef S
 	@echo "$(RED)❌ Error: Specify service with S=<service>$(NC)"
 	@echo "Example: make shell S=api"
-	@echo "Available: api, web, db, redis, minio"
+	@echo "Available: backend, web, db, redis, minio"
 	@exit 1
 endif
 	@if [ "$(S)" = "db" ]; then \
@@ -170,8 +171,14 @@ health:
 	@echo "$(BLUE)🔵 Health Check $(NC)"
 	@echo "$(BLUE)🔵━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@printf "  $(YELLOW)🟡 API Health:         $(NC)"
-	@if curl -sf http://localhost:8001/api/health > /dev/null 2>&1; then \
+	@printf "  $(YELLOW)🟡 Backend Health:     $(NC)"
+	@if curl -sf http://localhost:8000/api/health > /dev/null 2>&1; then \
+		echo "$(GREEN)🟢 Healthy$(NC)"; \
+	else \
+		echo "$(RED)🔴 Unhealthy$(NC)"; \
+	fi
+	@printf "  $(YELLOW)🟡 File Manager:       $(NC)"
+	@if curl -sf http://localhost:8001/health > /dev/null 2>&1; then \
 		echo "$(GREEN)🟢 Healthy$(NC)"; \
 	else \
 		echo "$(RED)🔴 Unhealthy$(NC)"; \
@@ -224,28 +231,28 @@ install: install-web
 # ============================================================================ 
 
 test:
-	@chmod +x scripts/testing/test-runner.sh
+	@chmod +x scripts/test-runner.sh
 ifdef T
-	@./scripts/testing/test-runner.sh $(T) $(ARGS)
+	@./scripts/test-runner.sh $(T) $(ARGS)
 else
-	@./scripts/testing/test-runner.sh all
+	@./scripts/test-runner.sh all
 endif
 
 
 
 test-local:
 	@echo "$(YELLOW)🧪 Running tests locally with .venv...$(NC)"
-	@if [ ! -d "apps/api/.venv" ]; then \
-		echo "$(RED)❌ .venv not found in apps/api. Run 'make setup' or create it manually.$(NC)"; \
+	@if [ ! -d "apps/backend/.venv" ]; then \
+		echo "$(RED)❌ .venv not found in apps/backend. Run 'make setup' or create it manually.$(NC)"; \
 		exit 1; \
 	fi
 	@echo "$(YELLOW)📥 Loading environment from envs/.env.local (if exists)...$(NC)"
 ifdef FILE
-	@eval $$(./scripts/setup/env-manager.sh load local) && \
-	cd apps/api && .venv/bin/python -m pytest $(FILE) $(ARGS)
+	@eval $$(./scripts/env-manager.sh load local) && \
+	cd apps/backend && .venv/bin/python -m pytest $(FILE) $(ARGS)
 else
-	@eval $$(./scripts/setup/env-manager.sh load local) && \
-	cd apps/api && .venv/bin/python -m pytest tests/ $(ARGS)
+	@eval $$(./scripts/env-manager.sh load local) && \
+	cd apps/backend && .venv/bin/python -m pytest tests/ $(ARGS)
 endif
 
 # ============================================================================ 
@@ -258,8 +265,8 @@ ifndef CMD
 	@echo "Available: backup, restore, stats, shell"
 	@exit 1
 endif
-	@chmod +x scripts/database/db-manager.sh
-	@./scripts/database/db-manager.sh $(CMD) $(PROJECT_NAME)
+	@chmod +x scripts/db-manager.sh
+	@./scripts/db-manager.sh $(CMD) $(PROJECT_NAME)
 
 # ============================================================================ 
 # DEPLOYMENT
@@ -271,8 +278,8 @@ ifndef ENV
 	@echo "Available: demo, prod"
 	@exit 1
 endif
-	@chmod +x scripts/deployment/deploy-manager.sh
-	@./scripts/deployment/deploy-manager.sh $(ENV) $(MODE)
+	@chmod +x scripts/deploy-manager.sh
+	@./scripts/deploy-manager.sh $(ENV) $(MODE)
 
 # ============================================================================ 
 # CLEANUP
@@ -343,7 +350,7 @@ db-restore:
 
 create-demo-user:
 	@echo "📝 Creating demo user..."
-	@$(COMPOSE) exec -T api sh -c 'MONGODB_URI="$$MONGODB_URL" MONGODB_DB_NAME="$$MONGODB_DATABASE" python scripts/setup/create_demo_user.py'
+	@$(COMPOSE) exec -T backend sh -c 'MONGODB_URI="$$MONGODB_URL" MONGODB_DB_NAME="$$MONGODB_DATABASE" python scripts/create_demo_user.py'
 
 verify:
 	@$(MAKE) health

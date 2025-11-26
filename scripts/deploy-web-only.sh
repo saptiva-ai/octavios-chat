@@ -16,8 +16,8 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-DEMO_SERVER="user@your-server-ip"
-DEMO_PATH="/home/user/octavios-chat"
+DEMO_SERVER="jf@34.172.67.93"
+DEMO_PATH="/home/jf/capital414-chat"
 
 log_info() { echo -e "${BLUE}ℹ${NC} $1"; }
 log_success() { echo -e "${GREEN}✔${NC} $1"; }
@@ -34,7 +34,7 @@ step() {
 main() {
     echo ""
     echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║  FAST WEB-ONLY DEPLOYMENT                                     ║${NC}"
+    echo -e "${BLUE}║  FAST WEB-ONLY DEPLOYMENT - 414.SAPTIVA.COM                  ║${NC}"
     echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     log_warning "Only deploying web container (API/DB unchanged)"
@@ -51,7 +51,8 @@ main() {
     # IMPORTANT: Do NOT include /api suffix - routes already include it
     # Force the correct URL without /api (override any .env.prod setting)
     docker build -f apps/web/Dockerfile \
-        --build-arg NEXT_PUBLIC_APP_NAME="${NEXT_PUBLIC_APP_NAME:-Saptiva Copilot OS}" \
+        --build-arg NEXT_PUBLIC_API_URL="https://414.saptiva.com" \
+        --build-arg NEXT_PUBLIC_APP_NAME="${NEXT_PUBLIC_APP_NAME:-Saptiva Copilot OS - Capital 414}" \
         --build-arg NEXT_PUBLIC_MAX_FILE_SIZE_MB="${NEXT_PUBLIC_MAX_FILE_SIZE_MB:-50}" \
         --build-arg NEXT_PUBLIC_FEATURE_WEB_SEARCH="${NEXT_PUBLIC_FEATURE_WEB_SEARCH:-false}" \
         --build-arg NEXT_PUBLIC_FEATURE_DEEP_RESEARCH="${NEXT_PUBLIC_FEATURE_DEEP_RESEARCH:-false}" \
@@ -105,6 +106,7 @@ main() {
     echo -e "${GREEN}║  WEB-ONLY DEPLOYMENT COMPLETE                                 ║${NC}"
     echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
+    echo -e "${BLUE}Domain:${NC}       https://414.saptiva.com"
     echo -e "${BLUE}Status:${NC}       Web container restarted"
     echo ""
     echo -e "${YELLOW}Note:${NC} API, MongoDB, Redis, MinIO unchanged"

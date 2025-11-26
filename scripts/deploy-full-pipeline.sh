@@ -365,7 +365,7 @@ stage_verification() {
 
         PRE_USERS=$(jq -r '.user_activity.total_users // 0' "$AUDIT_FILE")
 
-        POST_USERS=$(ssh "$SERVER_HOST" "docker exec octavios-chat-mongodb mongosh \
+        POST_USERS=$(ssh "$SERVER_HOST" "docker exec octavios-chat-capital414-mongodb mongosh \
             --username ${MONGODB_USER:-octavios_user} \
             --password ${MONGODB_PASSWORD} \
             --authenticationDatabase admin \

@@ -1,7 +1,7 @@
 # 📊 OCR Benchmark Report
 
 **Generated**: 2025-11-03 17:59:56
-**PDF**: /tmp/test_data/ClientProject_presentacion.pdf
+**PDF**: /tmp/test_data/Capital414_presentacion.pdf
 **Pages Tested**: [1, 2]
 
 ## Performance Summary

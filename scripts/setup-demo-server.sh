@@ -29,8 +29,8 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 DEMO_SERVER="jf@34.172.67.93"
-DEMO_PATH="/home/user/octavios-chat"
-REPO_URL="https://github.com/saptiva-ai/octavios-chat.git"  # Adjust this URL
+DEMO_PATH="/home/jf/capital414-chat"
+REPO_URL="https://github.com/saptiva-ai/capital414-chat.git"  # Adjust this URL
 
 # ========================================
 # LOGGING FUNCTIONS
@@ -169,28 +169,21 @@ ENDSSH
             # We're in a git repo, let's transfer the code via tar
             log_info "Transferring code via tar (no git clone)..."
 
-# Step 3: Archive
-step "Step 3/5: Creating Archive"
+            # Create tarball excluding unnecessary files
+            tar czf /tmp/capital414-chat.tar.gz \
+                --exclude='.git' \
+                --exclude='node_modules' \
+                --exclude='.next' \
+                --exclude='apps/api/.venv' \
+                --exclude='apps/api/__pycache__' \
+                --exclude='*.pyc' \
+                --exclude='.pytest_cache' \
+                -C "$(pwd)" .
 
-log_info "Creating archive..."
-tar czf /tmp/octavios-chat.tar.gz \
-    --exclude=".git" \
-    --exclude="node_modules" \
-    --exclude="__pycache__" \
-    --exclude=".venv" \
-    --exclude=".env*" \
-    .
-
-FILESIZE=$(du -h /tmp/octavios-chat.tar.gz | cut -f1)
-log_success "Archive created: $FILESIZE"
-
-# Step 4: Transfer
-step "Step 4/5: Transfer to Server"
-
-log_info "Transferring to $DEMO_SERVER..."
-scp /tmp/octavios-chat.tar.gz "$DEMO_SERVER:/tmp/"
-ssh "$DEMO_SERVER" "mkdir -p $DEMO_PATH && tar xzf /tmp/octavios-chat.tar.gz -C $DEMO_PATH && rm /tmp/octavios-chat.tar.gz"
-rm /tmp/octavios-chat.tar.gz
+            # Transfer and extract
+            scp /tmp/capital414-chat.tar.gz "$DEMO_SERVER:/tmp/"
+            ssh "$DEMO_SERVER" "mkdir -p $DEMO_PATH && tar xzf /tmp/capital414-chat.tar.gz -C $DEMO_PATH && rm /tmp/capital414-chat.tar.gz"
+            rm /tmp/capital414-chat.tar.gz
 
             log_success "Code transferred successfully"
         else

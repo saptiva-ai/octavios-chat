@@ -61,6 +61,15 @@ venv.bak/
 htmlcov/
 .tox/
 .nox/
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+.pyre/
+# UV-specific caches (should be in Docker mount, not build context)
+.uv/
+uv.lock
 
 # ============================================================================
 # BUILD ARTIFACTS & CACHE
