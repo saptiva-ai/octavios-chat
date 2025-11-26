@@ -157,7 +157,7 @@ shell:
 ifndef S
 	@echo "$(RED)❌ Error: Specify service with S=<service>$(NC)"
 	@echo "Example: make shell S=api"
-	@echo "Available: api, web, db, redis, minio"
+	@echo "Available: backend, web, db, redis, minio"
 	@exit 1
 endif
 	@if [ "$(S)" = "db" ]; then \
@@ -350,7 +350,7 @@ db-restore:
 
 create-demo-user:
 	@echo "📝 Creating demo user..."
-	@$(COMPOSE) exec -T api sh -c 'MONGODB_URI="$$MONGODB_URL" MONGODB_DB_NAME="$$MONGODB_DATABASE" python scripts/create_demo_user.py'
+	@$(COMPOSE) exec -T backend sh -c 'MONGODB_URI="$$MONGODB_URL" MONGODB_DB_NAME="$$MONGODB_DATABASE" python scripts/create_demo_user.py'
 
 verify:
 	@$(MAKE) health

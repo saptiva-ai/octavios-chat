@@ -5,6 +5,7 @@ File metadata endpoint.
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, status
+from minio.error import S3Error
 from pydantic import BaseModel
 import structlog
 
@@ -179,11 +180,28 @@ async def extract_text(file_path: str, force: bool = False):
                 "source": "cache",
             }
 
+    # Variable for cleanup
+    tmp_path = None
+
     try:
-        # Download file
+        # Download file from MinIO
+        logger.debug(
+            "Downloading file from MinIO",
+            file_path=file_path,
+            bucket=minio.bucket
+        )
         content = minio.download_file(file_path)
+
+        # Get file metadata
         info = minio.get_file_info(file_path)
         content_type = info.get("content_type", "application/octet-stream")
+
+        logger.debug(
+            "File downloaded successfully",
+            file_path=file_path,
+            size=len(content),
+            content_type=content_type
+        )
 
         # Write to temp file
         extension = "." + filename.rsplit(".", 1)[-1] if "." in filename else ""
@@ -191,11 +209,21 @@ async def extract_text(file_path: str, force: bool = False):
             tmp.write(content)
             tmp_path = Path(tmp.name)
 
+        logger.debug(
+            "Temp file created",
+            tmp_path=str(tmp_path),
+            size=len(content)
+        )
+
         # Extract text
         text, pages = await extract_text_from_file(tmp_path, content_type)
 
-        # Cleanup
-        tmp_path.unlink(missing_ok=True)
+        logger.info(
+            "Text extraction completed",
+            file_path=file_path,
+            text_length=len(text),
+            pages=pages
+        )
 
         # Cache result
         cache = get_extraction_cache()
@@ -210,7 +238,7 @@ async def extract_text(file_path: str, force: bool = False):
         )
 
         logger.info(
-            "Text extracted",
+            "Text extracted and cached",
             file_path=file_path,
             text_length=len(text),
             pages=pages,
@@ -223,9 +251,53 @@ async def extract_text(file_path: str, force: bool = False):
             "source": "extraction",
         }
 
-    except Exception as e:
-        logger.error("Failed to extract text", file_path=file_path, error=str(e))
+    except S3Error as e:
+        # MinIO-specific error
+        logger.error(
+            "MinIO S3 error during extraction",
+            file_path=file_path,
+            error=str(e),
+            error_code=getattr(e, 'code', None),
+            exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to extract text: {str(e)}",
+            detail=f"MinIO error: {str(e)}",
         )
+    except ImportError as e:
+        # Missing OCR dependencies
+        logger.error(
+            "Missing extraction dependencies",
+            file_path=file_path,
+            error=str(e),
+            exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Missing OCR dependencies: {str(e)}. Install pytesseract/fitz if needed.",
+        )
+    except Exception as e:
+        # Generic error with full traceback
+        logger.error(
+            "Failed to extract text",
+            file_path=file_path,
+            error=str(e),
+            error_type=type(e).__name__,
+            exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to extract text: {type(e).__name__}: {str(e)}",
+        )
+    finally:
+        # Cleanup temp file
+        if tmp_path and tmp_path.exists():
+            try:
+                tmp_path.unlink(missing_ok=True)
+                logger.debug("Temp file cleaned up", tmp_path=str(tmp_path))
+            except Exception as cleanup_err:
+                logger.warning(
+                    "Failed to cleanup temp file",
+                    tmp_path=str(tmp_path),
+                    error=str(cleanup_err)
+                )

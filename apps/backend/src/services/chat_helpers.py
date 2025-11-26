@@ -163,8 +163,28 @@ def build_chat_context(
     Notes:
         - Model defaults to "Saptiva Turbo" (case-sensitive)
         - Stream flag defaults to False
-        - Applies kill switch from settings
+        - Kill switch is DISABLED when attachments are present (forces tool usage)
+        - Kill switch applies from settings only for non-document queries
     """
+    # Compute document IDs early
+    document_ids_list = (
+        (request.file_ids or []) + (request.document_ids or [])
+        if (request.file_ids or request.document_ids) else []
+    )
+    has_attachments = len(document_ids_list) > 0
+
+    # 🔧 FIX: Disable kill switch when attachments are present
+    # This ensures the LLM has access to document context via tools
+    kill_switch = settings.deep_research_kill_switch and not has_attachments
+
+    if has_attachments and settings.deep_research_kill_switch:
+        logger.info(
+            "Kill switch DISABLED due to attachments",
+            user_id=user_id,
+            attachment_count=len(document_ids_list),
+            reason="documents_require_tool_access"
+        )
+
     return ChatContext(
         user_id=user_id,
         request_id=str(uuid4()),
@@ -173,14 +193,11 @@ def build_chat_context(
         session_id=None,  # Will be resolved during processing
         message=request.message,
         context=request.context,
-        document_ids=(
-            (request.file_ids or []) + (request.document_ids or [])
-            if (request.file_ids or request.document_ids) else None
-        ),
+        document_ids=document_ids_list if has_attachments else None,
         model=request.model or "Saptiva Turbo",  # Case-sensitive default
         tools_enabled=normalize_tools_state(request.tools_enabled),
         stream=getattr(request, 'stream', False),  # Streaming disabled by default
         temperature=getattr(request, 'temperature', None),
         max_tokens=getattr(request, 'max_tokens', None),
-        kill_switch_active=settings.deep_research_kill_switch
+        kill_switch_active=kill_switch  # 🔧 FIX: Conditional kill switch
     )

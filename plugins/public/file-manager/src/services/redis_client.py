@@ -56,9 +56,16 @@ def get_redis_client() -> Optional[redis.Redis]:
 
 
 class ExtractionCache:
-    """Cache for extracted text from documents."""
+    """
+    Cache for extracted text from documents.
 
-    CACHE_PREFIX = "file-manager:extraction:"
+    IMPORTANT: Uses "doc:text:" prefix for compatibility with Backend Core.
+    Both Backend and File Manager plugin must share the same cache keys
+    to avoid redundant extractions and ensure consistency.
+    """
+
+    # 🔧 FIX: Changed from "file-manager:extraction:" to "doc:text:" for Backend compatibility
+    CACHE_PREFIX = "doc:text:"
 
     def __init__(self, client: Optional[redis.Redis] = None):
         self.client = client or get_redis_client()

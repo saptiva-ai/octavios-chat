@@ -183,9 +183,9 @@ services:
   # ========================================
   # FASTAPI BACKEND (CORE)
   # ========================================
-  # Renamed from 'api' service - now the Core/Kernel in Plugin-First Architecture
-  # Port changed from 8001 to 8000 as part of architecture refactor
-  api:
+  # Service name: 'backend' - Core/Kernel in Plugin-First Architecture
+  # Port 8000 - Main orchestration layer for chat, auth, sessions
+  backend:
     build:
       context: ../apps/backend
       dockerfile: Dockerfile
@@ -385,7 +385,7 @@ services:
       - nginx_logs:/var/log/nginx
     depends_on:
       - web
-      - api
+      - backend
     profiles:
       - production
     networks:
@@ -401,7 +401,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-octavios}-playwright
     environment:
       - PLAYWRIGHT_BASE_URL=http://web:3000
-      - API_BASE_URL=http://api:8000
+      - API_BASE_URL=http://backend:8000
     volumes:
       - ../tests:/app/tests
       - ../playwright-report:/app/playwright-report
