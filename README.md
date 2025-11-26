@@ -139,11 +139,11 @@ flowchart TB
     %% Core to Private Plugins (optional MCP integration)
     backend -.->|"MCP Protocol<br/>(optional)"| capital414
 
-    classDef frontend fill:#e3f2fd,stroke:#90caf9,color:#111111
-    classDef core fill:#fff3e0,stroke:#ffcc80,color:#111111
-    classDef plugin_public fill:#e8f5e9,stroke:#a5d6a7,color:#111111
-    classDef plugin_private fill:#ffebee,stroke:#ef9a9a,color:#111111
-    classDef infra fill:#f3e5f5,stroke:#ce93d8,color:#111111
+    classDef frontend fill:#4fc3f7,stroke:#0288d1,color:#000000
+    classDef core fill:#ffb74d,stroke:#f57c00,color:#000000
+    classDef plugin_public fill:#81c784,stroke:#388e3c,color:#000000
+    classDef plugin_private fill:#e57373,stroke:#c62828,color:#ffffff
+    classDef infra fill:#ba68c8,stroke:#7b1fa2,color:#ffffff
 ```
 
 ### Service Dependency Chain
@@ -430,12 +430,12 @@ flowchart TB
     capital414 --> observability
 
     classDef dark fill:#111111,stroke:#4b5563,color:#f9fafb;
-    classDef frontend fill:#e3f2fd,stroke:#90caf9,color:#111111;
-    classDef core fill:#fff3e0,stroke:#ffcc80,color:#111111;
-    classDef plugin_public fill:#e8f5e9,stroke:#a5d6a7,color:#111111;
-    classDef plugin_private fill:#ffebee,stroke:#ef9a9a,color:#111111;
+    classDef frontend fill:#4fc3f7,stroke:#0288d1,color:#000000;
+    classDef core fill:#ffb74d,stroke:#f57c00,color:#000000;
+    classDef plugin_public fill:#81c784,stroke:#388e3c,color:#000000;
+    classDef plugin_private fill:#e57373,stroke:#c62828,color:#ffffff;
     classDef light fill:#ffffff,stroke:#4b5563,color:#111111;
-    classDef infra fill:#f3e5f5,stroke:#ce93d8,color:#111111;
+    classDef infra fill:#ba68c8,stroke:#7b1fa2,color:#ffffff;
     classDef gray fill:#e5e7eb,stroke:#4b5563,color:#111111;
 ```
 
@@ -635,11 +635,11 @@ flowchart TB
     otel --> grafana
     logs --> grafana
 
-    classDef core fill:#fff3e0,stroke:#ffcc80,color:#111111;
-    classDef plugin_public fill:#e8f5e9,stroke:#a5d6a7,color:#111111;
-    classDef plugin_private fill:#ffebee,stroke:#ef9a9a,color:#111111;
-    classDef external fill:#f3e5f5,stroke:#ce93d8,color:#111111;
-    classDef infra fill:#f3e5f5,stroke:#ce93d8,color:#111111;
+    classDef core fill:#ffb74d,stroke:#f57c00,color:#000000;
+    classDef plugin_public fill:#81c784,stroke:#388e3c,color:#000000;
+    classDef plugin_private fill:#e57373,stroke:#c62828,color:#ffffff;
+    classDef external fill:#ba68c8,stroke:#7b1fa2,color:#ffffff;
+    classDef infra fill:#ba68c8,stroke:#7b1fa2,color:#ffffff;
 ```
 
 **Arquitectura de integración Plugin-First**:
@@ -1008,11 +1008,11 @@ flowchart TB
     chat_svc --> aletheia
     auditores --> languagetool
 
-    classDef core fill:#fff3e0,stroke:#ffcc80,color:#111111;
-    classDef plugin_public fill:#e8f5e9,stroke:#a5d6a7,color:#111111;
-    classDef plugin_private fill:#ffebee,stroke:#ef9a9a,color:#111111;
-    classDef external fill:#f3e5f5,stroke:#ce93d8,color:#111111;
-    classDef infra fill:#f3e5f5,stroke:#ce93d8,color:#111111;
+    classDef core fill:#ffb74d,stroke:#f57c00,color:#000000;
+    classDef plugin_public fill:#81c784,stroke:#388e3c,color:#000000;
+    classDef plugin_private fill:#e57373,stroke:#c62828,color:#ffffff;
+    classDef external fill:#ba68c8,stroke:#7b1fa2,color:#ffffff;
+    classDef infra fill:#ba68c8,stroke:#7b1fa2,color:#ffffff;
     classDef gray fill:#e5e7eb,stroke:#4b5563,color:#111111;
 ```
 
