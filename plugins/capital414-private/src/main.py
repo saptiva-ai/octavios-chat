@@ -65,7 +65,8 @@ mcp = FastMCP(
 class AuditRequest(BaseModel):
     """Input parameters for audit_document_full tool."""
 
-    file_path: str = Field(..., description="Absolute path to the PDF file to audit")
+    file_path: Optional[str] = Field(None, description="Absolute path to the PDF file to audit (local)")
+    minio_key: Optional[str] = Field(None, description="MinIO object key to download from file-manager plugin")
     policy_id: str = Field(default="auto", description="Policy ID (default: 'auto' for auto-detection)")
     client_name: Optional[str] = Field(None, description="Client name for disclaimer validation")
     enable_disclaimer: bool = Field(default=True, description="Enable disclaimer auditor")
@@ -103,7 +104,8 @@ class AuditResponse(BaseModel):
 
 @mcp.tool()
 async def audit_document_full(
-    file_path: str,
+    file_path: Optional[str] = None,
+    minio_key: Optional[str] = None,
     policy_id: str = "auto",
     client_name: Optional[str] = None,
     enable_disclaimer: bool = True,
@@ -128,8 +130,13 @@ async def audit_document_full(
     - Entity Consistency: Ensures consistent naming
     - Semantic Consistency: Checks document coherence
 
+    File Source (provide ONE of these):
+    - file_path: Local filesystem path to PDF (legacy support)
+    - minio_key: MinIO object key to download from file-manager plugin (preferred)
+
     Args:
-        file_path: Absolute path to the PDF file to audit
+        file_path: Absolute path to the PDF file to audit (local filesystem)
+        minio_key: MinIO object key (e.g., "user123/session456/doc.pdf") - downloads from file-manager
         policy_id: Policy ID to use (default: 'auto' for auto-detection)
         client_name: Client name for disclaimer validation (optional)
         enable_*: Toggle individual auditors on/off
@@ -139,22 +146,23 @@ async def audit_document_full(
     """
     start_time = time.time()
     job_id = str(uuid4())
+    temp_file_to_cleanup: Optional[Path] = None  # Track temp file for cleanup
 
     logger.info(
         "Starting document audit",
         job_id=job_id,
         file_path=file_path,
+        minio_key=minio_key,
         policy_id=policy_id,
     )
 
     try:
-        # Validate file exists
-        pdf_path = Path(file_path)
-        if not pdf_path.exists():
+        # Validate input: must provide either file_path or minio_key
+        if not file_path and not minio_key:
             return {
                 "job_id": job_id,
                 "status": "error",
-                "error_message": f"File not found: {file_path}",
+                "error_message": "Must provide either 'file_path' or 'minio_key'",
                 "total_findings": 0,
                 "findings_by_severity": {},
                 "findings_by_category": {},
@@ -163,9 +171,39 @@ async def audit_document_full(
                 "policy_name": "N/A",
                 "validation_duration_ms": int((time.time() - start_time) * 1000),
                 "top_findings": [],
-                "executive_summary_markdown": f"Error: File not found: {file_path}",
+                "executive_summary_markdown": "Error: Must provide either 'file_path' or 'minio_key'",
                 "pdf_report_path": None,
             }
+
+        # Resolve PDF path: either from local file or downloaded from file-manager
+        if minio_key:
+            # Download from file-manager plugin
+            from .clients.file_manager import get_file_manager_client
+
+            logger.info("Downloading file from file-manager", minio_key=minio_key, job_id=job_id)
+            fm_client = await get_file_manager_client()
+            pdf_path = await fm_client.download_to_temp(minio_key)
+            temp_file_to_cleanup = pdf_path  # Mark for cleanup after audit
+            logger.info("File downloaded", temp_path=str(pdf_path), job_id=job_id)
+        else:
+            # Use local file path
+            pdf_path = Path(file_path)
+            if not pdf_path.exists():
+                return {
+                    "job_id": job_id,
+                    "status": "error",
+                    "error_message": f"File not found: {file_path}",
+                    "total_findings": 0,
+                    "findings_by_severity": {},
+                    "findings_by_category": {},
+                    "disclaimer_coverage": None,
+                    "policy_id": policy_id,
+                    "policy_name": "N/A",
+                    "validation_duration_ms": int((time.time() - start_time) * 1000),
+                    "top_findings": [],
+                    "executive_summary_markdown": f"Error: File not found: {file_path}",
+                    "pdf_report_path": None,
+                }
 
         # Resolve policy
         policy_manager = get_policy_manager()
@@ -289,6 +327,19 @@ async def audit_document_full(
             "executive_summary_markdown": f"Error during audit: {str(e)}",
             "pdf_report_path": None,
         }
+
+    finally:
+        # Cleanup: Remove temporary file if downloaded from file-manager
+        if temp_file_to_cleanup and temp_file_to_cleanup.exists():
+            try:
+                temp_file_to_cleanup.unlink()
+                logger.debug("Cleaned up temp file", path=str(temp_file_to_cleanup))
+            except Exception as cleanup_error:
+                logger.warning(
+                    "Failed to cleanup temp file",
+                    path=str(temp_file_to_cleanup),
+                    error=str(cleanup_error),
+                )
 
 
 @mcp.tool()
