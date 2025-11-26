@@ -36,9 +36,9 @@ services:
       - ../envs/.env
     volumes:
       # Mount source code for hot reload
-      - ../apps/api/src:/app/src:ro
-      - ../apps/api/tests:/app/tests:ro
-      - ../apps/api/pytest.ini:/app/pytest.ini:ro
+      - ../apps/backend/src:/app/src:ro
+      - ../apps/backend/tests:/app/tests:ro
+      - ../apps/backend/pytest.ini:/app/pytest.ini:ro
       - ../.coveragerc:/app/.coveragerc:ro
     environment:
       - DEEP_RESEARCH_ENABLED=${DEEP_RESEARCH_ENABLED:-true}

@@ -118,9 +118,10 @@ dev:
 	@echo "$(GREEN)🟢  Services started $(NC)"
 	@echo "$(GREEN)🟢━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@echo "  $(BLUE)🔵 Frontend:  $(YELLOW)http://localhost:3000$(NC)"
-	@echo "  $(BLUE)🔵 API:       $(YELLOW)http://localhost:8001$(NC)"
-	@echo "  $(BLUE)🔵 Docs:      $(YELLOW)http://localhost:8001/docs$(NC)"
+	@echo "  $(BLUE)🔵 Frontend:     $(YELLOW)http://localhost:3000$(NC)"
+	@echo "  $(BLUE)🔵 Backend:      $(YELLOW)http://localhost:8000$(NC)"
+	@echo "  $(BLUE)🔵 File Manager: $(YELLOW)http://localhost:8001$(NC)"
+	@echo "  $(BLUE)🔵 Docs:         $(YELLOW)http://localhost:8000/docs$(NC)"
 	@echo ""
 	@echo "$(YELLOW)🟡 Waiting for services to be healthy...$(NC)"
 	@sleep 5
@@ -156,7 +157,7 @@ shell:
 ifndef S
 	@echo "$(RED)❌ Error: Specify service with S=<service>$(NC)"
 	@echo "Example: make shell S=api"
-	@echo "Available: api, web, db, redis, minio"
+	@echo "Available: backend, web, db, redis, minio"
 	@exit 1
 endif
 	@if [ "$(S)" = "db" ]; then \
@@ -170,8 +171,14 @@ health:
 	@echo "$(BLUE)🔵 Health Check $(NC)"
 	@echo "$(BLUE)🔵━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@printf "  $(YELLOW)🟡 API Health:         $(NC)"
-	@if curl -sf http://localhost:8001/api/health > /dev/null 2>&1; then \
+	@printf "  $(YELLOW)🟡 Backend Health:     $(NC)"
+	@if curl -sf http://localhost:8000/api/health > /dev/null 2>&1; then \
+		echo "$(GREEN)🟢 Healthy$(NC)"; \
+	else \
+		echo "$(RED)🔴 Unhealthy$(NC)"; \
+	fi
+	@printf "  $(YELLOW)🟡 File Manager:       $(NC)"
+	@if curl -sf http://localhost:8001/health > /dev/null 2>&1; then \
 		echo "$(GREEN)🟢 Healthy$(NC)"; \
 	else \
 		echo "$(RED)🔴 Unhealthy$(NC)"; \
@@ -235,17 +242,17 @@ endif
 
 test-local:
 	@echo "$(YELLOW)🧪 Running tests locally with .venv...$(NC)"
-	@if [ ! -d "apps/api/.venv" ]; then \
-		echo "$(RED)❌ .venv not found in apps/api. Run 'make setup' or create it manually.$(NC)"; \
+	@if [ ! -d "apps/backend/.venv" ]; then \
+		echo "$(RED)❌ .venv not found in apps/backend. Run 'make setup' or create it manually.$(NC)"; \
 		exit 1; \
 	fi
 	@echo "$(YELLOW)📥 Loading environment from envs/.env.local (if exists)...$(NC)"
 ifdef FILE
 	@eval $$(./scripts/env-manager.sh load local) && \
-	cd apps/api && .venv/bin/python -m pytest $(FILE) $(ARGS)
+	cd apps/backend && .venv/bin/python -m pytest $(FILE) $(ARGS)
 else
 	@eval $$(./scripts/env-manager.sh load local) && \
-	cd apps/api && .venv/bin/python -m pytest tests/ $(ARGS)
+	cd apps/backend && .venv/bin/python -m pytest tests/ $(ARGS)
 endif
 
 # ============================================================================ 
@@ -343,7 +350,7 @@ db-restore:
 
 create-demo-user:
 	@echo "📝 Creating demo user..."
-	@$(COMPOSE) exec -T api sh -c 'MONGODB_URI="$$MONGODB_URL" MONGODB_DB_NAME="$$MONGODB_DATABASE" python scripts/create_demo_user.py'
+	@$(COMPOSE) exec -T backend sh -c 'MONGODB_URI="$$MONGODB_URL" MONGODB_DB_NAME="$$MONGODB_DATABASE" python scripts/create_demo_user.py'
 
 verify:
 	@$(MAKE) health

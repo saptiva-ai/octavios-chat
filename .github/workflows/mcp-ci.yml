@@ -4,14 +4,14 @@ on:
   push:
     branches: [main, develop]
     paths:
-      - 'apps/api/src/mcp/**'
-      - 'apps/api/tests/mcp/**'
+      - 'apps/backend/src/mcp/**'
+      - 'apps/backend/tests/mcp/**'
       - 'apps/web/src/lib/mcp/**'
   pull_request:
     branches: [main, develop]
     paths:
-      - 'apps/api/src/mcp/**'
-      - 'apps/api/tests/mcp/**'
+      - 'apps/backend/src/mcp/**'
+      - 'apps/backend/tests/mcp/**'
       - 'apps/web/src/lib/mcp/**'
   workflow_dispatch:
 
@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/api
+        working-directory: apps/backend
 
     steps:
       - name: Checkout code
@@ -37,7 +37,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
-          cache-dependency-path: apps/api/requirements.txt
+          cache-dependency-path: apps/backend/requirements.txt
 
       - name: Install dependencies
         run: |
@@ -90,11 +90,11 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           files: |
-            apps/api/coverage-mcp-unit.xml
-            apps/api/coverage-mcp-integration.xml
-            apps/api/coverage-mcp-security.xml
-            apps/api/coverage-mcp-tasks.xml
-            apps/api/coverage-mcp-versioning.xml
+            apps/backend/coverage-mcp-unit.xml
+            apps/backend/coverage-mcp-integration.xml
+            apps/backend/coverage-mcp-security.xml
+            apps/backend/coverage-mcp-tasks.xml
+            apps/backend/coverage-mcp-versioning.xml
           flags: mcp-backend
           name: mcp-backend-coverage
 
@@ -107,7 +107,7 @@ jobs:
     if: github.event_name == 'pull_request'
     defaults:
       run:
-        working-directory: apps/api
+        working-directory: apps/backend
 
     steps:
       - name: Checkout code
@@ -120,7 +120,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
-          cache-dependency-path: apps/api/requirements.txt
+          cache-dependency-path: apps/backend/requirements.txt
 
       - name: Install dependencies
         run: |
@@ -145,7 +145,7 @@ jobs:
         if: always()
         uses: codecov/codecov-action@v4
         with:
-          files: apps/api/coverage-mcp-diff.xml
+          files: apps/backend/coverage-mcp-diff.xml
           flags: mcp-diff
           name: mcp-diff-coverage
 

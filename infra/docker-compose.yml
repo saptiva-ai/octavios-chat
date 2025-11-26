@@ -181,18 +181,22 @@ services:
       - octavios-network
 
   # ========================================
-  # FASTAPI BACKEND
+  # FASTAPI BACKEND (CORE)
   # ========================================
-  api:
+  # Service name: 'backend' - Core/Kernel in Plugin-First Architecture
+  # Port 8000 - Main orchestration layer for chat, auth, sessions
+  backend:
     build:
-      context: ../apps/api
+      context: ../apps/backend
       dockerfile: Dockerfile
       target: production
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-api
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-backend
     restart: unless-stopped
     env_file:
       - ../envs/.env
+    command: python -m uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 1
     environment:
+      - PORT=8000
       # Base de datos
       - MONGODB_URL=mongodb://${MONGODB_USER:-octavios_user}:${MONGODB_PASSWORD:-secure_password_change_me}@mongodb:27017/${MONGODB_DATABASE:-octavios}?authSource=admin
       - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_password_change_me}@redis:6379/0
@@ -206,7 +210,7 @@ services:
 
       # CORS y Hosts permitidos
       - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:3000"]}
-      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-["localhost","127.0.0.1","web","api"]}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-["localhost","127.0.0.1","web","api","backend"]}
 
       # Logging y debug
       - LOG_LEVEL=${LOG_LEVEL:-info}
@@ -249,9 +253,7 @@ services:
       - CHAT_ALLOWED_MODELS=${CHAT_ALLOWED_MODELS:-Saptiva Turbo,Saptiva Cortex,Saptiva Ops,Saptiva Coder,Saptiva Legacy}
 
       - SAPTIVA_BASE_URL=${SAPTIVA_BASE_URL:-https://api.saptiva.com}
-      - SAPTIVA_API_KEY=${SAPTIVA_API_KEY:-}
       - SAPTIVA_TIMEOUT=${SAPTIVA_TIMEOUT:-30}
-      - SAPTIVA_MAX_RETRIES=${SAPTIVA_MAX_RETRIES:-3}
 
       # Rate limiting (disabled in development for better DX)
       - RATE_LIMIT_ENABLED=${RATE_LIMIT_ENABLED:-false}
@@ -259,8 +261,12 @@ services:
       - RATE_LIMIT_PERIOD=${RATE_LIMIT_PERIOD:-60}
 
       # Observabilidad
-      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-octavios-bridge}
+      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-octavios-backend}
       - JAEGER_ENDPOINT=${JAEGER_ENDPOINT:-http://localhost:14268/api/traces}
+
+      # Plugin URLs (for future Plugin-First Architecture)
+      - FILE_MANAGER_URL=${FILE_MANAGER_URL:-http://file-manager:8001}
+      - CAPITAL414_URL=${CAPITAL414_URL:-http://file-auditor:8002}
 
     depends_on:
       mongodb:
@@ -273,17 +279,19 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_started
+      file-manager:
+        condition: service_healthy
 
     ports:
-      - "${API_PORT:-8001}:8001"
+      - "${API_PORT:-8000}:8000"
 
     # Volume mount for hot reload in development
     # Source code is mounted to enable immediate reflection of changes
     volumes:
-      - ../apps/api/src:/app/src
+      - ../apps/backend/src:/app/src
 
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -314,8 +322,8 @@ services:
     environment:
       - PORT=3000
       - NODE_ENV=${NODE_ENV:-development}
-      - API_BASE_URL=http://api:8001
-      # NEXT_PUBLIC_API_URL not set to enable Next.js proxy (/api/* -> http://api:8001/api/*)
+      - API_BASE_URL=http://api:8000
+      # NEXT_PUBLIC_API_URL not set to enable Next.js proxy (/api/* -> http://api:8000/api/*)
       - NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME:-Saptiva Copilot OS}
       - NEXT_PUBLIC_APP_VERSION=${NEXT_PUBLIC_APP_VERSION:-1.0.0}
       - NEXT_PUBLIC_ENABLE_STREAMING=${NEXT_PUBLIC_ENABLE_STREAMING:-true}
@@ -377,7 +385,7 @@ services:
       - nginx_logs:/var/log/nginx
     depends_on:
       - web
-      - api
+      - backend
     profiles:
       - production
     networks:
@@ -393,7 +401,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-octavios}-playwright
     environment:
       - PLAYWRIGHT_BASE_URL=http://web:3000
-      - API_BASE_URL=http://api:8001
+      - API_BASE_URL=http://backend:8000
     volumes:
       - ../tests:/app/tests
       - ../playwright-report:/app/playwright-report
@@ -408,39 +416,105 @@ services:
       - octavios-network
 
 # ========================================
+  # FILE MANAGER - Public Plugin Service
+  # ========================================
+  # Plugin-First Architecture: Public plugin for file operations
+  # Other plugins (like capital414) consume files from this service
+  file-manager:
+    build:
+      context: ..
+      dockerfile: plugins/public/file-manager/Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-file-manager
+    restart: unless-stopped
+    env_file:
+      - ../envs/.env
+    environment:
+      - PORT=8001
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin123}
+      - MINIO_BUCKET_DOCUMENTS=documents
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_password_change_me}@redis:6379/0
+      - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-50}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "${FILE_MANAGER_PORT:-8001}:8001"
+    volumes:
+      # Hot reload in development
+      - ../plugins/public/file-manager/src:/app/src
+    depends_on:
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - octavios-network
+
+  # ========================================
+  # FILE AUDITOR - MCP Plugin Service (Private)
+  # ========================================
+  # Plugin-First Architecture: Private plugin for document auditing
+  # Consumes files from file-manager plugin via HTTP
+  file-auditor:
+    build:
+      context: ..
+      dockerfile: plugins/capital414-private/Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-file-auditor
+    restart: unless-stopped
+    env_file:
+      - ../envs/.env
+    environment:
+      - MCP_SERVER_NAME=file-auditor
+      - MCP_SERVER_PORT=8002
+      - LANGUAGETOOL_URL=http://languagetool:8010/v2/check
+      # Plugin-First: Get files from file-manager instead of direct MinIO
+      - FILE_MANAGER_URL=http://file-manager:8001
+      - PYTHONPATH=/app/src
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "${CAPITAL414_AUDITOR_PORT:-8002}:8002"
+    volumes:
+      # Hot reload in development
+      - ../plugins/capital414-private/src:/app/src
+      # Shared temp directory for PDF reports
+      - /tmp/capital414-reports:/tmp/capital414-reports
+    depends_on:
+      languagetool:
+        condition: service_healthy
+      file-manager:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8002/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - octavios-network
+
+# ========================================
 # VOLUMES
 # ========================================
 volumes:
-  # Data volumes with configurable bind mounts for production
-  # In production, set VOLUME_TYPE=none to use bind mounts
-  # In development, leave unset to use Docker-managed volumes
+  # Data volumes - simple Docker-managed volumes for development
+  # For production bind mounts, override these in docker-compose.prod.yml
   mongodb_data:
     driver: local
-    driver_opts:
-      type: ${VOLUME_TYPE:-volume}
-      device: ${VOLUME_MONGODB_PATH:-mongodb_data}
-      o: ${VOLUME_OPTIONS:-}
 
   mongodb_config:
     driver: local
-    driver_opts:
-      type: ${VOLUME_TYPE:-volume}
-      device: ${VOLUME_MONGODB_CONFIG_PATH:-mongodb_config}
-      o: ${VOLUME_OPTIONS:-}
 
   redis_data:
     driver: local
-    driver_opts:
-      type: ${VOLUME_TYPE:-volume}
-      device: ${VOLUME_REDIS_PATH:-redis_data}
-      o: ${VOLUME_OPTIONS:-}
 
   minio_data:
     driver: local
-    driver_opts:
-      type: ${VOLUME_TYPE:-volume}
-      device: ${VOLUME_MINIO_PATH:-minio_data}
-      o: ${VOLUME_OPTIONS:-}
 
   # These volumes always use Docker-managed storage
   nginx_logs:
