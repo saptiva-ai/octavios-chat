@@ -16,7 +16,7 @@
 
 Validar la **integración correcta** entre los componentes de la arquitectura Plugin-First:
 - **Backend Core** (Port 8000) - Kernel ligero
-- **File Manager Plugin** (Port 8003) - Operaciones de archivos
+- **File Manager Plugin** (Port 8001) - Operaciones de archivos
 - **Capital414 Plugin** (Port 8002) - Auditorías COPILOTO_414
 - **Infraestructura** - MongoDB, Redis, MinIO, LanguageTool
 
@@ -29,7 +29,7 @@ Frontend (3000)
     ↓ HTTP
 Backend Core (8000) - Orchestration
     ↓ HTTP Client          ↓ MCP Protocol
-File Manager (8003)     Capital414 (8002)
+File Manager (8001)     Capital414 (8002)
     ↓                       ↓
 MinIO/Redis         File Manager (HTTP Client)
 ```
@@ -99,7 +99,7 @@ if [ -z "$MINIO_KEY" ]; then
 fi
 
 # 5. Verify file exists in MinIO via File Manager
-FILE_CONTENT=$(curl -s "http://localhost:8003/download/$MINIO_KEY")
+FILE_CONTENT=$(curl -s "http://localhost:8001/download/$MINIO_KEY")
 if [[ "$FILE_CONTENT" != *"Integration test content"* ]]; then
   echo "❌ FAIL: File content mismatch"
   exit 1
@@ -189,7 +189,7 @@ fi
 echo "🧪 Test 2.1: Backend invokes Capital414 audit via MCP"
 
 # 1. Upload PDF to File Manager first
-UPLOAD_RESPONSE=$(curl -s -X POST http://localhost:8003/upload \
+UPLOAD_RESPONSE=$(curl -s -X POST http://localhost:8001/upload \
   -F "file=@tests/fixtures/copiloto414_compliant.pdf" \
   -F "user_id=audit_test" \
   -F "session_id=mcp_test")
@@ -283,7 +283,7 @@ async def test_capital414_downloads_from_filemanager():
         data = {"user_id": "capital414_test", "session_id": "test1"}
 
         upload_resp = await client.post(
-            "http://file-manager:8003/upload",
+            "http://file-manager:8001/upload",
             files=files,
             data=data
         )
@@ -291,7 +291,7 @@ async def test_capital414_downloads_from_filemanager():
         minio_key = upload_resp.json()["minio_key"]
 
     # 2. Capital414 downloads via FileManagerClient
-    fm_client = FileManagerClient(base_url="http://file-manager:8003")
+    fm_client = FileManagerClient(base_url="http://file-manager:8001")
     pdf_path = await fm_client.download_to_temp(minio_key)
 
     # 3. Assertions
@@ -314,17 +314,17 @@ async def test_capital414_downloads_from_filemanager():
 echo "🧪 Test 4.1: File Manager caches extracted text in Redis"
 
 # 1. Upload PDF
-UPLOAD_RESPONSE=$(curl -s -X POST http://localhost:8003/upload \
+UPLOAD_RESPONSE=$(curl -s -X POST http://localhost:8001/upload \
   -F "file=@tests/fixtures/sample.pdf" \
   -F "user_id=cache_test")
 
 MINIO_KEY=$(echo $UPLOAD_RESPONSE | jq -r '.minio_key')
 
 # 2. First extraction (should cache in Redis)
-time curl -s -X POST "http://localhost:8003/extract/$MINIO_KEY" > /tmp/extract1.json
+time curl -s -X POST "http://localhost:8001/extract/$MINIO_KEY" > /tmp/extract1.json
 
 # 3. Second extraction (should hit cache)
-time curl -s -X POST "http://localhost:8003/extract/$MINIO_KEY" > /tmp/extract2.json
+time curl -s -X POST "http://localhost:8001/extract/$MINIO_KEY" > /tmp/extract2.json
 
 # 4. Verify cache hit in Redis
 docker compose -f infra/docker-compose.yml exec redis redis-cli GET "extract:$MINIO_KEY"
@@ -510,7 +510,7 @@ fi
 
 # 5. Verify File Manager is healthy again
 sleep 10
-HEALTH=$(curl -s http://localhost:8003/health | jq -r '.status')
+HEALTH=$(curl -s http://localhost:8001/health | jq -r '.status')
 
 if [ "$HEALTH" == "healthy" ]; then
   echo "✅ PASS: File Manager recovered after restart"
@@ -568,7 +568,7 @@ echo "🧪 Test R-3: MinIO down - File Manager returns proper error"
 docker compose -f infra/docker-compose.yml stop minio
 
 # 2. Try upload via File Manager
-UPLOAD_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST http://localhost:8003/upload \
+UPLOAD_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST http://localhost:8001/upload \
   -F "file=@tests/fixtures/sample.pdf" \
   -F "user_id=outage_test")
 
@@ -587,7 +587,7 @@ docker compose -f infra/docker-compose.yml start minio
 sleep 10
 
 # 5. Verify upload works again
-UPLOAD_RESPONSE=$(curl -s -X POST http://localhost:8003/upload \
+UPLOAD_RESPONSE=$(curl -s -X POST http://localhost:8001/upload \
   -F "file=@tests/fixtures/sample.pdf" \
   -F "user_id=outage_test")
 
@@ -625,7 +625,7 @@ dd if=/dev/urandom of=/tmp/perf_test_1mb.bin bs=1M count=1
 hey -n 100 -c 10 -m POST \
   -T "multipart/form-data; boundary=----WebKitFormBoundary" \
   -D /tmp/perf_test_1mb.bin \
-  "http://localhost:8003/upload?user_id=perf_test&session_id=perf1" \
+  "http://localhost:8001/upload?user_id=perf_test&session_id=perf1" \
   > /tmp/hey_results.txt
 
 # Parse results
@@ -901,7 +901,7 @@ make logs S=capital414-auditor
 
 # Health check individual
 curl -s http://localhost:8000/api/health | jq
-curl -s http://localhost:8003/health | jq
+curl -s http://localhost:8001/health | jq
 curl -s http://localhost:8002/health | jq
 
 # Verificar conectividad entre servicios

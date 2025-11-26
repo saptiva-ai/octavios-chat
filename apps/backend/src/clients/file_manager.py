@@ -50,10 +50,10 @@ class FileManagerClient:
 
         Args:
             base_url: Base URL of file-manager service.
-                      Defaults to FILE_MANAGER_URL env var or http://file-manager:8003
+                      Defaults to FILE_MANAGER_URL env var or http://file-manager:8001
         """
         self.base_url = base_url or os.getenv(
-            "FILE_MANAGER_URL", "http://file-manager:8003"
+            "FILE_MANAGER_URL", "http://file-manager:8001"
         )
         self._client: Optional[httpx.AsyncClient] = None
 

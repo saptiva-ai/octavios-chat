@@ -45,7 +45,7 @@ MAX_FILE_SIZE_MB=50
 docker build -t octavios-file-manager .
 
 # Run
-docker run -p 8003:8003 octavios-file-manager
+docker run -p 8001:8001 octavios-file-manager
 ```
 
 ## Development
@@ -55,7 +55,7 @@ docker run -p 8003:8003 octavios-file-manager
 pip install -r requirements.txt
 
 # Run locally
-uvicorn src.main:app --host 0.0.0.0 --port 8003 --reload
+uvicorn src.main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 ## License

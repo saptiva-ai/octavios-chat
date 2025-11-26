@@ -265,7 +265,7 @@ services:
       - JAEGER_ENDPOINT=${JAEGER_ENDPOINT:-http://localhost:14268/api/traces}
 
       # Plugin URLs (for future Plugin-First Architecture)
-      - FILE_MANAGER_URL=${FILE_MANAGER_URL:-http://file-manager:8003}
+      - FILE_MANAGER_URL=${FILE_MANAGER_URL:-http://file-manager:8001}
       - CAPITAL414_URL=${CAPITAL414_URL:-http://capital414-auditor:8002}
 
     depends_on:
@@ -437,7 +437,7 @@ services:
       - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-50}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:
-      - "${FILE_MANAGER_PORT:-8003}:8003"
+      - "${FILE_MANAGER_PORT:-8001}:8001"
     volumes:
       # Hot reload in development
       - ../plugins/public/file-manager/src:/app/src
@@ -447,7 +447,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -473,7 +473,7 @@ services:
       - MCP_SERVER_PORT=8002
       - LANGUAGETOOL_URL=http://languagetool:8010/v2/check
       # Plugin-First: Get files from file-manager instead of direct MinIO
-      - FILE_MANAGER_URL=http://file-manager:8003
+      - FILE_MANAGER_URL=http://file-manager:8001
       - PYTHONPATH=/app/src
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:

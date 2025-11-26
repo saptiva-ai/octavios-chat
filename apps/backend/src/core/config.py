@@ -196,7 +196,7 @@ class Settings(BaseSettings):
 
     # Plugin URLs (Plugin-First Architecture)
     file_manager_url: str = Field(
-        default="http://file-manager:8003",
+        default="http://file-manager:8001",
         description="File Manager plugin URL for file operations"
     )
     capital414_url: str = Field(

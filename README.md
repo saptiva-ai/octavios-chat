@@ -97,7 +97,7 @@ flowchart TB
     end
 
     subgraph PublicPlugins["🔌 Public Plugins (Open Source Ready)"]
-        filemanager["File Manager Plugin<br/>Port: 8003<br/>Upload · Download · Extract"]:::plugin_public
+        filemanager["File Manager Plugin<br/>Port: 8001<br/>Upload · Download · Extract"]:::plugin_public
     end
 
     subgraph PrivatePlugins["🔒 Private Plugins (Proprietary)"]
@@ -193,7 +193,7 @@ La cadena de dependencias garantiza inicio ordenado:
 |---------|------|--------------|--------------|
 | Frontend (Next.js) | 3000 | - | http://localhost:3000 |
 | Backend Core | 8000 | http://backend:8000 | http://localhost:8000 |
-| File Manager | 8003 | http://file-manager:8003 | http://localhost:8003 |
+| File Manager | 8001 | http://file-manager:8001 | http://localhost:8001 |
 | Capital414 | 8002 | http://capital414-auditor:8002 | http://localhost:8002 |
 | MongoDB | 27017 | mongodb://mongodb:27017 | - |
 | Redis | 6379 | redis://redis:6379 | - |
@@ -213,6 +213,169 @@ La cadena de dependencias garantiza inicio ordenado:
 | Capital414 FileManagerClient | `plugins/capital414-private/src/clients/file_manager.py` |
 | Docker Compose | `infra/docker-compose.yml` |
 
+### Comunicación entre Servicios (Código)
+
+La arquitectura Plugin-First usa **HTTP Client Pattern** y **MCP Protocol** para comunicación inter-servicios. Aquí ejemplos de código real:
+
+#### Backend Core → File Manager Plugin (HTTP Client)
+
+```python
+# apps/backend/src/services/file_manager_client.py
+from httpx import AsyncClient, Timeout
+from structlog import get_logger
+
+logger = get_logger(__name__)
+
+class FileManagerClient:
+    def __init__(self, base_url: str = "http://file-manager:8001"):
+        self.base_url = base_url
+        self.client = AsyncClient(timeout=Timeout(30.0))
+
+    async def upload_file(
+        self,
+        file: UploadFile,
+        user_id: str,
+        session_id: str
+    ) -> dict:
+        """Upload file to File Manager Plugin via HTTP."""
+        logger.info("Uploading file to File Manager", filename=file.filename)
+
+        files = {"file": (file.filename, file.file, file.content_type)}
+        data = {"user_id": user_id, "session_id": session_id}
+
+        response = await self.client.post(
+            f"{self.base_url}/upload",
+            files=files,
+            data=data
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def download_file(self, minio_key: str) -> bytes:
+        """Download file from File Manager Plugin."""
+        logger.info("Downloading file from File Manager", minio_key=minio_key)
+
+        response = await self.client.get(
+            f"{self.base_url}/download/{minio_key}"
+        )
+        response.raise_for_status()
+        return response.content
+```
+
+**Uso en Backend Core**:
+```python
+# apps/backend/src/routers/files.py
+from services.file_manager_client import get_file_manager_client
+
+@router.post("/upload")
+async def upload_file_endpoint(
+    file: UploadFile = File(...),
+    fm_client: FileManagerClient = Depends(get_file_manager_client)
+):
+    # Backend Core delega a File Manager Plugin
+    result = await fm_client.upload_file(file, user_id, session_id)
+    return result
+```
+
+#### Backend Core → Capital414 Plugin (MCP Protocol)
+
+```python
+# apps/backend/src/mcp/client.py
+from mcp import ClientSession
+from structlog import get_logger
+
+logger = get_logger(__name__)
+
+class MCPClient:
+    def __init__(self, server_url: str = "http://capital414-auditor:8002"):
+        self.server_url = server_url
+        self.session = ClientSession(server_url)
+
+    async def call_tool(
+        self,
+        tool_name: str,
+        arguments: dict
+    ) -> dict:
+        """Invoke MCP tool on Capital414 Plugin."""
+        logger.info("Invoking MCP tool", tool_name=tool_name)
+
+        result = await self.session.call_tool(
+            name=tool_name,
+            arguments=arguments
+        )
+        return result
+```
+
+**Uso en Backend Core**:
+```python
+# apps/backend/src/routers/chat.py
+from mcp.client import get_mcp_client
+
+@router.post("/chat")
+async def chat_endpoint(
+    message: str,
+    mcp_client: MCPClient = Depends(get_mcp_client)
+):
+    # Detectar comando de auditoría
+    if message.startswith("Auditar archivo:"):
+        # Backend Core delega a Capital414 Plugin vía MCP
+        result = await mcp_client.call_tool(
+            tool_name="audit_document_full",
+            arguments={"minio_key": doc_key, "policy_id": "copiloto_414"}
+        )
+        return result
+```
+
+#### Capital414 Plugin → File Manager Plugin (HTTP Client)
+
+```python
+# plugins/capital414-private/src/clients/file_manager.py
+from httpx import AsyncClient
+
+class FileManagerClient:
+    def __init__(self, base_url: str = "http://file-manager:8001"):
+        self.base_url = base_url
+        self.client = AsyncClient()
+
+    async def download_to_temp(self, minio_key: str) -> str:
+        """Download PDF from File Manager for audit processing."""
+        response = await self.client.get(
+            f"{self.base_url}/download/{minio_key}"
+        )
+        response.raise_for_status()
+
+        # Save to temp file for audit processing
+        temp_path = f"/tmp/{minio_key}"
+        with open(temp_path, "wb") as f:
+            f.write(response.content)
+
+        return temp_path
+```
+
+**Uso en Capital414 Plugin**:
+```python
+# plugins/capital414-private/src/handlers/audit_handler.py
+from clients.file_manager import get_file_manager_client
+
+class AuditCommandHandler:
+    def __init__(self, fm_client: FileManagerClient):
+        self.fm_client = fm_client
+
+    async def handle(self, doc_key: str):
+        # Capital414 consume File Manager Plugin para obtener PDF
+        pdf_path = await self.fm_client.download_to_temp(doc_key)
+
+        # Ejecutar auditoría con PDF local
+        report = await self.coordinator.validate_document(pdf_path)
+        return report
+```
+
+**Ventajas de esta arquitectura**:
+- **Desacoplamiento**: Cada servicio solo conoce la URL del otro, no sus implementaciones
+- **Testabilidad**: Fácil mockear `FileManagerClient` o `MCPClient` en tests
+- **Escalabilidad**: Cada plugin puede tener múltiples réplicas detrás de un load balancer
+- **Dependency Inversion**: Backend Core depende de abstracciones (interfaces), no de implementaciones concretas
+
 ## Visión de alto nivel
 
 Vista macro de los componentes: primero un mapa de patrones/contendores y luego vistas específicas de contenedores e integraciones.
@@ -227,7 +390,7 @@ flowchart TB
 
     web --> core["Backend Core (Kernel)<br/>Chat · Auth · Orchestration<br/>Port 8000"]:::core
 
-    core --> filemanager["File Manager Plugin<br/>Upload · Download · Extract<br/>Port 8003"]:::plugin_public
+    core --> filemanager["File Manager Plugin<br/>Upload · Download · Extract<br/>Port 8001"]:::plugin_public
     core -.->|"MCP Protocol"| capital414["Capital414 Plugin<br/>COPILOTO_414 Audits<br/>Port 8002"]:::plugin_private
 
     capital414 -->|"HTTP Client"| filemanager
@@ -278,7 +441,7 @@ flowchart TB
 
 **Arquitectura Plugin-First en acción**: Los usuarios interactúan con Frontend (Next.js 14 + React Query) que se comunica con **Backend Core (Puerto 8000)** - un kernel ligero que solo orquesta chat, autenticación y sesiones. El Core delega funcionalidades específicas a plugins independientes:
 
-- **File Manager Plugin (Puerto 8003)**: Infraestructura pública reutilizable para upload/download/extracción de texto. Opera de forma independiente con MinIO y Redis.
+- **File Manager Plugin (Puerto 8001)**: Infraestructura pública reutilizable para upload/download/extracción de texto. Opera de forma independiente con MinIO y Redis.
 - **Capital414 Plugin (Puerto 8002)**: Lógica de negocio privada para auditorías COPILOTO_414. Ejecuta 8 auditores en paralelo y consume File Manager via HTTP Client.
 
 **Patrones de comunicación**:
@@ -331,7 +494,7 @@ flowchart TB
     file_router --> fm_client
     audit_router -.->|"MCP Protocol"| capital414_service
 
-    subgraph FileManager["🟠 File Manager Plugin (Public) - Port 8003"]
+    subgraph FileManager["🟠 File Manager Plugin (Public) - Port 8001"]
         fm_routes["Upload · Download<br/>Extract · Thumbnails"]:::plugin_public
         fm_extraction["Multi-tier Extraction<br/>pypdf → PDF SDK → OCR"]:::plugin_public
         fm_minio["MinIO Client<br/>S3 Operations"]:::plugin_public
@@ -377,7 +540,7 @@ flowchart TB
 **Flujo Plugin-First**:
 1. **Frontend** envía request al Backend Core (puerto 8000)
 2. **Backend Core** (Kernel ligero) orquesta pero NO ejecuta operaciones pesadas:
-   - Upload de archivos → Delega a **File Manager Plugin** (puerto 8003) vía HTTP Client
+   - Upload de archivos → Delega a **File Manager Plugin** (puerto 8001) vía HTTP Client
    - Auditoría de documentos → Delega a **Capital414 Plugin** (puerto 8002) vía MCP Protocol
 3. **File Manager Plugin** (público, open-source ready):
    - Maneja upload/download/extract con estrategia multi-tier (pypdf → PDF SDK → OCR)
@@ -408,7 +571,7 @@ flowchart TB
         fm_client_core["FileManagerClient<br/>HTTP Client"]:::core
     end
 
-    subgraph FileManager["🟠 File Manager Plugin (Port 8003)"]
+    subgraph FileManager["🟠 File Manager Plugin (Port 8001)"]
         fm_service["Upload/Download/Extract<br/>Multi-tier Extraction<br/>Thumbnail Generation"]:::plugin_public
     end
 
@@ -481,7 +644,7 @@ flowchart TB
 
 **Arquitectura de integración Plugin-First**:
 - **Backend Core (🟢 Port 8000)**: Kernel ligero con ChatService, Auth, y HTTP Clients para consumir plugins. NO ejecuta operaciones pesadas.
-- **File Manager Plugin (🟠 Port 8003)**: Servicio público independiente que maneja upload/download/extract con estrategia multi-tier (pypdf → PDF SDK → OCR), genera thumbnails, y persiste en MinIO.
+- **File Manager Plugin (🟠 Port 8001)**: Servicio público independiente que maneja upload/download/extract con estrategia multi-tier (pypdf → PDF SDK → OCR), genera thumbnails, y persiste en MinIO.
 - **Capital414 Plugin (🔴 Port 8002)**: Servicio privado con ValidationCoordinator que ejecuta 8 auditores en paralelo, consume File Manager vía HTTP Client para descargar PDFs a auditar.
 - **Servicios Externos (🌐)**: SAPTIVA LLMs (multi-modelo), Aletheia Research (deep research), LanguageTool (grammar checking), SMTP (notifications).
 - **Almacenamiento Distribuido (💾)**: MongoDB (Core: sessions/messages, Capital414: reports), Redis (Core: cache/JWT blacklist, FileManager: extract cache), MinIO (FileManager: files/thumbnails, Capital414: reports).
@@ -788,7 +951,7 @@ flowchart TB
         auth_r --> session_svc
     end
 
-    subgraph FileManagerPlugin["🟠 File Manager Plugin (Port 8003) - Public"]
+    subgraph FileManagerPlugin["🟠 File Manager Plugin (Port 8001) - Public"]
         fm_api["REST API<br/>/upload · /download · /extract"]:::plugin_public
 
         subgraph FileManagerServices["File Manager Services"]
@@ -861,7 +1024,7 @@ flowchart TB
    - **Core Services**: ChatService (orchestration + LLM), FileManagerClient (HTTP client), SessionService (auth/context)
    - **Responsabilidad**: Orquestación, autenticación, routing - NO ejecuta operaciones pesadas
 
-2. **🟠 File Manager Plugin (Public - Port 8003)**:
+2. **🟠 File Manager Plugin (Public - Port 8001)**:
    - **REST API**: `/upload`, `/download`, `/extract` endpoints
    - **Services**: Multi-tier extraction (pypdf → PDF SDK → OCR), thumbnail generation, MinIO client
    - **Persistencia**: MinIO S3 (files, thumbnails), Redis (extract cache)
@@ -990,7 +1153,7 @@ sequenceDiagram
     participant Capital414 as Capital414 Plugin<br/>(Port 8002)
     participant Handler as AuditCommandHandler<br/>(en Capital414)
     participant Coordinator as ValidationCoordinator<br/>(en Capital414)
-    participant FileManager as File Manager Plugin<br/>(Port 8003)
+    participant FileManager as File Manager Plugin<br/>(Port 8001)
     participant Formatter as SummaryFormatter<br/>(en Capital414)
     participant ArtifactDB as Artifact Model<br/>(MongoDB)
     participant Canvas as Canvas Panel
@@ -1041,7 +1204,7 @@ sequenceDiagram
 2. **Invocación MCP**: Backend Core usa `MCPClient.call_tool("audit_document_full")` para invocar al plugin
 3. **Procesamiento en Capital414 Plugin** (Port 8002):
    - `AuditCommandHandler.can_handle()` detecta comando usando Chain of Responsibility
-   - Handler consume **File Manager Plugin** (Port 8003) vía HTTP Client para descargar PDF
+   - Handler consume **File Manager Plugin** (Port 8001) vía HTTP Client para descargar PDF
    - `ValidationCoordinator` ejecuta 8 auditores en paralelo (disclaimer, format, typography, grammar, logo, color, entity, semantic)
 4. **Generación Dual en Capital414**:
    - `generate_human_summary()`: Resumen conversacional para chat (sin jerga técnica)
@@ -1270,7 +1433,7 @@ Vista rápida de carpetas raíz y submódulos más relevantes. La idea es poder 
 │       └── __tests__/           # Jest + Testing Library
 ├── plugins/
 │   ├── public/                  # 🟠 Public Plugins (Open Source Ready)
-│   │   └── file-manager/        # Puerto 8003 - Upload/Download/Extract
+│   │   └── file-manager/        # Puerto 8001 - Upload/Download/Extract
 │   │       ├── src/
 │   │       │   ├── routers/     # upload.py, download.py, extract.py, health.py
 │   │       │   └── services/    # minio_client.py, redis_client.py, extraction_service.py

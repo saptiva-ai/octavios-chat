@@ -4,7 +4,7 @@ OctaviOS File Manager Plugin - Main Application
 Microservicio híbrido REST + MCP para gestión de archivos.
 Proporciona upload, download, extracción de texto y metadatos.
 
-Port: 8003
+Port: 8001
 """
 
 from contextlib import asynccontextmanager

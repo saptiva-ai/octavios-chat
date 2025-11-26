@@ -166,7 +166,7 @@ graph TB
     end
 
     subgraph "Public Plugins"
-        FM[File Manager Plugin<br/>Port 8003<br/>Upload/Download/Extract]
+        FM[File Manager Plugin<br/>Port 8001<br/>Upload/Download/Extract]
     end
 
     subgraph "Private Plugins"
@@ -298,7 +298,7 @@ class FileManagerClient:
     """HTTP client for file-manager plugin."""
 
     def __init__(self):
-        self.base_url = os.getenv("FILE_MANAGER_URL", "http://file-manager:8003")
+        self.base_url = os.getenv("FILE_MANAGER_URL", "http://file-manager:8001")
         self._client = httpx.AsyncClient()
 
     async def upload_file(
@@ -414,7 +414,7 @@ async def audit_document_full(minio_key: str, policy_id: str = "auto"):
 | Característica | Monolito | Plugin-First |
 |----------------|----------|--------------|
 | **Contenedores** | 1 backend | 3 services (backend + 2 plugins) |
-| **Puertos** | 8001 | 8000 (backend)<br/>8003 (file-manager)<br/>8002 (capital414) |
+| **Puertos** | 8001 | 8000 (backend)<br/>8001 (file-manager)<br/>8002 (capital414) |
 | **Deployment** | Todo junto | Independiente por servicio |
 | **Escalabilidad** | Vertical (más CPU/RAM) | Horizontal (más instancias) |
 | **Build Time** | ~5 min (todo) | ~2 min (solo cambio) |
@@ -771,7 +771,7 @@ curl http://localhost:8000/api/health
 # Response: {"status": "healthy", "version": "0.1.0"}
 
 # Terminal 2: File Manager (Public Plugin)
-curl http://localhost:8003/health
+curl http://localhost:8001/health
 # Response: {"status": "healthy", "service": "file-manager"}
 
 # Terminal 3: Capital414 Auditor (Private Plugin)

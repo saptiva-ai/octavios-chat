@@ -175,7 +175,7 @@ apps/backend/src/domain/audit_handler.py → plugins/capital414-private/src/
 #### 1.2. Corregir Tabla de Ports (Línea 190-204)
 **Acción**: Validar que TODOS los puertos sean consistentes:
 - Backend: 8000 (NO 8001)
-- File Manager: 8003
+- File Manager: 8001
 - Capital414: 8002
 
 #### 1.3. Corregir Referencias de FileManagerClient
@@ -192,7 +192,7 @@ Frontend → Backend Core → {File Manager Plugin, Capital414 Plugin} → Infra
 
 **Nuevo diagrama debe mostrar**:
 - Backend Core (puerto 8000) - Ligero, solo orchestration
-- File Manager Plugin (puerto 8003) - Upload/download
+- File Manager Plugin (puerto 8001) - Upload/download
 - Capital414 Plugin (puerto 8002) - Auditorías
 - Flechas de dependencias (health checks)
 
@@ -243,7 +243,7 @@ User → Chat → Backend → MCP Call → Capital414 Plugin → Auditores → R
 │       └── src/
 ├── plugins/
 │   ├── public/
-│   │   └── file-manager/  # Upload/Download/Extract (Port 8003)
+│   │   └── file-manager/  # Upload/Download/Extract (Port 8001)
 │   │       ├── src/
 │   │       │   ├── routers/
 │   │       │   └── services/

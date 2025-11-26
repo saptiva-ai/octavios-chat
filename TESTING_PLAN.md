@@ -20,7 +20,7 @@ make health
 
 **Expected:**
 - Backend: 🟢 Healthy (http://localhost:8000)
-- File Manager: 🟢 Healthy (http://localhost:8003)
+- File Manager: 🟢 Healthy (http://localhost:8001)
 - Frontend: 🟢 Healthy (http://localhost:3000)
 - MongoDB: 🟢 Connected
 - Redis: 🟢 Connected
@@ -31,7 +31,7 @@ make health
 curl -s http://localhost:8000/api/health | jq
 
 # File Manager
-curl -s http://localhost:8003/health | jq
+curl -s http://localhost:8001/health | jq
 
 # Capital414 Auditor
 curl -s http://localhost:8002/health | jq
@@ -47,7 +47,7 @@ curl -s http://localhost:8002/health | jq
 echo "Test PDF content" > /tmp/test.txt
 
 # Upload via curl
-curl -X POST http://localhost:8003/upload \
+curl -X POST http://localhost:8001/upload \
   -F "file=@/tmp/test.txt" \
   -F "user_id=test_user" \
   -F "session_id=test_session" | jq
@@ -71,17 +71,17 @@ curl -X POST http://localhost:8003/upload \
 ### 2.2 Test de Download
 ```bash
 # Usar minio_key del paso anterior
-curl -s http://localhost:8003/download/{minio_key}
+curl -s http://localhost:8001/download/{minio_key}
 ```
 
 ### 2.3 Test de Metadata
 ```bash
-curl -s "http://localhost:8003/metadata/{minio_key}?include_text=true" | jq
+curl -s "http://localhost:8001/metadata/{minio_key}?include_text=true" | jq
 ```
 
 ### 2.4 Test de Extracción de Texto
 ```bash
-curl -X POST "http://localhost:8003/extract/{minio_key}?force=false" | jq
+curl -X POST "http://localhost:8001/extract/{minio_key}?force=false" | jq
 ```
 
 ---
@@ -129,7 +129,7 @@ curl -X POST http://localhost:8002/mcp/tools/audit_document_full \
 ### 4.2 Test con minio_key (nuevo flujo)
 ```bash
 # 1. Primero subir archivo al file-manager
-UPLOAD_RESPONSE=$(curl -s -X POST http://localhost:8003/upload \
+UPLOAD_RESPONSE=$(curl -s -X POST http://localhost:8001/upload \
   -F "file=@/path/to/test.pdf" \
   -F "user_id=audit_test" \
   -F "session_id=session1")
@@ -187,7 +187,7 @@ curl -s http://localhost:8000/api/health | jq
 
 # Esperar reconexión y probar upload
 sleep 10
-curl -X POST http://localhost:8003/upload -F "file=@/tmp/test.txt" -F "user_id=test" | jq
+curl -X POST http://localhost:8001/upload -F "file=@/tmp/test.txt" -F "user_id=test" | jq
 ```
 
 ### 6.2 Test de file-manager caído
@@ -214,7 +214,7 @@ curl -s http://localhost:8000/api/health | jq
 hey -n 100 -c 10 -m POST \
   -F "file=@/tmp/test.txt" \
   -F "user_id=bench" \
-  http://localhost:8003/upload
+  http://localhost:8001/upload
 ```
 
 ---
@@ -225,7 +225,7 @@ hey -n 100 -c 10 -m POST \
 - [ ] `make dev` inicia todos los servicios sin errores
 - [ ] `make health` muestra todos los servicios healthy
 - [ ] Backend escucha en puerto 8000
-- [ ] File-manager escucha en puerto 8003
+- [ ] File-manager escucha en puerto 8001
 - [ ] Capital414 escucha en puerto 8002
 
 ### file-manager Plugin

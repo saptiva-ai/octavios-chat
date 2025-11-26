@@ -188,7 +188,7 @@ plugins/public/file-manager/
 
 ### 2.2 API del File Manager
 
-#### REST Endpoints (Puerto 8003)
+#### REST Endpoints (Puerto 8001)
 
 | Método | Endpoint | Descripción | Auth |
 |--------|----------|-------------|------|
@@ -315,16 +315,16 @@ COPY src/ ./src/
 # Variables de entorno
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
-ENV PORT=8003
+ENV PORT=8001
 
-EXPOSE 8003
+EXPOSE 8001
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8003/health || exit 1
+    CMD curl -f http://localhost:8001/health || exit 1
 
 # Comando de inicio
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8003"]
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8001"]
 ```
 
 ### 2.5 requirements.txt del File Manager
@@ -394,7 +394,7 @@ class FileMetadata(BaseModel):
 class FileManagerClient:
     """Cliente HTTP para el plugin file-manager."""
 
-    def __init__(self, base_url: str = "http://file-manager:8003"):
+    def __init__(self, base_url: str = "http://file-manager:8001"):
         self.base_url = base_url
         self._client: Optional[httpx.AsyncClient] = None
 
@@ -674,7 +674,7 @@ services:
     container_name: ${PROJECT_NAME:-octavios}-backend
     environment:
       # URLs de plugins
-      - FILE_MANAGER_URL=http://file-manager:8003
+      - FILE_MANAGER_URL=http://file-manager:8001
       - CAPITAL414_URL=http://capital414-auditor:8002
     env_file:
       - ../envs/.env
@@ -714,7 +714,7 @@ services:
       - ../plugins/public/file-manager/src:/app/src:ro
       - file_manager_temp:/tmp/uploads
     ports:
-      - "8003:8003"
+      - "8001:8001"
     networks:
       - octavios-network
     depends_on:
@@ -723,7 +723,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -738,7 +738,7 @@ services:
     container_name: ${PROJECT_NAME:-octavios}-capital414
     environment:
       # Consume archivos desde el plugin público
-      - FILE_MANAGER_URL=http://file-manager:8003
+      - FILE_MANAGER_URL=http://file-manager:8001
     env_file:
       - ../envs/.env
     volumes:
@@ -834,7 +834,7 @@ http {
     }
 
     upstream file_manager {
-        server file-manager:8003;
+        server file-manager:8001;
     }
 
     upstream frontend {
@@ -919,7 +919,7 @@ logger = structlog.get_logger(__name__)
 class FileManagerClient:
     """Cliente para descargar archivos desde file-manager."""
 
-    def __init__(self, base_url: str = "http://file-manager:8003"):
+    def __init__(self, base_url: str = "http://file-manager:8001"):
         self.base_url = base_url
 
     async def download_to_temp(self, file_id: str, jwt_token: str) -> Path:
@@ -1050,7 +1050,7 @@ async def validate_document(
 ### Checklist
 
 - [ ] `make dev` inicia todos los servicios
-- [ ] `curl http://localhost:8003/health` responde OK (file-manager)
+- [ ] `curl http://localhost:8001/health` responde OK (file-manager)
 - [ ] `curl http://localhost:8001/api/health` responde OK (backend)
 - [ ] `curl http://localhost:8002/health` responde OK (capital414)
 - [ ] Upload de archivos funciona: `POST /api/v1/files/upload`
@@ -1067,7 +1067,7 @@ async def validate_document(
 make health
 
 # 2. Test file-manager directo
-curl -X POST http://localhost:8003/upload \
+curl -X POST http://localhost:8001/upload \
   -H "Authorization: Bearer $TOKEN" \
   -F "file=@test.pdf" \
   -F "user_id=demo"
@@ -1138,7 +1138,7 @@ make restart
 ┌─────────────────────────────────────────────────────────────────────┐
 │                    Nginx (API Gateway)                              │
 │  ┌────────────────────────────────────────────────────────────────┐ │
-│  │ /api/v1/files/* → file-manager:8003                            │ │
+│  │ /api/v1/files/* → file-manager:8001                            │ │
 │  │ /api/*          → backend:8001                                 │ │
 │  │ /               → web:3000                                     │ │
 │  └────────────────────────────────────────────────────────────────┘ │
@@ -1148,7 +1148,7 @@ make restart
          ↓                     ↓                     ↓
 ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
 │   Next.js 14    │  │  Backend Core   │  │  File Manager   │
-│   (web:3000)    │  │ (backend:8001)  │  │  (8003)         │
+│   (web:3000)    │  │ (backend:8001)  │  │  (8001)         │
 │                 │  │                 │  │                 │
 │  • UI/UX        │  │  • Auth/JWT     │  │  • Upload       │
 │  • Chat View    │  │  • Chat Logic   │  │  • Download     │

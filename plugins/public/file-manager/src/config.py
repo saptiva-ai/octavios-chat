@@ -13,7 +13,7 @@ class Settings(BaseSettings):
 
     # Service
     service_name: str = "file-manager"
-    port: int = 8003
+    port: int = 8001
     debug: bool = False
     log_level: str = "INFO"
 
