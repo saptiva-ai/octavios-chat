@@ -21,6 +21,10 @@
     - [Comunicación entre Plugins](#comunicación-entre-plugins)
     - [Ports and URLs](#ports-and-urls)
     - [Referencias de Código](#referencias-de-código)
+    - [Comunicación entre Servicios (Código)](#comunicación-entre-servicios-código)
+      - [Backend Core → File Manager Plugin (HTTP Client)](#backend-core--file-manager-plugin-http-client)
+      - [Backend Core → Capital414 Plugin (MCP Protocol)](#backend-core--capital414-plugin-mcp-protocol)
+      - [Capital414 Plugin → File Manager Plugin (HTTP Client)](#capital414-plugin--file-manager-plugin-http-client)
   - [Visión de alto nivel](#visión-de-alto-nivel)
     - [Mapa de arquitectura (alto nivel)](#mapa-de-arquitectura-alto-nivel)
     - [Contenedores principales](#contenedores-principales)
@@ -34,11 +38,11 @@
     - [Seguridad y observabilidad](#seguridad-y-observabilidad)
   - [Arquitectura](#arquitectura)
     - [Frontend (Next.js 14)](#frontend-nextjs-14)
-    - [Backend (FastAPI + MCP)](#backend-fastapi--mcp)
+    - [Backend Core + Plugins (Plugin-First Architecture)](#backend-core--plugins-plugin-first-architecture)
     - [Integración Frontend ↔ Backend](#integración-frontend--backend)
     - [Flujo de chat (secuencia)](#flujo-de-chat-secuencia)
     - [Pipeline de ingestión y auditoría](#pipeline-de-ingestión-y-auditoría)
-    - [Flujo de Audit Command + Canvas](#flujo-de-audit-command--canvas)
+    - [Flujo de Audit Command + Canvas (Plugin-First)](#flujo-de-audit-command--canvas-plugin-first)
     - [Lazy loading MCP (descubrimiento → invocación)](#lazy-loading-mcp-descubrimiento--invocación)
   - [Inicio rápido](#inicio-rápido)
     - [Prerrequisitos](#prerrequisitos)
@@ -877,7 +881,7 @@ Todo implementa **State Pattern** (Zustand), **Gateway Pattern** (clients), **Ob
 Arquitectura **Plugin-First** mostrando Backend Core (Kernel ligero) delegando operaciones especializadas a plugins independientes.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#111827','lineColor': '#111827','textColor': '#111827','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#cbd5e1','primaryBorderColor': '#cbd5e1','primaryTextColor': '#111827','lineColor': '#111827','textColor': '#111827','secondaryColor': '#ffffff','secondaryBorderColor': '#111827','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#111827','tertiaryTextColor': '#0f172a'}}}%%
 flowchart TB
     client[HTTP/SSE Client]:::gray --> middleware
 
