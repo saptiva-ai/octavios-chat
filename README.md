@@ -72,21 +72,17 @@
 
 ## Arquitectura Plugin-First (Micro-Kernel)
 
-OctaviOS utiliza una arquitectura **Plugin-First** (también conocida como Micro-Kernel) que separa la infraestructura en tres capas:
+OctaviOS usa arquitectura **Plugin-First**: núcleo mínimo que orquesta y plugins aislados para escalar y versionar sin fricción.
 
 ### Filosofía de Diseño
 
-**Antes (Monolito)**: Un solo backend manejaba chat, archivos, auditorías, embeddings y almacenamiento. Cambios en una funcionalidad requerían rebuild completo.
-
-**Ahora (Plugin-First)**:
-- **Core (Kernel)**: Backend ligero que solo orquesta chat, usuarios y conexiones
-- **Plugins Públicos**: Infraestructura reutilizable (File Manager, Web Browsing, Memory) - Open Source ready
-- **Plugins Privados**: Lógica de negocio propietaria (Capital414 Auditor, Bank Advisor)
+- **Antes (monolito)**: un solo backend manejaba chat, archivos, auditorías, embeddings y storage; cada cambio implicaba rebuild total.
+- **Ahora (plugin-first)**: core ligero para chat/auth; plugins públicos reutilizables (File Manager, browsing, memory); plugins privados con lógica Capital414 o asesoría bancaria.
 
 ### Diagrama de Containers y Dependencias
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#111111','primaryBorderColor': '#4b5563','primaryTextColor': '#4b5563','lineColor': '#4b5563','secondaryColor': '#ffffff','secondaryBorderColor': '#4b5563','secondaryTextColor': '#111111','tertiaryColor': '#d1d5db','tertiaryBorderColor': '#4b5563','tertiaryTextColor': '#111111'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#94a3b8','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
 flowchart TB
     subgraph Frontend["🎨 Frontend Layer"]
         web["Next.js 14 Web<br/>Port: 3000<br/>Zustand + React Query"]:::frontend
@@ -139,11 +135,11 @@ flowchart TB
     %% Core to Private Plugins (optional MCP integration)
     backend -.->|"MCP Protocol<br/>(optional)"| capital414
 
-    classDef frontend fill:#4fc3f7,stroke:#0288d1,color:#000000
-    classDef core fill:#ffb74d,stroke:#f57c00,color:#000000
-    classDef plugin_public fill:#81c784,stroke:#388e3c,color:#000000
-    classDef plugin_private fill:#e57373,stroke:#c62828,color:#ffffff
-    classDef infra fill:#ba68c8,stroke:#7b1fa2,color:#ffffff
+    classDef frontend fill:#c7f0ff,stroke:#0ea5e9,color:#0f172a
+    classDef core fill:#ffe0a3,stroke:#f59e0b,color:#0f172a
+    classDef plugin_public fill:#c6f6d5,stroke:#16a34a,color:#0f172a
+    classDef plugin_private fill:#fed7e2,stroke:#fb7185,color:#0f172a
+    classDef infra fill:#e5e7eb,stroke:#94a3b8,color:#0f172a
 ```
 
 ### Service Dependency Chain
@@ -195,8 +191,8 @@ La cadena de dependencias garantiza inicio ordenado:
 | Backend Core | 8000 | http://backend:8000 | http://localhost:8000 |
 | File Manager | 8001 | http://file-manager:8001 | http://localhost:8001 |
 | Capital414 | 8002 | http://file-auditor:8002 | http://localhost:8002 |
-| MongoDB | 27017 | mongodb://mongodb:27017 | - |
-| Redis | 6379 | redis://redis:6379 | - |
+| MongoDB | 27017 | mongodb://<mongo-host>:27017 | - |
+| Redis | 6379 | redis://<redis-host>:6379 | - |
 | MinIO | 9000 | http://minio:9000 | http://localhost:9000 |
 | MinIO Console | 9001 | - | http://localhost:9001 |
 | Qdrant | 6333 | http://qdrant:6333 | http://localhost:6333 |
@@ -381,10 +377,10 @@ class AuditCommandHandler:
 Vista macro de los componentes: primero un mapa de patrones/contendores y luego vistas específicas de contenedores e integraciones.
 
 ### Mapa de arquitectura (alto nivel)
-Diagrama que muestra la arquitectura **Plugin-First (Micro-Kernel)** con Core ligero delegando a plugins independientes. Los patrones principales (Chain of Responsibility, Builder, HTTP Client, MCP Protocol) atraviesan las capas.
+Arquitectura **Plugin-First** en una vista: Core ligero que delega en plugins y comparte patrones transversales (Chain of Responsibility, Builder, HTTP Client, MCP).
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#111111','primaryBorderColor': '#4b5563','primaryTextColor': '#f9fafb','lineColor': '#4b5563','secondaryColor': '#ffffff','secondaryBorderColor': '#4b5563','secondaryTextColor': '#111111','tertiaryColor': '#d1d5db','tertiaryBorderColor': '#4b5563','tertiaryTextColor': '#111111'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#94a3b8','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
 flowchart TB
     user((Usuarios)):::dark --> web["Frontend<br/>Next.js 14 + React Query<br/>Port 3000"]:::frontend
 
@@ -429,34 +425,27 @@ flowchart TB
     filemanager --> observability
     capital414 --> observability
 
-    classDef dark fill:#111111,stroke:#4b5563,color:#f9fafb;
-    classDef frontend fill:#4fc3f7,stroke:#0288d1,color:#000000;
-    classDef core fill:#ffb74d,stroke:#f57c00,color:#000000;
-    classDef plugin_public fill:#81c784,stroke:#388e3c,color:#000000;
-    classDef plugin_private fill:#e57373,stroke:#c62828,color:#ffffff;
-    classDef light fill:#ffffff,stroke:#4b5563,color:#111111;
-    classDef infra fill:#ba68c8,stroke:#7b1fa2,color:#ffffff;
-    classDef gray fill:#e5e7eb,stroke:#4b5563,color:#111111;
+    classDef dark fill:#0f172a,stroke:#38bdf8,color:#e2e8f0;
+    classDef frontend fill:#c7f0ff,stroke:#0ea5e9,color:#0f172a;
+    classDef core fill:#ffe0a3,stroke:#f59e0b,color:#0f172a;
+    classDef plugin_public fill:#c6f6d5,stroke:#16a34a,color:#0f172a;
+    classDef plugin_private fill:#fed7e2,stroke:#fb7185,color:#0f172a;
+    classDef light fill:#ffffff,stroke:#cbd5e1,color:#0f172a;
+    classDef infra fill:#e5e7eb,stroke:#94a3b8,color:#0f172a;
+    classDef gray fill:#f8fafc,stroke:#cbd5e1,color:#0f172a;
 ```
 
-**Arquitectura Plugin-First en acción**: Los usuarios interactúan con Frontend (Next.js 14 + React Query) que se comunica con **Backend Core (Puerto 8000)** - un kernel ligero que solo orquesta chat, autenticación y sesiones. El Core delega funcionalidades específicas a plugins independientes:
-
-- **File Manager Plugin (Puerto 8001)**: Infraestructura pública reutilizable para upload/download/extracción de texto. Opera de forma independiente con MinIO y Redis.
-- **Capital414 Plugin (Puerto 8002)**: Lógica de negocio privada para auditorías COPILOTO_414. Ejecuta 8 auditores en paralelo y consume File Manager via HTTP Client.
-
-**Patrones de comunicación**:
-- Frontend → Core: HTTP REST + SSE Streaming
-- Core → File Manager: HTTP Client (`FileManagerClient`)
-- Core → Capital414: MCP Protocol (lazy loading, tool discovery)
-- Capital414 → File Manager: HTTP Client para descargar PDFs temporales
-
-**Persistencia distribuida**: MongoDB/Redis para sesiones y mensajes (Core), MinIO S3 para archivos (File Manager). **Observabilidad centralizada**: Prometheus, OpenTelemetry y Structlog capturan métricas de todos los servicios.
+**Arquitectura en acción**:
+- Frontend (3000) conversa con el Core (8000) por REST/SSE.
+- Core delega archivos a File Manager (8001) y auditorías a Capital414 (8002) vía HTTP/MCP.
+- Mongo/Redis cubren sesiones y cache; MinIO guarda archivos y reportes.
+- Observabilidad única con Prometheus + OTel + structlog en todos los servicios.
 
 ### Contenedores principales
-Diagrama detallado que muestra la **arquitectura Plugin-First** con Core ligero delegando operaciones especializadas a plugins independientes.
+Vista detallada de la **arquitectura Plugin-First**: core liviano y plugins especializados.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#111111','primaryBorderColor': '#4b5563','primaryTextColor': '#f9fafb','lineColor': '#4b5563','secondaryColor': '#ffffff','secondaryBorderColor': '#4b5563','secondaryTextColor': '#111111','tertiaryColor': '#d1d5db','tertiaryBorderColor': '#4b5563','tertiaryTextColor': '#111111'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#94a3b8','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
 flowchart TB
     user((Usuarios)):::light --> web_ui
 
@@ -530,40 +519,27 @@ flowchart TB
     validation_coord --> mongo
     auditores --> languagetool
 
-    classDef frontend fill:#e3f2fd,stroke:#90caf9,color:#111111;
-    classDef core fill:#fff3e0,stroke:#ffcc80,color:#111111;
-    classDef plugin_public fill:#e8f5e9,stroke:#a5d6a7,color:#111111;
-    classDef plugin_private fill:#ffebee,stroke:#ef9a9a,color:#111111;
-    classDef infra fill:#f3e5f5,stroke:#ce93d8,color:#111111;
+    classDef frontend fill:#c7f0ff,stroke:#0ea5e9,color:#0f172a;
+    classDef core fill:#ffe0a3,stroke:#f59e0b,color:#0f172a;
+    classDef plugin_public fill:#c6f6d5,stroke:#16a34a,color:#0f172a;
+    classDef plugin_private fill:#fed7e2,stroke:#fb7185,color:#0f172a;
+    classDef infra fill:#e5e7eb,stroke:#94a3b8,color:#0f172a;
 ```
 
-**Flujo Plugin-First**:
-1. **Frontend** envía request al Backend Core (puerto 8000)
-2. **Backend Core** (Kernel ligero) orquesta pero NO ejecuta operaciones pesadas:
-   - Upload de archivos → Delega a **File Manager Plugin** (puerto 8001) vía HTTP Client
-   - Auditoría de documentos → Delega a **Capital414 Plugin** (puerto 8002) vía MCP Protocol
-3. **File Manager Plugin** (público, open-source ready):
-   - Maneja upload/download/extract con estrategia multi-tier (pypdf → PDF SDK → OCR)
-   - Opera directamente con MinIO para S3 operations
-   - Expone API REST para consumo de otros servicios
-4. **Capital414 Plugin** (privado, proprietary):
-   - Expone MCP Server con tool `audit_document_full`
-   - ValidationCoordinator ejecuta 8 auditores en paralelo
-   - Consume File Manager Plugin vía HTTP Client para descargar PDFs a auditar
-5. **Infrastructure** (MongoDB, Redis, MinIO, LanguageTool) es consumida por servicios según necesidad
+**Flujo Plugin-First** (resumen):
+1. Frontend → Core (8000).
+2. Core delega: archivos a File Manager (8001), auditorías a Capital414 (8002) vía HTTP/MCP.
+3. File Manager gestiona upload/extract/thumbnails contra MinIO/Redis.
+4. Capital414 orquesta auditores COPILOTO_414 y consume File Manager.
+5. Infra común (Mongo, Redis, MinIO, LanguageTool) compartida por quien la necesita.
 
-**Ventajas de esta separación**:
-- Core mantenido simple (solo orchestration)
-- Plugins pueden escalarse independientemente
-- File Manager puede extraerse como proyecto open-source
-- Capital414 contiene lógica proprietaria aislada
-- Cada plugin tiene su propio Dockerfile, dependencies, tests
+**Por qué sirve**: Core liviano, plugins escalan y versionan aparte, File Manager es open-source ready y Capital414 queda aislado con su ciclo propio.
 
 ### Integraciones y observabilidad
 Diagrama que muestra la **integración Plugin-First** con servicios externos, persistencia distribuida, y observabilidad centralizada.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#111111','primaryBorderColor': '#4b5563','primaryTextColor': '#f9fafb','lineColor': '#4b5563','secondaryColor': '#ffffff','secondaryBorderColor': '#4b5563','secondaryTextColor': '#111111','tertiaryColor': '#d1d5db','tertiaryBorderColor': '#4b5563','tertiaryTextColor': '#111111'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#94a3b8','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
 flowchart TB
     subgraph Core["🟢 Backend Core (Port 8000)"]
         chat_core["ChatService<br/>StreamingHandler<br/>SSE Events"]:::core
@@ -635,27 +611,19 @@ flowchart TB
     otel --> grafana
     logs --> grafana
 
-    classDef core fill:#ffb74d,stroke:#f57c00,color:#000000;
-    classDef plugin_public fill:#81c784,stroke:#388e3c,color:#000000;
-    classDef plugin_private fill:#e57373,stroke:#c62828,color:#ffffff;
-    classDef external fill:#ba68c8,stroke:#7b1fa2,color:#ffffff;
-    classDef infra fill:#ba68c8,stroke:#7b1fa2,color:#ffffff;
+    classDef core fill:#ffe0a3,stroke:#f59e0b,color:#0f172a;
+    classDef plugin_public fill:#c6f6d5,stroke:#16a34a,color:#0f172a;
+    classDef plugin_private fill:#fed7e2,stroke:#fb7185,color:#0f172a;
+    classDef external fill:#ddd6fe,stroke:#7c3aed,color:#0f172a;
+    classDef infra fill:#e5e7eb,stroke:#94a3b8,color:#0f172a;
 ```
 
-**Arquitectura de integración Plugin-First**:
-- **Backend Core (🟢 Port 8000)**: Kernel ligero con ChatService, Auth, y HTTP Clients para consumir plugins. NO ejecuta operaciones pesadas.
-- **File Manager Plugin (🟠 Port 8001)**: Servicio público independiente que maneja upload/download/extract con estrategia multi-tier (pypdf → PDF SDK → OCR), genera thumbnails, y persiste en MinIO.
-- **Capital414 Plugin (🔴 Port 8002)**: Servicio privado con ValidationCoordinator que ejecuta 8 auditores en paralelo, consume File Manager vía HTTP Client para descargar PDFs a auditar.
-- **Servicios Externos (🌐)**: SAPTIVA LLMs (multi-modelo), Aletheia Research (deep research), LanguageTool (grammar checking), SMTP (notifications).
-- **Almacenamiento Distribuido (💾)**: MongoDB (Core: sessions/messages, Capital414: reports), Redis (Core: cache/JWT blacklist, FileManager: extract cache), MinIO (FileManager: files/thumbnails, Capital414: reports).
-- **Observabilidad Centralizada (📊)**: Prometheus (métricas de request + MCP invocations), OpenTelemetry (traces distribuidos), Structlog (JSON logs contextuales), Grafana (dashboards + alertas) - **todos los servicios reportan al mismo stack**.
-
-**Patrones y componentes clave**
-- *Chain of Responsibility + Strategy*: `apps/backend/src/routers/chat/endpoints/message_endpoints.py` delega en `domain/message_handlers` para escoger streaming/simple.
-- *Builder Pattern*: `ChatResponseBuilder` compone respuestas enriquecidas con metadatos (`apps/backend/src/domain/chat_response_builder.py`).
-- *Lazy Loading / Adapter*: `MCPFastAPIAdapter` expone herramientas FastMCP vía REST con telemetría y auth (`apps/backend/src/mcp/fastapi_adapter.py`).
-- *Background Reaper*: `Storage` elimina documentos expirados/controla uso de disco (`apps/backend/src/services/storage.py`).
-- *Coordinador + Auditores*: `validation_coordinator.py` orquesta múltiples validadores especializados para COPILOTO_414.
+**Claves de integración**:
+- Core (8000) solo orquesta chat/auth y clientes HTTP/MCP; no ejecuta operaciones pesadas.
+- File Manager (8001) maneja upload/download/extract multi-tier y thumbnails contra MinIO/Redis.
+- Capital414 (8002) corre COPILOTO_414 con 8 auditores en paralelo y baja PDFs vía File Manager.
+- Externos: SAPTIVA, Aletheia, LanguageTool, SMTP; observabilidad única con Prometheus + OTel + structlog + Grafana.
+- Patrones: Chain of Responsibility en chat, Builder para respuestas, adapter MCP/HTTP, reaper de storage y coordinador de auditores.
 
 ## Stack y capacidades
 
@@ -688,30 +656,22 @@ flowchart TB
 
 ### Integración Audit File + Canvas (OpenCanvas)
 
-Sistema de auditoría con visualización en canvas lateral inspirado en OpenCanvas de OpenAI. Permite ejecutar auditorías COPILOTO_414 y visualizar resultados técnicos detallados sin saturar el chat.
+Auditoría COPILOTO_414 con panel lateral tipo OpenCanvas: el chat recibe el resumen humano y el canvas muestra el reporte técnico.
 
-**Flujo de Auditoría con Canvas**:
+**Flujo resumido**:
+1. Usuario envía `"Auditar archivo: filename.pdf"`.
+2. `AuditCommandHandler` (`plugins/capital414-private/src/handlers/audit_handler.py`) detecta el comando y descarga el PDF desde File Manager.
+3. `ValidationCoordinator` ejecuta 8 auditores en paralelo (disclaimer, format, typography, grammar, logo, color, entity, semantic).
+4. Se generan dos salidas: `generate_human_summary()` para chat y `format_executive_summary_as_markdown()` para canvas (`apps/backend/src/services/summary_formatter.py`).
+5. Se crea un `Artifact` con el reporte técnico y se devuelve en `tool_invocations` (`plugins/capital414-private/src/handlers/audit_handler.py:168-176`).
+6. Frontend renderiza el resumen en chat y abre `CanvasPanel` (`apps/web/src/components/canvas/canvas-panel.tsx`) con el artifact vía `CanvasContext`.
 
-1. **Trigger**: Usuario escribe `"Auditar archivo: filename.pdf"` en el chat
-2. **Handler**: `AuditCommandHandler` (`plugins/capital414-private/src/handlers/audit_handler.py`) intercepta el comando usando Chain of Responsibility
-3. **Ejecución**: Se ejecuta `validate_document()` con 8 auditores paralelos (disclaimer, format, typography, grammar, logo, color, entity, semantic)
-4. **Generación Dual de Contenido**:
-   - **Human Summary** (para chat): Resumen conversacional y no técnico generado por `generate_human_summary()` (`apps/backend/src/services/summary_formatter.py`)
-   - **Technical Report** (para canvas): Reporte técnico completo en Markdown generado por `format_executive_summary_as_markdown()`
-5. **Creación de Artifact**: Se crea un `Artifact` (modelo Beanie) con tipo `MARKDOWN` conteniendo el reporte técnico completo
-6. **Metadata Injection**: El handler incluye `tool_invocations` con `create_artifact` en `decision_metadata` (línea 215-224)
-7. **Frontend Detection**: El componente `ChatMessage` detecta `tool_invocations` en metadata y extrae `artifact.id`
-8. **Canvas Rendering**:
-   - `CanvasContext` (`apps/web/src/context/CanvasContext.tsx`) gestiona estado del canvas
-   - `CanvasPanel` (`apps/web/src/components/canvas/canvas-panel.tsx`) renderiza el artifact usando `MarkdownRenderer`
-   - `AuditDetailView` muestra el reporte técnico completo con tabs, badges de severidad y descarga de PDF
-
-**Separación de Contenidos (Dual Summary)**:
+**Separación de contenidos**:
 
 | Ubicación | Contenido | Propósito | Formato |
 |-----------|-----------|-----------|---------|
-| **Chat** | Human Summary | Resumen amigable, no técnico, conversacional | Texto plano con emoji |
-| **Canvas** | Technical Report | Reporte detallado con findings, severidades, páginas | Markdown estructurado |
+| **Chat** | Human Summary | Resumen conversacional | Texto plano con emoji |
+| **Canvas** | Technical Report | Hallazgos + severidades + páginas | Markdown estructurado |
 
 **Arquitectura de Artifacts**:
 
@@ -728,12 +688,9 @@ class Artifact(Document):
 ```
 
 **Beneficios del Canvas**:
-
-- ✅ **Experiencia de usuario limpia**: Chat muestra solo resumen ejecutivo, canvas muestra detalles técnicos
-- ✅ **Contexto preservado**: Canvas permanece abierto mientras el usuario navega el chat
-- ✅ **Ownership por chat**: Canvas se cierra automáticamente al cambiar de conversación (líneas 47-65 CanvasContext)
-- ✅ **Versionado**: Los artifacts mantienen historial de versiones para iteraciones
-- ✅ **Extensibilidad**: El sistema de artifacts soporta markdown, código y gráficos (preparado para futuras expansiones)
+- ✅ Chat limpio con resumen ejecutivo; detalles técnicos viven en el canvas.
+- ✅ Canvas mantiene contexto por chat y se cierra al cambiar de conversación.
+- ✅ Artifacts versionan reportes y soportan markdown, código o gráficos.
 
 **Ejemplo de Tool Invocation**:
 
@@ -805,6 +762,7 @@ Arquitectura reactiva moderna con React Query + Zustand, optimistic updates, y e
 **Arquitectura Reactiva**:
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#94a3b8','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a'}}}%%
 flowchart TB
     User[("👤 Usuario")]
 
@@ -853,10 +811,10 @@ flowchart TB
     ChatView -->|"Metadata"| useChatMetadata
     useChatMetadata -->|"Read"| ChatStore
 
-    style User fill:#e3f2fd
-    style Backend fill:#fff3e0
-    style QueryCache fill:#f3e5f5
-    style ChatStore fill:#e8f5e9
+    style User fill:#c7f0ff,stroke:#0ea5e9,color:#0f172a
+    style Backend fill:#ffe0a3,stroke:#f59e0b,color:#0f172a
+    style QueryCache fill:#f8fafc,stroke:#cbd5e1,color:#0f172a
+    style ChatStore fill:#c6f6d5,stroke:#16a34a,color:#0f172a
 ```
 
 **Capas de la Arquitectura**:
@@ -916,7 +874,7 @@ Todo implementa **State Pattern** (Zustand), **Gateway Pattern** (clients), **Ob
 Arquitectura **Plugin-First** mostrando Backend Core (Kernel ligero) delegando operaciones especializadas a plugins independientes.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#111111','primaryBorderColor': '#4b5563','primaryTextColor': '#f9fafb','lineColor': '#4b5563','secondaryColor': '#ffffff','secondaryBorderColor': '#4b5563','secondaryTextColor': '#111111','tertiaryColor': '#d1d5db','tertiaryBorderColor': '#4b5563','tertiaryTextColor': '#111111'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#94a3b8','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
 flowchart TB
     client[HTTP/SSE Client]:::gray --> middleware
 
@@ -1008,49 +966,28 @@ flowchart TB
     chat_svc --> aletheia
     auditores --> languagetool
 
-    classDef core fill:#ffb74d,stroke:#f57c00,color:#000000;
-    classDef plugin_public fill:#81c784,stroke:#388e3c,color:#000000;
-    classDef plugin_private fill:#e57373,stroke:#c62828,color:#ffffff;
-    classDef external fill:#ba68c8,stroke:#7b1fa2,color:#ffffff;
-    classDef infra fill:#ba68c8,stroke:#7b1fa2,color:#ffffff;
-    classDef gray fill:#e5e7eb,stroke:#4b5563,color:#111111;
+    classDef core fill:#ffe0a3,stroke:#f59e0b,color:#0f172a;
+    classDef plugin_public fill:#c6f6d5,stroke:#16a34a,color:#0f172a;
+    classDef plugin_private fill:#fed7e2,stroke:#fb7185,color:#0f172a;
+    classDef external fill:#ddd6fe,stroke:#7c3aed,color:#0f172a;
+    classDef infra fill:#e5e7eb,stroke:#94a3b8,color:#0f172a;
+    classDef gray fill:#f8fafc,stroke:#cbd5e1,color:#0f172a;
 ```
 
-**Arquitectura Plugin-First (Micro-Kernel) en 3 capas principales**:
+**Capa a capa**:
+- **Core 8000**: middleware (auth, rate-limit, cache, telemetry), routers delgados y servicios de orquestación. No ejecuta trabajos pesados.
+- **File Manager 8001**: REST `/upload|download|extract`, extracción multi-tier + thumbnails, persiste en MinIO/Redis.
+- **Capital414 8002**: MCP tool `audit_document_full`, ValidationCoordinator con 8 auditores, descarga PDFs vía File Manager y persiste reportes en Mongo/MinIO.
 
-1. **🟢 Backend Core (Kernel Ligero - Port 8000)**:
-   - **Middleware Stack**: Gateway ASGI → Auth JWT + Blacklist → RateLimit → CacheControl → Telemetry
-   - **API Routers (Thin Layer)**: Chat, Files (delega a plugin), Audit (delega a plugin), Auth
-   - **Core Services**: ChatService (orchestration + LLM), FileManagerClient (HTTP client), SessionService (auth/context)
-   - **Responsabilidad**: Orquestación, autenticación, routing - NO ejecuta operaciones pesadas
+**Ventajas**: core simple, plugins escalan y versionan aparte, File Manager publicable, Capital414 aislado y con inversión de dependencias (HTTP/MCP).
 
-2. **🟠 File Manager Plugin (Public - Port 8001)**:
-   - **REST API**: `/upload`, `/download`, `/extract` endpoints
-   - **Services**: Multi-tier extraction (pypdf → PDF SDK → OCR), thumbnail generation, MinIO client
-   - **Persistencia**: MinIO S3 (files, thumbnails), Redis (extract cache)
-   - **Responsabilidad**: Todas las operaciones de archivos (upload/download/extract/thumbnails)
-
-3. **🔴 Capital414 Plugin (Private - Port 8002)**:
-   - **MCP Server**: Tool `audit_document_full` expuesto vía MCP protocol
-   - **COPILOTO_414**: ValidationCoordinator ejecuta 8 auditores en paralelo
-   - **FileManagerClient**: HTTP client para descargar PDFs desde file-manager plugin
-   - **Persistencia**: MongoDB (reports), MinIO (audit reports), consume LanguageTool
-   - **Responsabilidad**: Auditorías de cumplimiento COPILOTO_414
-
-**Ventajas de esta separación**:
-- **Backend Core mantenido simple**: Solo orchestration (300 LOC vs 2000 LOC monolítico)
-- **Plugins escalables independientemente**: File Manager puede tener más réplicas si hay mucho upload
-- **File Manager extraíble como proyecto open-source**: No contiene lógica propietaria
-- **Capital414 aislado**: Lógica propietaria de auditorías completamente separada
-- **Dependency Inversion**: Backend Core depende de abstracciones (HTTP Client, MCP Protocol), no de implementaciones
-
-**Patrones clave**: HTTP Client Pattern (comunicación inter-plugin), MCP Protocol (tool invocation), Builder (ChatService), Orchestrator (ValidationCoordinator), Adapter (persistence), Micro-Kernel Architecture (Core + Plugins).
+**Patrones clave**: HTTP Client inter-plugin, MCP tools, Builder en ChatService, Orchestrator en ValidationCoordinator, adapters de persistencia, micro-kernel para separar concerns.
 
 ### Integración Frontend ↔ Backend
 Conexiones clave: REST, SSE y MCP; se incluyen dependencias externas (LLMs y herramientas) y dónde se instrumenta.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#111111','primaryBorderColor': '#4b5563','primaryTextColor': '#111111','lineColor': '#4b5563','secondaryColor': '#ffffff','secondaryBorderColor': '#4b5563','secondaryTextColor': '#111111','tertiaryColor': '#d1d5db','tertiaryBorderColor': '#4b5563','tertiaryTextColor': '#111111'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#94a3b8','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
 flowchart LR
     user((Usuario)):::light --> web_ui["Next.js UI"]:::dark
     web_ui -->|REST /api| api_gateway["FastAPI Gateway"]:::dark
@@ -1071,12 +1008,12 @@ flowchart LR
     api_gateway --> telemetry["OTel + Prometheus"]:::gray
     fastmcp --> telemetry
 
-    classDef dark fill:#111111,stroke:#4b5563,color:#f9fafb;
-    classDef light fill:#ffffff,stroke:#4b5563,color:#111111;
-    classDef gray fill:#e5e7eb,stroke:#4b5563,color:#111111;
+    classDef dark fill:#0f172a,stroke:#38bdf8,color:#e2e8f0;
+    classDef light fill:#ffffff,stroke:#cbd5e1,color:#0f172a;
+    classDef gray fill:#f8fafc,stroke:#cbd5e1,color:#0f172a;
 ```
 
-Este diagramas refleja la interacción **cliente-servidor**: Next.js usa REST para acciones cortas, SSE para streaming y MCP para herramientas avanzadas. FastAPI actúa como Gateway y delega en ChatService/FastMCP, mientras Redis y Mongo sirven como contexto persistente. El módulo de telemetría instrumenta ambos entrypoints para tener métricas y trazas en tiempo real.
+Este diagrama resume la interacción **cliente-servidor**: Next.js usa REST para acciones cortas, SSE para streaming y MCP para herramientas avanzadas. FastAPI actúa como gateway y delega en ChatService/FastMCP; Redis y Mongo aportan contexto persistente; telemetría captura métricas y trazas en ambos entrypoints.
 
 `infra/docker-compose.yml` levanta todos los servicios (Mongo, Redis, FastAPI, Next.js, MinIO, LanguageTool, Playwright y Nginx opcional) con healthchecks y perfiles.
 
@@ -1085,7 +1022,7 @@ Este diagramas refleja la interacción **cliente-servidor**: Next.js usa REST pa
 Secuencia completa del envío de un mensaje streaming desde el cliente hasta SAPTIVA y de regreso mediante SSE.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'actorBorder': '#4b5563','actorBkg': '#f9fafb','actorTextColor': '#111111','signalColor': '#4b5563','signalTextColor': '#111111','activationBorderColor': '#4b5563','activationBkgColor': '#d1d5db','sequenceNumberColor': '#4b5563'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'actorBorder': '#94a3b8','actorBkg': '#f8fafc','actorTextColor': '#0f172a','signalColor': '#38bdf8','signalTextColor': '#0f172a','activationBorderColor': '#cbd5e1','activationBkgColor': '#e2e8f0','sequenceNumberColor': '#0ea5e9'}}}%%
 sequenceDiagram
     participant UI as Next.js Client
     participant API as FastAPI /api/chat
@@ -1113,7 +1050,7 @@ Funcionamiento: el request crea un `ChatContext`, el `StreamingHandler` lanza un
 Secuencia de subida de archivos, persistencia y ejecución del coordinador COPILOTO_414.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'actorBorder': '#4b5563','actorBkg': '#f9fafb','actorTextColor': '#111111','signalColor': '#4b5563','signalTextColor': '#111111','activationBorderColor': '#4b5563','activationBkgColor': '#d1d5db','sequenceNumberColor': '#4b5563'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'actorBorder': '#94a3b8','actorBkg': '#f8fafc','actorTextColor': '#0f172a','signalColor': '#38bdf8','signalTextColor': '#0f172a','activationBorderColor': '#cbd5e1','activationBkgColor': '#e2e8f0','sequenceNumberColor': '#0ea5e9'}}}%%
 sequenceDiagram
     participant Dropzone as FileDropzone (Next.js)
     participant API as FastAPI /api/files/upload
@@ -1144,7 +1081,7 @@ Funcionamiento: se sigue un pipeline en etapas (Upload → Persistencia → Cach
 Secuencia completa desde el comando "Auditar archivo:" hasta la renderización dual (chat + canvas) mostrando la **arquitectura Plugin-First**.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'actorBorder': '#4b5563','actorBkg': '#f9fafb','actorTextColor': '#111111','signalColor': '#4b5563','signalTextColor': '#111111','activationBorderColor': '#4b5563','activationBkgColor': '#d1d5db','sequenceNumberColor': '#4b5563'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'actorBorder': '#94a3b8','actorBkg': '#f8fafc','actorTextColor': '#0f172a','signalColor': '#38bdf8','signalTextColor': '#0f172a','activationBorderColor': '#cbd5e1','activationBkgColor': '#e2e8f0','sequenceNumberColor': '#0ea5e9'}}}%%
 sequenceDiagram
     participant User as Usuario
     participant Chat as ChatView
@@ -1224,7 +1161,7 @@ sequenceDiagram
 Flujo HTTP que sigue el frontend para descubrir, cargar e invocar herramientas MCP sin cargar todo el contexto.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#111111','primaryBorderColor': '#4b5563','primaryTextColor': '#111111','lineColor': '#4b5563','secondaryColor': '#ffffff','secondaryBorderColor': '#4b5563','secondaryTextColor': '#111111','tertiaryColor': '#d1d5db','tertiaryBorderColor': '#4b5563','tertiaryTextColor': '#111111'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#e2e8f0','lineColor': '#94a3b8','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
 flowchart LR
     Client["Next.js MCPClient"]:::dark -->|GET /api/mcp/lazy/discover| Discover["FastAPI Lazy Router"]:::dark
     Discover --> Cache["In-memory tool cache"]:::gray
@@ -1237,9 +1174,9 @@ flowchart LR
     MCP --> Auth["Auth dependency (get_current_user)"]:::light
     Invoker --> Client
 
-    classDef dark fill:#111111,stroke:#4b5563,color:#f9fafb;
-    classDef light fill:#ffffff,stroke:#4b5563,color:#111111;
-    classDef gray fill:#e5e7eb,stroke:#4b5563,color:#111111;
+    classDef dark fill:#0f172a,stroke:#38bdf8,color:#e2e8f0;
+    classDef light fill:#ffffff,stroke:#cbd5e1,color:#0f172a;
+    classDef gray fill:#f8fafc,stroke:#cbd5e1,color:#0f172a;
 ```
 
 Funcionamiento: el `MCPClient` implementa un ciclo Discover → Load → Invoke. El módulo `Discover` expone un registro ligero, `Loader` materializa la herramienta bajo demanda (Lazy Loading) y `Invoker` la ejecuta envolviendo la llamada con autenticación y telemetría. El caché evita cargar specs completas en cada request, logrando el 98 % de reducción de contexto declarado.
