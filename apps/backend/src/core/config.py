@@ -194,6 +194,16 @@ class Settings(BaseSettings):
         description="Comma-separated list of allowed chat models"
     )
 
+    # Plugin URLs (Plugin-First Architecture)
+    file_manager_url: str = Field(
+        default="http://file-manager:8003",
+        description="File Manager plugin URL for file operations"
+    )
+    capital414_url: str = Field(
+        default="http://capital414-auditor:8002",
+        description="Capital414 auditor plugin URL"
+    )
+
     # SAPTIVA
     saptiva_base_url: str = Field(default="https://api.saptiva.com", description="SAPTIVA API base URL")
     saptiva_timeout: int = Field(default=30, description="SAPTIVA request timeout")
