@@ -2,10 +2,10 @@
 MCP Client for Capital 414 Auditor Plugin.
 
 This module provides a client wrapper to invoke the COPILOTO_414
-audit system via MCP protocol. It supports:
+audit system via MCP protocol to the capital414-auditor microservice.
 
-1. Remote MCP calls to capital414-auditor service
-2. Fallback to local implementation (for backward compatibility)
+The audit logic has been extracted to plugins/capital414-private.
+This client is the ONLY way to invoke document audits from the Core API.
 
 Usage:
     from services.audit_mcp_client import audit_document_via_mcp
@@ -20,8 +20,7 @@ Usage:
 from __future__ import annotations
 
 import os
-from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 import httpx
 import structlog
@@ -31,7 +30,12 @@ logger = structlog.get_logger(__name__)
 # Configuration
 MCP_AUDITOR_URL = os.getenv("CAPITAL414_AUDITOR_URL", "http://capital414-auditor:8002")
 MCP_TIMEOUT = int(os.getenv("CAPITAL414_AUDITOR_TIMEOUT", "120"))  # 2 minutes
-USE_MCP_AUDITOR = os.getenv("USE_MCP_AUDITOR", "false").lower() == "true"
+USE_MCP_AUDITOR = os.getenv("USE_MCP_AUDITOR", "true").lower() == "true"
+
+
+class MCPAuditorUnavailableError(Exception):
+    """Raised when the MCP auditor service is unavailable."""
+    pass
 
 
 async def audit_document_via_mcp(
@@ -60,22 +64,12 @@ async def audit_document_via_mcp(
         Audit result dict with findings, summary, and report paths
 
     Raises:
-        Exception: If MCP call fails and no fallback is available
+        MCPAuditorUnavailableError: If MCP auditor is disabled or unavailable
+        httpx.HTTPStatusError: If MCP call returns an error status
     """
     if not USE_MCP_AUDITOR:
-        logger.info("MCP auditor disabled, using local implementation")
-        return await _fallback_local_audit(
-            file_path=file_path,
-            policy_id=policy_id,
-            client_name=client_name,
-            enable_disclaimer=enable_disclaimer,
-            enable_format=enable_format,
-            enable_typography=enable_typography,
-            enable_grammar=enable_grammar,
-            enable_logo=enable_logo,
-            enable_color_palette=enable_color_palette,
-            enable_entity_consistency=enable_entity_consistency,
-            enable_semantic_consistency=enable_semantic_consistency,
+        raise MCPAuditorUnavailableError(
+            "MCP auditor is disabled. Set USE_MCP_AUDITOR=true in environment."
         )
 
     logger.info(
@@ -87,25 +81,53 @@ async def audit_document_via_mcp(
 
     try:
         async with httpx.AsyncClient(timeout=MCP_TIMEOUT) as client:
-            # MCP tool call via HTTP POST to /tools/audit_document_full
+            # JSON-RPC 2.0 call to MCP endpoint
             response = await client.post(
-                f"{MCP_AUDITOR_URL}/tools/audit_document_full",
+                f"{MCP_AUDITOR_URL}/mcp",
                 json={
-                    "file_path": file_path,
-                    "policy_id": policy_id,
-                    "client_name": client_name,
-                    "enable_disclaimer": enable_disclaimer,
-                    "enable_format": enable_format,
-                    "enable_typography": enable_typography,
-                    "enable_grammar": enable_grammar,
-                    "enable_logo": enable_logo,
-                    "enable_color_palette": enable_color_palette,
-                    "enable_entity_consistency": enable_entity_consistency,
-                    "enable_semantic_consistency": enable_semantic_consistency,
+                    "jsonrpc": "2.0",
+                    "id": "audit-call",
+                    "method": "tools/call",
+                    "params": {
+                        "name": "audit_document_full",
+                        "arguments": {
+                            "file_path": file_path,
+                            "policy_id": policy_id,
+                            "client_name": client_name,
+                            "enable_disclaimer": enable_disclaimer,
+                            "enable_format": enable_format,
+                            "enable_typography": enable_typography,
+                            "enable_grammar": enable_grammar,
+                            "enable_logo": enable_logo,
+                            "enable_color_palette": enable_color_palette,
+                            "enable_entity_consistency": enable_entity_consistency,
+                            "enable_semantic_consistency": enable_semantic_consistency,
+                        },
+                    },
                 },
+                headers={"Content-Type": "application/json"},
             )
             response.raise_for_status()
-            result = response.json()
+            rpc_response = response.json()
+
+            # Handle JSON-RPC error
+            if "error" in rpc_response:
+                error = rpc_response["error"]
+                raise MCPAuditorUnavailableError(
+                    f"MCP auditor error: {error.get('message', str(error))}"
+                )
+
+            # Extract result from JSON-RPC response
+            result = rpc_response.get("result", {})
+
+            # Handle nested content structure from FastMCP
+            if isinstance(result, dict) and "content" in result:
+                content = result["content"]
+                if isinstance(content, list) and len(content) > 0:
+                    first_content = content[0]
+                    if isinstance(first_content, dict) and "text" in first_content:
+                        import json
+                        result = json.loads(first_content["text"])
 
             logger.info(
                 "MCP audit completed",
@@ -121,116 +143,15 @@ async def audit_document_via_mcp(
             status_code=e.response.status_code,
             detail=e.response.text,
         )
-        # Fallback to local implementation
-        return await _fallback_local_audit(
-            file_path=file_path,
-            policy_id=policy_id,
-            client_name=client_name,
-            enable_disclaimer=enable_disclaimer,
-            enable_format=enable_format,
-            enable_typography=enable_typography,
-            enable_grammar=enable_grammar,
-            enable_logo=enable_logo,
-            enable_color_palette=enable_color_palette,
-            enable_entity_consistency=enable_entity_consistency,
-            enable_semantic_consistency=enable_semantic_consistency,
+        raise MCPAuditorUnavailableError(
+            f"MCP auditor returned HTTP {e.response.status_code}: {e.response.text}"
         )
 
     except httpx.RequestError as e:
         logger.error("MCP auditor connection error", error=str(e))
-        # Fallback to local implementation
-        return await _fallback_local_audit(
-            file_path=file_path,
-            policy_id=policy_id,
-            client_name=client_name,
-            enable_disclaimer=enable_disclaimer,
-            enable_format=enable_format,
-            enable_typography=enable_typography,
-            enable_grammar=enable_grammar,
-            enable_logo=enable_logo,
-            enable_color_palette=enable_color_palette,
-            enable_entity_consistency=enable_entity_consistency,
-            enable_semantic_consistency=enable_semantic_consistency,
+        raise MCPAuditorUnavailableError(
+            f"Failed to connect to MCP auditor at {MCP_AUDITOR_URL}: {str(e)}"
         )
-
-
-async def _fallback_local_audit(
-    file_path: str,
-    policy_id: str = "auto",
-    client_name: Optional[str] = None,
-    enable_disclaimer: bool = True,
-    enable_format: bool = True,
-    enable_typography: bool = True,
-    enable_grammar: bool = True,
-    enable_logo: bool = True,
-    enable_color_palette: bool = True,
-    enable_entity_consistency: bool = True,
-    enable_semantic_consistency: bool = True,
-) -> Dict[str, Any]:
-    """
-    Fallback to local audit implementation.
-
-    This is used when:
-    - USE_MCP_AUDITOR is false
-    - MCP service is unavailable
-    """
-    logger.info("Using local audit implementation (fallback)")
-
-    # Import local implementation
-    from .validation_coordinator import validate_document
-    from .policy_manager import resolve_policy
-    from ..models.document import Document
-
-    # Create a minimal Document object for the coordinator
-    # Note: In the future, the coordinator should accept file_path directly
-    pdf_path = Path(file_path)
-
-    # Resolve policy
-    policy_config = resolve_policy(policy_id) if policy_id != "auto" else None
-
-    # Create a mock document (the coordinator needs it for some metadata)
-    class MockDocument:
-        def __init__(self, path: Path):
-            self.filename = path.name
-            self.id = f"local-{path.stem}"
-
-    mock_doc = MockDocument(pdf_path)
-
-    # Run validation
-    result = await validate_document(
-        document=mock_doc,
-        pdf_path=pdf_path,
-        client_name=client_name,
-        enable_disclaimer=enable_disclaimer,
-        enable_format=enable_format,
-        enable_typography=enable_typography,
-        enable_grammar=enable_grammar,
-        enable_logo=enable_logo,
-        enable_color_palette=enable_color_palette,
-        enable_entity_consistency=enable_entity_consistency,
-        enable_semantic_consistency=enable_semantic_consistency,
-        policy_config=policy_config,
-        policy_id=policy_id,
-        policy_name=policy_config.get("name") if policy_config else "Auto",
-    )
-
-    # Convert to dict format matching MCP response
-    return {
-        "job_id": result.job_id,
-        "status": result.status,
-        "total_findings": len(result.findings),
-        "findings_by_severity": result.summary.get("findings_by_severity", {}),
-        "findings_by_category": result.summary.get("findings_by_category", {}),
-        "disclaimer_coverage": result.summary.get("disclaimer_coverage"),
-        "policy_id": policy_id,
-        "policy_name": policy_config.get("name") if policy_config else "Auto",
-        "validation_duration_ms": result.summary.get("validation_duration_ms", 0),
-        "top_findings": [],  # TODO: Extract top findings
-        "executive_summary_markdown": "",  # TODO: Generate summary
-        "pdf_report_path": None,
-        "findings": [f.model_dump() if hasattr(f, "model_dump") else f for f in result.findings],
-        "summary": result.summary,
-    }
 
 
 async def check_mcp_auditor_health() -> bool:
@@ -248,23 +169,122 @@ async def check_mcp_auditor_health() -> bool:
         return False
 
 
-async def list_policies_via_mcp() -> list:
+async def list_policies_via_mcp() -> List[Dict[str, Any]]:
     """
     List available policies from MCP auditor.
 
     Returns:
         List of policy configurations
+
+    Raises:
+        MCPAuditorUnavailableError: If MCP auditor is unavailable
     """
     if not USE_MCP_AUDITOR:
-        from .policy_manager import get_policy_manager
-        return get_policy_manager().list_policies()
+        raise MCPAuditorUnavailableError(
+            "MCP auditor is disabled. Set USE_MCP_AUDITOR=true in environment."
+        )
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.post(f"{MCP_AUDITOR_URL}/tools/list_policies")
+            response = await client.post(
+                f"{MCP_AUDITOR_URL}/mcp",
+                json={
+                    "jsonrpc": "2.0",
+                    "id": "list-policies",
+                    "method": "tools/call",
+                    "params": {
+                        "name": "list_policies",
+                        "arguments": {},
+                    },
+                },
+                headers={"Content-Type": "application/json"},
+            )
             response.raise_for_status()
-            return response.json()
-    except Exception as e:
+            rpc_response = response.json()
+
+            if "error" in rpc_response:
+                error = rpc_response["error"]
+                raise MCPAuditorUnavailableError(
+                    f"MCP auditor error: {error.get('message', str(error))}"
+                )
+
+            result = rpc_response.get("result", {})
+
+            # Handle nested content structure from FastMCP
+            if isinstance(result, dict) and "content" in result:
+                content = result["content"]
+                if isinstance(content, list) and len(content) > 0:
+                    first_content = content[0]
+                    if isinstance(first_content, dict) and "text" in first_content:
+                        import json
+                        return json.loads(first_content["text"])
+
+            return result if isinstance(result, list) else []
+
+    except httpx.RequestError as e:
         logger.warning("Failed to list policies via MCP", error=str(e))
-        from .policy_manager import get_policy_manager
-        return get_policy_manager().list_policies()
+        raise MCPAuditorUnavailableError(
+            f"Failed to connect to MCP auditor: {str(e)}"
+        )
+
+
+async def get_policy_details_via_mcp(policy_id: str) -> Dict[str, Any]:
+    """
+    Get detailed configuration for a specific policy.
+
+    Args:
+        policy_id: The policy ID to retrieve
+
+    Returns:
+        Full policy configuration including auditor settings
+
+    Raises:
+        MCPAuditorUnavailableError: If MCP auditor is unavailable
+    """
+    if not USE_MCP_AUDITOR:
+        raise MCPAuditorUnavailableError(
+            "MCP auditor is disabled. Set USE_MCP_AUDITOR=true in environment."
+        )
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.post(
+                f"{MCP_AUDITOR_URL}/mcp",
+                json={
+                    "jsonrpc": "2.0",
+                    "id": "get-policy",
+                    "method": "tools/call",
+                    "params": {
+                        "name": "get_policy_details",
+                        "arguments": {"policy_id": policy_id},
+                    },
+                },
+                headers={"Content-Type": "application/json"},
+            )
+            response.raise_for_status()
+            rpc_response = response.json()
+
+            if "error" in rpc_response:
+                error = rpc_response["error"]
+                raise MCPAuditorUnavailableError(
+                    f"MCP auditor error: {error.get('message', str(error))}"
+                )
+
+            result = rpc_response.get("result", {})
+
+            # Handle nested content structure from FastMCP
+            if isinstance(result, dict) and "content" in result:
+                content = result["content"]
+                if isinstance(content, list) and len(content) > 0:
+                    first_content = content[0]
+                    if isinstance(first_content, dict) and "text" in first_content:
+                        import json
+                        return json.loads(first_content["text"])
+
+            return result
+
+    except httpx.RequestError as e:
+        logger.warning("Failed to get policy details via MCP", error=str(e))
+        raise MCPAuditorUnavailableError(
+            f"Failed to connect to MCP auditor: {str(e)}"
+        )

@@ -33,10 +33,11 @@ from ....services.chat_helpers import build_chat_context
 from ....services.session_context_manager import SessionContextManager
 from ....services.document_service import DocumentService
 from ....services.saptiva_client import get_saptiva_client
-from ....services.validation_coordinator import validate_document_streaming
-from ....services.policy_manager import resolve_policy
+from ....services.audit_mcp_client import (
+    audit_document_via_mcp,
+    MCPAuditorUnavailableError,
+)
 from ....services.minio_storage import get_minio_storage
-from ....services.report_generator import generate_audit_report_pdf
 from ....models.document import Document, DocumentStatus
 from ....models.validation_report import ValidationReport
 from ....domain import ChatContext
@@ -878,13 +879,6 @@ class StreamingHandler:
             }
             return
 
-        # Resolve policy
-        try:
-            policy = await resolve_policy("auto", document=document)
-        except Exception as e:
-            logger.error(f"Failed to resolve policy: {e}")
-            policy = await resolve_policy("414-std")
-
         # Materialize PDF - follow pattern from audit_handler.py
         pdf_path = Path(document.minio_key)
         is_temp = False
@@ -950,16 +944,25 @@ class StreamingHandler:
         }
 
         accumulated_content = []
-        last_job_id = None  # Track job_id from validation_complete event
-        validation_complete_event = None  # Capture full audit report
-        progress_line_index = None  # Track which line has the progress indicator
+        validation_complete_event = None
 
         try:
-            # Stream validation progress
-            async for audit_event in validate_document_streaming(
-                document=document,
-                pdf_path=pdf_path,
-                client_name=policy.client_name,
+            # Yield initial progress message
+            start_content = f"🔍 Analizando **{document.filename}**\n\n"
+            accumulated_content.append(start_content)
+            yield {
+                "event": "chunk",
+                "data": json.dumps({
+                    "content": start_content,
+                    "audit_event": {"type": "validation_start", "filename": document.filename},
+                })
+            }
+
+            # Call MCP auditor service (non-streaming)
+            mcp_result = await audit_document_via_mcp(
+                file_path=str(pdf_path),
+                policy_id="auto",
+                client_name=None,
                 enable_disclaimer=True,
                 enable_format=True,
                 enable_typography=True,
@@ -968,295 +971,174 @@ class StreamingHandler:
                 enable_color_palette=True,
                 enable_entity_consistency=True,
                 enable_semantic_consistency=True,
-                policy_config=policy.to_compliance_config(),
-                policy_id=policy.id,
-                policy_name=policy.name,
-            ):
-                event_type = audit_event.get("type")
+            )
 
-                if event_type == "validation_start":
-                    content = f"🔍 Analizando **{audit_event['filename']}**\n\n"
-                    accumulated_content.append(content)
+            # Build validation_complete_event from MCP result
+            validation_complete_event = {
+                "type": "validation_complete",
+                "job_id": mcp_result.get("job_id"),
+                "status": mcp_result.get("status"),
+                "filename": document.filename,
+                "duration_ms": mcp_result.get("validation_duration_ms", 0),
+                "summary": {
+                    "total_findings": mcp_result.get("total_findings", 0),
+                    "findings_by_severity": mcp_result.get("findings_by_severity", {}),
+                    "findings_by_category": mcp_result.get("findings_by_category", {}),
+                    "disclaimer_coverage": mcp_result.get("disclaimer_coverage"),
+                },
+                "findings": mcp_result.get("top_findings", []),
+                "policy_id": mcp_result.get("policy_id"),
+                "policy_name": mcp_result.get("policy_name"),
+                "attachments": {
+                    "pdf_report_path": mcp_result.get("pdf_report_path"),
+                } if mcp_result.get("pdf_report_path") else {},
+            }
 
-                elif event_type == "fragments_extracted":
-                    # Generate executive summary after extraction
-                    # Get page count from fragments_count (number of pages extracted)
-                    page_count = audit_event.get('fragments_count', 0)
-                    summary = generate_document_summary(
-                        filename=audit_event.get('filename', document.filename),
-                        page_count=page_count
-                    )
-                    accumulated_content.append(summary)
+            # Build result content
+            total_findings = mcp_result.get("total_findings", 0)
+            duration = mcp_result.get("validation_duration_ms", 0)
+            findings_by_severity = mcp_result.get("findings_by_severity", {})
 
-                elif event_type == "auditor_start":
-                    # Skip progress messages - audit is fast enough
-                    continue
+            critical = findings_by_severity.get('critical', 0)
+            high = findings_by_severity.get('high', 0)
+            medium = findings_by_severity.get('medium', 0)
+            low = findings_by_severity.get('low', 0)
 
-                elif event_type == "auditor_complete":
-                    # Skip progress messages - audit is fast enough
-                    continue
+            # Build result content
+            content = f"**Resultado de Auditoría**\n\n"
 
-                elif event_type == "auditor_error":
-                    error = audit_event.get("error", "Error desconocido")
-                    content = f"❌ Error: {error}\n\n"
-                    accumulated_content.append(content)
+            # Use executive summary from MCP if available
+            executive_summary_md = mcp_result.get("executive_summary_markdown")
+            if executive_summary_md:
+                content += f"{executive_summary_md}\n\n"
+                content += f"---\n\n"
 
-                elif event_type == "validation_complete":
-                    # Capture full audit report for artifact
-                    validation_complete_event = audit_event
-                    last_job_id = audit_event.get("job_id")
+            # Build auditor breakdown from findings_by_category
+            findings_by_category = mcp_result.get("findings_by_category", {})
+            if findings_by_category:
+                content += "**Desglose por auditor:**\n\n"
+                for category, count in findings_by_category.items():
+                    display_name = AUDITOR_DISPLAY_NAMES.get(category, category)
+                    content += f"- {display_name}: {count} hallazgo{'s' if count != 1 else ''}\n"
+                content += "\n"
 
-                    summary = audit_event.get("summary", {})
-                    total_findings = summary.get("total_findings", 0)
-                    duration = audit_event.get("duration_ms", 0)
-                    findings_by_severity = summary.get("findings_by_severity", {})
+            # PRIORITIZED: Critical first
+            if critical > 0:
+                content += f"⚠️ **ATENCIÓN:** {critical} {'problema crítico' if critical == 1 else 'problemas críticos'} {'detectado' if critical == 1 else 'detectados'}\n"
+                content += f"_Corrección obligatoria antes de publicar_\n\n"
 
-                    critical = findings_by_severity.get('critical', 0)
-                    high = findings_by_severity.get('high', 0)
-                    medium = findings_by_severity.get('medium', 0)
-                    low = findings_by_severity.get('low', 0)
+            # PRIORITIZED: High priority second
+            if high > 0:
+                content += f"📝 **{high} recomendación{'' if high == 1 else 'es'}** de prioridad alta\n"
+                content += f"_Se sugiere revisar para cumplir estándares corporativos_\n\n"
 
-                    # Generate AI-powered executive summary
-                    content = f"**Resultado de Auditoría**\n\n"
+            # PRIORITIZED: Medium and Low together
+            if medium > 0 or low > 0:
+                suggestions_count = medium + low
+                content += f"✓ **{suggestions_count} sugerencia{'' if suggestions_count == 1 else 's'}** opcional{'' if suggestions_count == 1 else 'es'}\n"
+                content += f"_Mejoras de estilo y calidad_\n\n"
 
-                    summary_error_message = None
-                    try:
-                        executive_summary = await generate_executive_summary(
-                            validation_event=audit_event,
-                            saptiva_client=await get_saptiva_client()
-                        )
-                    except RuntimeError as summary_exc:
-                        executive_summary = None
-                        summary_error_message = str(summary_exc)
-                        logger.warning(
-                            "Executive summary unavailable",
-                            error=summary_error_message,
-                        )
+            # Perfect document
+            if total_findings == 0:
+                content += f"✅ **Documento aprobado**\n"
+                content += f"_Cumple con todos los estándares de calidad_\n\n"
 
-                    logger.info("Executive summary generated", summary_length=len(executive_summary) if executive_summary else 0, has_summary=bool(executive_summary))
+            # Footer with meta info
+            content += f"---\n"
+            content += f"_Análisis completado • {duration}ms_\n"
 
-                    if executive_summary:
-                        content += f"{executive_summary}\n\n"
-                        content += f"---\n\n"
-                    elif summary_error_message:
-                        content += f"⚠️ {summary_error_message}\n\n"
-                        content += f"---\n\n"
+            accumulated_content.append(content)
 
-                    auditor_breakdown_section = build_auditor_breakdown_markdown(audit_event)
-                    if auditor_breakdown_section:
-                        content += f"{auditor_breakdown_section}\n\n"
+            # Yield result chunk
+            yield {
+                "event": "chunk",
+                "data": json.dumps({
+                    "content": content,
+                    "audit_event": validation_complete_event,
+                })
+            }
 
-                    # PRIORITIZED: Critical first
-                    if critical > 0:
-                        content += f"⚠️ **ATENCIÓN:** {critical} {'problema crítico' if critical == 1 else 'problemas críticos'} {'detectado' if critical == 1 else 'detectados'}\n"
-                        content += f"_Corrección obligatoria antes de publicar_\n\n"
-
-                    # PRIORITIZED: High priority second
-                    if high > 0:
-                        content += f"📝 **{high} recomendación{'' if high == 1 else 'es'}** de prioridad alta\n"
-                        content += f"_Se sugiere revisar para cumplir estándares corporativos_\n\n"
-
-                    # PRIORITIZED: Medium and Low together
-                    if medium > 0 or low > 0:
-                        suggestions_count = medium + low
-                        content += f"✓ **{suggestions_count} sugerencia{'' if suggestions_count == 1 else 's'}** opcional{'' if suggestions_count == 1 else 'es'}\n"
-                        content += f"_Mejoras de estilo y calidad_\n\n"
-
-                    # Perfect document
-                    if total_findings == 0:
-                        content += f"✅ **Documento aprobado**\n"
-                        content += f"_Cumple con todos los estándares de calidad_\n\n"
-
-                    # Footer with meta info
-                    content += f"---\n"
-                    content += f"_Análisis completado • {duration}ms_\n"
-
-                    accumulated_content.append(content)
-
-                # Yield SSE chunk event
-                yield {
-                    "event": "chunk",
-                    "data": json.dumps({
-                        "content": accumulated_content[-1],  # Only send the new content
-                        "audit_event": audit_event,  # Include full audit event for frontend processing
-                    })
-                }
-
-            # Build audit artifact from validation_complete event FIRST
-            audit_artifact = None
-            if validation_complete_event:
-                # Attempt to generate and upload full PDF report (streaming path)
-                attachments = validation_complete_event.get("attachments") or {}
-                report_pdf_url = attachments.get("full_report_pdf", {}).get("url")
-                validation_report_id = validation_complete_event.get("validation_report_id")
-                validation_report_doc = None
-
-                # Persist ValidationReport to enable on-demand download endpoint
-                if not validation_report_id:
-                    try:
-                        validation_report_doc = ValidationReport(
-                            document_id=str(document.id),
-                            user_id=str(document.user_id),
-                            job_id=validation_complete_event.get("job_id")
-                            or str(uuid4()),
-                            status=validation_complete_event.get("status", "done"),
-                            client_name=policy.client_name,
-                            auditors_enabled={
-                                "disclaimer": True,
-                                "format": True,
-                                "typography": True,
-                                "grammar": True,
-                                "logo": True,
-                                "color_palette": True,
-                                "entity_consistency": True,
-                                "semantic_consistency": True,
-                            },
-                            findings=validation_complete_event.get("findings", []),
-                            summary=validation_complete_event.get("summary", {}),
-                            attachments=attachments,
-                        )
-                        await validation_report_doc.insert()
-                        validation_report_id = str(validation_report_doc.id)
-                        logger.info(
-                            "Streaming audit: ValidationReport persisted",
-                            validation_report_id=validation_report_id,
-                            findings=len(validation_report_doc.findings),
-                        )
-                    except Exception as persist_exc:
-                        logger.error(
-                            "Streaming audit: failed to persist ValidationReport",
-                            error=str(persist_exc),
-                            exc_type=type(persist_exc).__name__,
-                        )
-
-                minio_storage = get_minio_storage()
-                if minio_storage and not report_pdf_url:
-                    try:
-                        source_report = validation_report_doc or _InlineValidationReport(
-                            document_id=str(document.id),
-                            user_id=str(document.user_id),
-                            job_id=validation_complete_event.get("job_id")
-                            or str(uuid4()),
-                            status=validation_complete_event.get("status", "done"),
-                            client_name=policy.client_name,
-                            findings=validation_complete_event.get("findings", []),
-                            summary=validation_complete_event.get("summary", {}),
-                            attachments=attachments,
-                        )
-
-                        pdf_buffer = await generate_audit_report_pdf(
-                            report=source_report,
-                            filename=document.filename,
-                            document_name=document.filename,
-                        )
-
-                        report_key = (
-                            f"reports/{validation_report_id or source_report.id}_{int(time.time())}.pdf"
-                        )
-
-                        await minio_storage.upload_file(
-                            bucket_name="audit-reports",
-                            object_name=report_key,
-                            data=pdf_buffer,
-                            length=pdf_buffer.getbuffer().nbytes,
-                            content_type="application/pdf",
-                        )
-
-                        report_pdf_url = minio_storage.get_presigned_url(
-                            object_name=report_key,
-                            bucket="audit-reports",
-                            expires=timedelta(hours=24),
-                        )
-
-                        attachments["full_report_pdf"] = {
-                            "url": report_pdf_url,
-                            "key": report_key,
-                            "generated_at": datetime.utcnow().isoformat(),
-                            "expires_at": (
-                                datetime.utcnow() + timedelta(hours=24)
-                            ).isoformat(),
-                            "storage": "minio",
-                        }
-                        validation_complete_event["attachments"] = attachments
-                        validation_complete_event["validation_report_id"] = validation_report_id
-                        if validation_report_doc:
-                            try:
-                                await validation_report_doc.set({"attachments": attachments})
-                            except Exception as update_exc:
-                                logger.warning(
-                                    "Streaming audit: failed to update ValidationReport attachments",
-                                    validation_report_id=validation_report_id,
-                                    error=str(update_exc),
-                                )
-
-                        logger.info(
-                            "PDF report generated/uploaded for streaming audit",
-                            report_key=report_key,
-                            has_url=bool(report_pdf_url),
-                            validation_report_id=validation_report_id,
-                        )
-                    except Exception as pdf_exc:
-                        logger.error(
-                            "Failed to generate/upload PDF report (streaming)",
-                            error=str(pdf_exc),
-                            exc_type=type(pdf_exc).__name__,
-                        )
-                # Ensure attachments are propagated even if empty
-                validation_complete_event["attachments"] = attachments
-                if report_pdf_url:
-                    validation_complete_event["report_pdf_url"] = report_pdf_url
-                    logger.info(
-                        "Streaming audit: report_pdf_url attached to event",
-                        report_pdf_url=report_pdf_url,
-                    )
-                if validation_report_id:
-                    validation_complete_event["validation_report_id"] = validation_report_id
-                    logger.info(
-                        "Streaming audit: validation_report_id attached to event",
-                        validation_report_id=validation_report_id,
-                    )
-
-                # Transform findings list into categories dict (grouped by category)
-                findings_list = validation_complete_event.get("findings", [])
-                categories = {}
-                for finding in findings_list:
-                    category = finding.get("category", "Sin categoría")
-                    if category not in categories:
-                        categories[category] = []
-                    categories[category].append(finding)
-
-                # Build complete AuditReportResponse structure
-                audit_artifact = {
-                    "type": "audit_report_ui",
-                    "doc_name": document.filename,
-                    "metadata": {
-                        "display_name": document.filename,
-                        "filename": document.filename,
-                        "policy_used": {
-                            "id": validation_complete_event.get("policy_id"),
-                            "name": validation_complete_event.get("policy_name", "N/D"),
-                        },
-                        # Attach any generated artifacts (e.g., full PDF report from report_generator.py)
-                        "attachments": validation_complete_event.get("attachments", {}),
-                        "validation_report_id": validation_complete_event.get("validation_report_id"),
-                        # Convenience: direct link to full PDF report if present
-                        "report_pdf_url": (
-                            validation_complete_event.get("attachments", {})
-                            .get("full_report_pdf", {})
-                            .get("url")
-                        ),
+            # Save ValidationReport to MongoDB
+            validation_report_id = None
+            try:
+                validation_report_doc = ValidationReport(
+                    document_id=str(document.id),
+                    user_id=str(document.user_id),
+                    job_id=mcp_result.get("job_id") or str(uuid4()),
+                    status="done" if mcp_result.get("status") == "completed" else "error",
+                    client_name=mcp_result.get("policy_name"),
+                    auditors_enabled={
+                        "disclaimer": True,
+                        "format": True,
+                        "typography": True,
+                        "grammar": True,
+                        "logo": True,
+                        "color_palette": True,
+                        "entity_consistency": True,
+                        "semantic_consistency": True,
                     },
-                    "stats": {
-                        "critical": validation_complete_event.get("summary", {}).get("findings_by_severity", {}).get("critical", 0),
-                        "high": validation_complete_event.get("summary", {}).get("findings_by_severity", {}).get("high", 0),
-                        "medium": validation_complete_event.get("summary", {}).get("findings_by_severity", {}).get("medium", 0),
-                        "low": validation_complete_event.get("summary", {}).get("findings_by_severity", {}).get("low", 0),
-                        "total": validation_complete_event.get("summary", {}).get("total_findings", 0),
+                    findings=mcp_result.get("top_findings", []),
+                    summary={
+                        "total_findings": total_findings,
+                        "findings_by_severity": findings_by_severity,
+                        "findings_by_category": findings_by_category,
+                        "disclaimer_coverage": mcp_result.get("disclaimer_coverage"),
+                        "policy_id": mcp_result.get("policy_id"),
+                        "policy_name": mcp_result.get("policy_name"),
+                        "validation_duration_ms": duration,
                     },
-                    "categories": categories,
-                    "actions": [],  # Could be populated with recommended actions in the future
-                    "payload": validation_complete_event,  # Keep full event for reference
-                }
+                    attachments=validation_complete_event.get("attachments", {}),
+                )
+                await validation_report_doc.insert()
+                validation_report_id = str(validation_report_doc.id)
+                validation_complete_event["validation_report_id"] = validation_report_id
+                logger.info(
+                    "MCP audit: ValidationReport persisted",
+                    validation_report_id=validation_report_id,
+                    findings=total_findings,
+                )
+            except Exception as persist_exc:
+                logger.error(
+                    "MCP audit: failed to persist ValidationReport",
+                    error=str(persist_exc),
+                    exc_type=type(persist_exc).__name__,
+                )
+
+            # Transform findings list into categories dict (grouped by category)
+            findings_list = validation_complete_event.get("findings", [])
+            categories = {}
+            for finding in findings_list:
+                category = finding.get("category", "Sin categoría")
+                if category not in categories:
+                    categories[category] = []
+                categories[category].append(finding)
+
+            # Build complete AuditReportResponse structure
+            audit_artifact = {
+                "type": "audit_report_ui",
+                "doc_name": document.filename,
+                "metadata": {
+                    "display_name": document.filename,
+                    "filename": document.filename,
+                    "policy_used": {
+                        "id": validation_complete_event.get("policy_id"),
+                        "name": validation_complete_event.get("policy_name", "N/D"),
+                    },
+                    "attachments": validation_complete_event.get("attachments", {}),
+                    "validation_report_id": validation_complete_event.get("validation_report_id"),
+                    "report_pdf_url": validation_complete_event.get("attachments", {}).get("pdf_report_path"),
+                },
+                "stats": {
+                    "critical": validation_complete_event.get("summary", {}).get("findings_by_severity", {}).get("critical", 0),
+                    "high": validation_complete_event.get("summary", {}).get("findings_by_severity", {}).get("high", 0),
+                    "medium": validation_complete_event.get("summary", {}).get("findings_by_severity", {}).get("medium", 0),
+                    "low": validation_complete_event.get("summary", {}).get("findings_by_severity", {}).get("low", 0),
+                    "total": validation_complete_event.get("summary", {}).get("total_findings", 0),
+                },
+                "categories": categories,
+                "actions": [],
+                "payload": validation_complete_event,
+            }
 
             # Save final response with artifact in metadata
             full_content = "".join(accumulated_content)
@@ -1272,8 +1154,8 @@ class StreamingHandler:
                 "audit_completed": True,
                 "document_id": str(document.id),
                 "filename": document.filename,
-                "job_id": last_job_id,
-                "artifact": audit_artifact,  # Include artifact in metadata for persistence
+                "job_id": validation_complete_event.get("job_id") if validation_complete_event else None,
+                "artifact": audit_artifact,
                 "report_pdf_url": artifact_report_url,
                 "attachments": artifact_attachments,
                 "validation_report_id": validation_complete_event.get("validation_report_id") if validation_complete_event else None,

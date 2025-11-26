@@ -5,6 +5,7 @@ Simplified models for stateless processing (no database dependencies).
 """
 
 from typing import List, Optional
+from uuid import uuid4
 from pydantic import BaseModel, Field
 
 
@@ -44,6 +45,7 @@ class DocumentInput(BaseModel):
     This is what the MCP tool receives from the caller.
     """
 
+    id: str = Field(default_factory=lambda: str(uuid4()), description="Document ID")
     filename: str = Field(..., description="Original filename")
     file_path: Optional[str] = Field(None, description="Path to PDF file on disk")
     file_bytes: Optional[bytes] = Field(None, description="PDF file content as bytes")

@@ -38,8 +38,12 @@ from ..schemas.review import (
 from ..schemas.audit_message import ValidationReportResponse
 from ..services.minio_storage import get_minio_storage
 from ..services.review_service import review_service
-from ..services.validation_coordinator import validate_document
-from ..services.policy_manager import resolve_policy
+from ..services.audit_mcp_client import (
+    audit_document_via_mcp,
+    list_policies_via_mcp,
+    get_policy_details_via_mcp,
+    MCPAuditorUnavailableError,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -564,80 +568,32 @@ async def validate_document_414(
         )
 
     # ========================================================================
-    # 2.5. Resolve Policy (NEW: P2.BE.1)
+    # 2.5. Call MCP Auditor Microservice
     # ========================================================================
 
     try:
-        # Resolve policy configuration
-        policy = await resolve_policy(policy_id, document=doc)
-
-        logger.info(
-            "Policy resolved for validation",
-            doc_id=doc_id,
-            policy_id=policy.id,
-            policy_name=policy.name,
-            requested_policy=policy_id,
-        )
-
-        # Use policy client_name if available, otherwise fall back to parameter
-        effective_client_name = policy.client_name or client_name
-
-        # Override enable flags based on policy configuration
-        policy_disclaimers = policy.disclaimers or {}
-        policy_logo = policy.logo or {}
-        policy_format = policy.format or {}
-
-        effective_enable_disclaimer = enable_disclaimer and policy_disclaimers.get("enabled", True)
-        effective_enable_format = enable_format and policy_format.get("enabled", True)
-        effective_enable_logo = enable_logo and policy_logo.get("enabled", True)
-
-        logger.info(
-            "Validation config from policy",
-            policy_id=policy.id,
-            client_name=effective_client_name,
-            enable_disclaimer=effective_enable_disclaimer,
-            enable_format=effective_enable_format,
-            enable_logo=effective_enable_logo,
-        )
-
-    except ValueError as policy_exc:
-        logger.error(
-            "Policy resolution failed",
+        # Call the MCP auditor microservice
+        mcp_result = await audit_document_via_mcp(
+            file_path=str(pdf_path),
             policy_id=policy_id,
-            error=str(policy_exc),
+            client_name=client_name,
+            enable_disclaimer=enable_disclaimer,
+            enable_format=enable_format,
+            enable_typography=True,  # Always enable all 8 auditors
+            enable_grammar=True,
+            enable_logo=enable_logo,
+            enable_color_palette=True,
+            enable_entity_consistency=True,
+            enable_semantic_consistency=True,
         )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid policy: {policy_exc}",
-        )
-
-    # ========================================================================
-    # 3. Run validation with resolved policy
-    # ========================================================================
-
-    try:
-        report = await validate_document(
-            document=doc,
-            pdf_path=pdf_path,
-            client_name=effective_client_name,
-            enable_disclaimer=effective_enable_disclaimer,
-            enable_format=effective_enable_format,
-            enable_logo=effective_enable_logo,
-            policy_config=policy.to_compliance_config(),  # NEW: Pass policy config
-            policy_id=policy.id,  # NEW: Track which policy was used
-            policy_name=policy.name,
-        )
-
-        # Add policy info to report summary
-        if hasattr(report, 'summary') and isinstance(report.summary, dict):
-            report.summary["policy_id"] = policy.id
-            report.summary["policy_name"] = policy.name
 
         logger.info(
-            "Validation 414 completed",
+            "MCP audit completed",
             doc_id=doc_id,
-            job_id=report.job_id,
-            total_findings=len(report.findings),
+            job_id=mcp_result.get("job_id"),
+            total_findings=mcp_result.get("total_findings", 0),
+            policy_id=mcp_result.get("policy_id"),
+            policy_name=mcp_result.get("policy_name"),
         )
 
         # ====================================================================
@@ -645,21 +601,37 @@ async def validate_document_414(
         # ====================================================================
 
         try:
-            # Create ValidationReport document
+            # Create ValidationReport document from MCP result
             validation_report = ValidationReport(
                 document_id=doc_id,
                 user_id=str(current_user.id),
-                job_id=report.job_id,
-                status="done" if report.status == "done" else "error",
-                client_name=client_name,
+                job_id=mcp_result.get("job_id"),
+                status="done" if mcp_result.get("status") == "completed" else "error",
+                client_name=mcp_result.get("policy_name"),
                 auditors_enabled={
                     "disclaimer": enable_disclaimer,
                     "format": enable_format,
+                    "typography": True,
+                    "grammar": True,
                     "logo": enable_logo,
+                    "color_palette": True,
+                    "entity_consistency": True,
+                    "semantic_consistency": True,
                 },
-                findings=[f.model_dump() for f in report.findings],
-                summary=report.summary,
-                attachments=report.attachments,
+                findings=mcp_result.get("top_findings", []),
+                summary={
+                    "total_findings": mcp_result.get("total_findings", 0),
+                    "findings_by_severity": mcp_result.get("findings_by_severity", {}),
+                    "findings_by_category": mcp_result.get("findings_by_category", {}),
+                    "disclaimer_coverage": mcp_result.get("disclaimer_coverage"),
+                    "policy_id": mcp_result.get("policy_id"),
+                    "policy_name": mcp_result.get("policy_name"),
+                    "validation_duration_ms": mcp_result.get("validation_duration_ms"),
+                },
+                attachments={
+                    "pdf_report_path": mcp_result.get("pdf_report_path"),
+                    "executive_summary_markdown": mcp_result.get("executive_summary_markdown"),
+                } if mcp_result.get("pdf_report_path") else {},
             )
 
             # Insert into MongoDB
@@ -669,7 +641,7 @@ async def validate_document_414(
                 "Validation report saved to MongoDB",
                 report_id=str(validation_report.id),
                 doc_id=doc_id,
-                findings_count=len(report.findings),
+                findings_count=mcp_result.get("total_findings", 0),
             )
 
             # Update document with link to validation report
@@ -691,7 +663,53 @@ async def validate_document_414(
                 exc_info=True,
             )
 
-        return report
+        # Build response in ValidationReportResponse format
+        from ..schemas.audit_message import Finding, FindingLocation
+
+        findings_list = []
+        for f in mcp_result.get("top_findings", []):
+            findings_list.append(Finding(
+                id=f.get("id", ""),
+                category=f.get("category", "other"),
+                rule=f.get("rule", ""),
+                issue=f.get("issue", ""),
+                severity=f.get("severity", "low"),
+                location=FindingLocation(
+                    page=f.get("location", {}).get("page"),
+                    bbox=f.get("location", {}).get("bbox"),
+                ) if f.get("location") else None,
+                suggestion=f.get("suggestion"),
+            ))
+
+        return ValidationReportResponse(
+            job_id=mcp_result.get("job_id", ""),
+            status="done" if mcp_result.get("status") == "completed" else "error",
+            findings=findings_list,
+            summary={
+                "total_findings": mcp_result.get("total_findings", 0),
+                "findings_by_severity": mcp_result.get("findings_by_severity", {}),
+                "findings_by_category": mcp_result.get("findings_by_category", {}),
+                "disclaimer_coverage": mcp_result.get("disclaimer_coverage"),
+                "policy_id": mcp_result.get("policy_id"),
+                "policy_name": mcp_result.get("policy_name"),
+                "validation_duration_ms": mcp_result.get("validation_duration_ms"),
+            },
+            attachments={
+                "pdf_report_path": mcp_result.get("pdf_report_path"),
+                "executive_summary_markdown": mcp_result.get("executive_summary_markdown"),
+            } if mcp_result.get("pdf_report_path") else {},
+        )
+
+    except MCPAuditorUnavailableError as mcp_exc:
+        logger.error(
+            "MCP auditor unavailable",
+            doc_id=doc_id,
+            error=str(mcp_exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Audit service unavailable: {mcp_exc}",
+        )
 
     except Exception as exc:
         logger.error(

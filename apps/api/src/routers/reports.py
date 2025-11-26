@@ -14,7 +14,6 @@ from ..core.auth import get_current_user
 from ..models.task import Task as TaskModel, TaskStatus
 from ..models.validation_report import ValidationReport
 from ..schemas.common import ApiResponse
-from ..services.report_generator import generate_audit_report_pdf
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
@@ -555,46 +554,57 @@ async def download_audit_report_pdf(
                 detail="Access denied to this audit report"
             )
 
-        # Generate PDF on-demand
-        logger.info(
-            "Generating audit PDF on-demand",
-            report_id=report_id,
-            user_id=user_id
-        )
+        # Check if PDF was pre-generated during audit
+        attachments = report.attachments or {}
+        pdf_report_path = attachments.get("pdf_report_path")
 
-        pdf_buffer = await generate_audit_report_pdf(
-            report=report,
-            filename=f"audit_report_{report_id}.pdf",
-            document_name=f"Reporte de Auditoría - {report.client_name or 'Capital 414'}"
-        )
+        if not pdf_report_path:
+            logger.warning(
+                "No pre-generated PDF available for audit report",
+                report_id=report_id,
+                user_id=user_id
+            )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="PDF report not available. Re-run the audit to generate a new report."
+            )
+
+        # Check if the file exists
+        from pathlib import Path
+        pdf_path = Path(pdf_report_path)
+        if not pdf_path.exists():
+            logger.warning(
+                "Pre-generated PDF file not found on disk",
+                report_id=report_id,
+                pdf_path=pdf_report_path
+            )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="PDF report file not found. Re-run the audit to generate a new report."
+            )
 
         # Create filename with timestamp
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         filename = f"auditoria_{report.client_name or 'capital414'}_{timestamp}.pdf"
 
         logger.info(
-            "Serving audit PDF on-demand",
+            "Serving pre-generated audit PDF",
             report_id=report_id,
             user_id=user_id,
             filename=filename,
-            pdf_size_bytes=pdf_buffer.getbuffer().nbytes
+            source_path=pdf_report_path
         )
-
-        # Create temporary file for response
-        with tempfile.NamedTemporaryFile(mode='w+b', suffix='.pdf', delete=False) as tmp_file:
-            tmp_file.write(pdf_buffer.getvalue())
-            tmp_file_path = tmp_file.name
 
         # Return PDF as download
         return FileResponse(
-            path=tmp_file_path,
+            path=pdf_report_path,
             filename=filename,
             media_type="application/pdf",
             headers={
                 "Content-Disposition": f"attachment; filename={filename}",
                 "X-Report-ID": report_id,
                 "X-Generated-At": datetime.utcnow().isoformat(),
-                "X-Source": "on-demand"  # Indicate this was generated on-demand
+                "X-Source": "pre-generated"
             }
         )
 

@@ -1,5 +1,7 @@
 """
 Utility helpers to normalize audit findings into a presentation-agnostic payload.
+
+These are presentation utilities only - audit logic is in plugins/capital414-private.
 """
 
 from typing import Any, Dict, List, Optional
