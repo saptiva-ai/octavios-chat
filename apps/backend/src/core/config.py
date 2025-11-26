@@ -200,7 +200,7 @@ class Settings(BaseSettings):
         description="File Manager plugin URL for file operations"
     )
     capital414_url: str = Field(
-        default="http://capital414-auditor:8002",
+        default="http://file-auditor:8002",
         description="Capital414 auditor plugin URL"
     )
 

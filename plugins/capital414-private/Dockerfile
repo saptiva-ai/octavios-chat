@@ -8,7 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app/src \
     # MCP Server settings
-    MCP_SERVER_NAME=capital414-auditor \
+    MCP_SERVER_NAME=file-auditor \
     MCP_SERVER_PORT=8002 \
     # LanguageTool connection (external service)
     LANGUAGETOOL_URL=http://languagetool:8010/v2/check

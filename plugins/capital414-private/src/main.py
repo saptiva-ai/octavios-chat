@@ -37,7 +37,7 @@ logger = structlog.get_logger(__name__)
 
 # Initialize FastMCP server
 mcp = FastMCP(
-    name=os.getenv("MCP_SERVER_NAME", "capital414-auditor"),
+    name=os.getenv("MCP_SERVER_NAME", "file-auditor"),
     instructions="""
     Capital 414 Document Compliance Auditor.
 
@@ -403,7 +403,7 @@ from starlette.routing import Route
 
 async def http_health(request):
     """HTTP health check endpoint."""
-    return JSONResponse({"status": "ok", "service": "capital414-auditor"})
+    return JSONResponse({"status": "ok", "service": "file-auditor"})
 
 
 # Create Starlette app from FastMCP and add health route

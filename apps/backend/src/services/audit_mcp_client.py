@@ -28,7 +28,7 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 # Configuration
-MCP_AUDITOR_URL = os.getenv("CAPITAL414_AUDITOR_URL", "http://capital414-auditor:8002")
+MCP_AUDITOR_URL = os.getenv("CAPITAL414_AUDITOR_URL", "http://file-auditor:8002")
 MCP_TIMEOUT = int(os.getenv("CAPITAL414_AUDITOR_TIMEOUT", "120"))  # 2 minutes
 USE_MCP_AUDITOR = os.getenv("USE_MCP_AUDITOR", "true").lower() == "true"
 

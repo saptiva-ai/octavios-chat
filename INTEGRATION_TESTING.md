@@ -530,7 +530,7 @@ fi
 echo "🧪 Test R-2: Capital414 down - Backend handles gracefully"
 
 # 1. Stop Capital414
-docker compose -f infra/docker-compose.yml stop capital414-auditor
+docker compose -f infra/docker-compose.yml stop file-auditor
 
 # 2. Try audit command via Backend
 CHAT_RESPONSE=$(curl -s -X POST "http://localhost:8000/api/chat" \
@@ -552,7 +552,7 @@ else
 fi
 
 # 4. Restart Capital414
-docker compose -f infra/docker-compose.yml start capital414-auditor
+docker compose -f infra/docker-compose.yml start file-auditor
 ```
 
 ---
@@ -897,7 +897,7 @@ make logs
 # Logs específicos
 make logs S=backend
 make logs S=file-manager
-make logs S=capital414-auditor
+make logs S=file-auditor
 
 # Health check individual
 curl -s http://localhost:8000/api/health | jq
@@ -906,7 +906,7 @@ curl -s http://localhost:8002/health | jq
 
 # Verificar conectividad entre servicios
 docker compose -f infra/docker-compose.yml exec backend ping file-manager
-docker compose -f infra/docker-compose.yml exec capital414-auditor ping file-manager
+docker compose -f infra/docker-compose.yml exec file-auditor ping file-manager
 
 # Verificar Redis
 docker compose -f infra/docker-compose.yml exec redis redis-cli ping

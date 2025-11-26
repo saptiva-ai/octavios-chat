@@ -100,10 +100,10 @@ class MinIOService:
         """
         try:
             self.client.put_object(
-                bucket,
-                object_name,
-                data,
-                length,
+                bucket_name=bucket,
+                object_name=object_name,
+                data=data,
+                length=length,
                 content_type=content_type,
             )
             logger.info(f"Uploaded to MinIO", bucket=bucket, key=object_name, size=length)
@@ -124,7 +124,7 @@ class MinIOService:
             File bytes
         """
         try:
-            response = self.client.get_object(bucket, object_name)
+            response = self.client.get_object(bucket_name=bucket, object_name=object_name)
             data = response.read()
             response.close()
             response.release_conn()
@@ -144,7 +144,7 @@ class MinIOService:
             file_path: Destination file path
         """
         try:
-            self.client.fget_object(bucket, object_name, file_path)
+            self.client.fget_object(bucket_name=bucket, object_name=object_name, file_path=file_path)
             logger.info(f"Downloaded from MinIO to path", bucket=bucket, key=object_name, path=file_path)
         except S3Error as e:
             logger.error(f"MinIO download to path failed", error=str(e), bucket=bucket, key=object_name)
@@ -173,12 +173,12 @@ class MinIOService:
         try:
             # Try downloading from temp-files bucket first (most common for new uploads)
             try:
-                self.client.fget_object(self.temp_files_bucket, object_name, tmp_path)
+                self.client.fget_object(bucket_name=self.temp_files_bucket, object_name=object_name, file_path=tmp_path)
                 logger.info(f"Materialized document from {self.temp_files_bucket}", key=object_name, path=tmp_path)
                 return Path(tmp_path), True
             except S3Error:
                 # Fallback to documents bucket
-                self.client.fget_object(self.documents_bucket, object_name, tmp_path)
+                self.client.fget_object(bucket_name=self.documents_bucket, object_name=object_name, file_path=tmp_path)
                 logger.info(f"Materialized document from {self.documents_bucket}", key=object_name, path=tmp_path)
                 return Path(tmp_path), True
                 
@@ -206,7 +206,7 @@ class MinIOService:
             Presigned URL
         """
         try:
-            url = self.client.presigned_get_object(bucket, object_name, expires=expires)
+            url = self.client.presigned_get_object(bucket_name=bucket, object_name=object_name, expires=expires)
             logger.info(f"Generated presigned URL", bucket=bucket, key=object_name)
             return url
         except S3Error as e:
@@ -222,7 +222,7 @@ class MinIOService:
             object_name: Object key
         """
         try:
-            self.client.remove_object(bucket, object_name)
+            self.client.remove_object(bucket_name=bucket, object_name=object_name)
             logger.info(f"Deleted from MinIO", bucket=bucket, key=object_name)
         except S3Error as e:
             logger.error(f"MinIO delete failed", error=str(e), bucket=bucket, key=object_name)
@@ -231,7 +231,7 @@ class MinIOService:
     def object_exists(self, bucket: str, object_name: str) -> bool:
         """Check if object exists"""
         try:
-            self.client.stat_object(bucket, object_name)
+            self.client.stat_object(bucket_name=bucket, object_name=object_name)
             return True
         except S3Error:
             return False

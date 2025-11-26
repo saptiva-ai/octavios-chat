@@ -86,7 +86,7 @@ class MinioClient:
                 data=data,
                 length=length,
                 content_type=content_type,
-                metadata=metadata or {},
+                user_metadata=metadata or {},
             )
 
             logger.info(
@@ -117,7 +117,7 @@ class MinioClient:
             File contents as bytes
         """
         try:
-            response = self.client.get_object(self.bucket, object_name)
+            response = self.client.get_object(bucket_name=self.bucket, object_name=object_name)
             data = response.read()
             response.close()
             response.release_conn()
@@ -172,7 +172,7 @@ class MinioClient:
     def delete_file(self, object_name: str) -> None:
         """Delete a file from MinIO."""
         try:
-            self.client.remove_object(self.bucket, object_name)
+            self.client.remove_object(bucket_name=self.bucket, object_name=object_name)
             logger.info("File deleted from MinIO", object_name=object_name)
 
         except S3Error as e:
@@ -186,7 +186,7 @@ class MinioClient:
     def file_exists(self, object_name: str) -> bool:
         """Check if a file exists in MinIO."""
         try:
-            self.client.stat_object(self.bucket, object_name)
+            self.client.stat_object(bucket_name=self.bucket, object_name=object_name)
             return True
         except S3Error:
             return False
@@ -194,7 +194,7 @@ class MinioClient:
     def get_file_info(self, object_name: str) -> dict:
         """Get file metadata from MinIO."""
         try:
-            stat = self.client.stat_object(self.bucket, object_name)
+            stat = self.client.stat_object(bucket_name=self.bucket, object_name=object_name)
             return {
                 "size": stat.size,
                 "content_type": stat.content_type,

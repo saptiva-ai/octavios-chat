@@ -194,7 +194,7 @@ La cadena de dependencias garantiza inicio ordenado:
 | Frontend (Next.js) | 3000 | - | http://localhost:3000 |
 | Backend Core | 8000 | http://backend:8000 | http://localhost:8000 |
 | File Manager | 8001 | http://file-manager:8001 | http://localhost:8001 |
-| Capital414 | 8002 | http://capital414-auditor:8002 | http://localhost:8002 |
+| Capital414 | 8002 | http://file-auditor:8002 | http://localhost:8002 |
 | MongoDB | 27017 | mongodb://mongodb:27017 | - |
 | Redis | 6379 | redis://redis:6379 | - |
 | MinIO | 9000 | http://minio:9000 | http://localhost:9000 |
@@ -287,7 +287,7 @@ from structlog import get_logger
 logger = get_logger(__name__)
 
 class MCPClient:
-    def __init__(self, server_url: str = "http://capital414-auditor:8002"):
+    def __init__(self, server_url: str = "http://file-auditor:8002"):
         self.server_url = server_url
         self.session = ClientSession(server_url)
 
@@ -1440,7 +1440,7 @@ Vista rápida de carpetas raíz y submódulos más relevantes. La idea es poder 
 │   │       ├── Dockerfile
 │   │       └── requirements.txt
 │   └── capital414-private/      # 🔴 Private Plugins (Proprietary)
-│       └── capital414-auditor/  # Puerto 8002 - COPILOTO_414 Compliance
+│       └── file-auditor/  # Puerto 8002 - COPILOTO_414 Compliance
 │           ├── src/
 │           │   ├── auditors/    # disclaimer, format, grammar, logo, typography, color
 │           │   ├── clients/     # file_manager_client.py (HTTP client)

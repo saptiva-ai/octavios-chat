@@ -194,7 +194,9 @@ services:
     restart: unless-stopped
     env_file:
       - ../envs/.env
+    command: python -m uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 1
     environment:
+      - PORT=8000
       # Base de datos
       - MONGODB_URL=mongodb://${MONGODB_USER:-octavios_user}:${MONGODB_PASSWORD:-secure_password_change_me}@mongodb:27017/${MONGODB_DATABASE:-octavios}?authSource=admin
       - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_password_change_me}@redis:6379/0
@@ -251,9 +253,7 @@ services:
       - CHAT_ALLOWED_MODELS=${CHAT_ALLOWED_MODELS:-Saptiva Turbo,Saptiva Cortex,Saptiva Ops,Saptiva Coder,Saptiva Legacy}
 
       - SAPTIVA_BASE_URL=${SAPTIVA_BASE_URL:-https://api.saptiva.com}
-      - SAPTIVA_API_KEY=${SAPTIVA_API_KEY:-}
       - SAPTIVA_TIMEOUT=${SAPTIVA_TIMEOUT:-30}
-      - SAPTIVA_MAX_RETRIES=${SAPTIVA_MAX_RETRIES:-3}
 
       # Rate limiting (disabled in development for better DX)
       - RATE_LIMIT_ENABLED=${RATE_LIMIT_ENABLED:-false}
@@ -266,7 +266,7 @@ services:
 
       # Plugin URLs (for future Plugin-First Architecture)
       - FILE_MANAGER_URL=${FILE_MANAGER_URL:-http://file-manager:8001}
-      - CAPITAL414_URL=${CAPITAL414_URL:-http://capital414-auditor:8002}
+      - CAPITAL414_URL=${CAPITAL414_URL:-http://file-auditor:8002}
 
     depends_on:
       mongodb:
@@ -429,6 +429,7 @@ services:
     env_file:
       - ../envs/.env
     environment:
+      - PORT=8001
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin123}
@@ -456,20 +457,20 @@ services:
       - octavios-network
 
   # ========================================
-  # CAPITAL414 AUDITOR - MCP Plugin Service (Private)
+  # FILE AUDITOR - MCP Plugin Service (Private)
   # ========================================
   # Plugin-First Architecture: Private plugin for document auditing
   # Consumes files from file-manager plugin via HTTP
-  capital414-auditor:
+  file-auditor:
     build:
       context: ..
       dockerfile: plugins/capital414-private/Dockerfile
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-capital414-auditor
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-file-auditor
     restart: unless-stopped
     env_file:
       - ../envs/.env
     environment:
-      - MCP_SERVER_NAME=capital414-auditor
+      - MCP_SERVER_NAME=file-auditor
       - MCP_SERVER_PORT=8002
       - LANGUAGETOOL_URL=http://languagetool:8010/v2/check
       # Plugin-First: Get files from file-manager instead of direct MinIO
