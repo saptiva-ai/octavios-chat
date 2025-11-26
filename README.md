@@ -52,12 +52,12 @@
   - [Licencia y soporte](#licencia-y-soporte)
 
 ## Resumen rápido
-- Chat multi-modelo (Turbo, Cortex, Ops, etc.) con SSE y chain-of-responsibility (`apps/api/src/routers/chat/endpoints/message_endpoints.py`).
-- Integración MCP oficial (FastMCP) con lazy loading y telemetría (`apps/api/src/mcp/server.py`).
-- Pipeline documental: subida segura, cache Redis y extracción multi-tier antes del RAG (`apps/api/src/services/document_service.py`).
-- COPILOTO_414 coordina auditores de disclaimer, formato, logos, tipografía, gramática y consistencia semántica (`apps/api/src/services/validation_coordinator.py`).
+- Chat multi-modelo (Turbo, Cortex, Ops, etc.) con SSE y chain-of-responsibility (`apps/backend/src/routers/chat/endpoints/message_endpoints.py`).
+- Integración MCP oficial (FastMCP) con lazy loading y telemetría (`apps/backend/src/mcp/server.py`).
+- Pipeline documental: subida segura, cache Redis y extracción multi-tier antes del RAG (`apps/backend/src/services/document_service.py`).
+- COPILOTO_414 coordina auditores de disclaimer, formato, logos, tipografía, gramática y consistencia semántica (`apps/backend/src/services/validation_coordinator.py`).
 - Frontend Next.js 14 + Zustand con herramientas de archivos, research y UI accesible (`apps/web/src/lib/stores/chat-store.ts`).
-- Seguridad empresarial: JWT con revocación en Redis, rate limiting y políticas CSP en Nginx (`apps/api/src/middleware/auth.py`).
+- Seguridad empresarial: JWT con revocación en Redis, rate limiting y políticas CSP en Nginx (`apps/backend/src/middleware/auth.py`).
 
 ## Visión de alto nivel
 
@@ -229,34 +229,34 @@ flowchart TB
 **Arquitectura de integración completa**: El núcleo API integra 4 servicios principales (Chat con SSE streaming, FastMCP con 5 herramientas, COPILOTO_414 con 8 auditores streaming, y Document Service con extracción multi-tier). Se conecta a servicios externos (SAPTIVA LLMs multi-modelo, Aletheia Research, LanguageTool, SMTP), usa almacenamiento triple (MongoDB para datos estructurados, Redis para cache/blacklist/registry, MinIO para archivos/thumbnails), y se monitoriza end-to-end mediante Prometheus (métricas de request + invocaciones MCP), OpenTelemetry (traces distribuidos), Structlog (logs JSON contextuales) y Grafana (dashboards + alertas).
 
 **Patrones y componentes clave**
-- *Chain of Responsibility + Strategy*: `apps/api/src/routers/chat/endpoints/message_endpoints.py` delega en `domain/message_handlers` para escoger streaming/simple.
-- *Builder Pattern*: `ChatResponseBuilder` compone respuestas enriquecidas con metadatos (`apps/api/src/domain/chat_response_builder.py`).
-- *Lazy Loading / Adapter*: `MCPFastAPIAdapter` expone herramientas FastMCP vía REST con telemetría y auth (`apps/api/src/mcp/fastapi_adapter.py`).
-- *Background Reaper*: `Storage` elimina documentos expirados/controla uso de disco (`apps/api/src/services/storage.py`).
+- *Chain of Responsibility + Strategy*: `apps/backend/src/routers/chat/endpoints/message_endpoints.py` delega en `domain/message_handlers` para escoger streaming/simple.
+- *Builder Pattern*: `ChatResponseBuilder` compone respuestas enriquecidas con metadatos (`apps/backend/src/domain/chat_response_builder.py`).
+- *Lazy Loading / Adapter*: `MCPFastAPIAdapter` expone herramientas FastMCP vía REST con telemetría y auth (`apps/backend/src/mcp/fastapi_adapter.py`).
+- *Background Reaper*: `Storage` elimina documentos expirados/controla uso de disco (`apps/backend/src/services/storage.py`).
 - *Coordinador + Auditores*: `validation_coordinator.py` orquesta múltiples validadores especializados para COPILOTO_414.
 
 ## Stack y capacidades
 
 ### Plataforma conversacional
-- **Streaming + fallback**: SSE via `StreamingHandler` y respuestas síncronas con builder de mensajes (`apps/api/src/routers/chat/handlers/streaming_handler.py`).
-- **Contexto inteligente**: `ChatService` recupera historial Beanie, normaliza herramientas y arma prompts para SAPTIVA (`apps/api/src/services/chat_service.py`).
+- **Streaming + fallback**: SSE via `StreamingHandler` y respuestas síncronas con builder de mensajes (`apps/backend/src/routers/chat/handlers/streaming_handler.py`).
+- **Contexto inteligente**: `ChatService` recupera historial Beanie, normaliza herramientas y arma prompts para SAPTIVA (`apps/backend/src/services/chat_service.py`).
 - **UI reactiva**: Zustand gestiona selección de chat, modelos y herramientas con hidratación SWR (`apps/web/src/lib/stores/chat-store.ts`).
 
 ### Documentos y RAG
-- **Ingesta segura**: archivos se guardan en disco temporal con límites de tamaño y "reaper" (`apps/api/src/services/storage.py`).
-- **Persistencia primaria**: objetos se escriben en MinIO con rutas por usuario/chat y metadatos (`apps/api/src/services/minio_storage.py`).
-- **Cache de texto**: Redis almacena extractos 1h y valida ownership antes de usarlos en prompts (`apps/api/src/services/document_service.py`).
-- **RAG con Qdrant Vector DB**: Sistema completo de búsqueda semántica usando Qdrant como base de datos vectorial (`apps/api/src/services/qdrant_service.py`):
+- **Ingesta segura**: archivos se guardan en disco temporal con límites de tamaño y "reaper" (`apps/backend/src/services/storage.py`).
+- **Persistencia primaria**: objetos se escriben en MinIO con rutas por usuario/chat y metadatos (`apps/backend/src/services/minio_storage.py`).
+- **Cache de texto**: Redis almacena extractos 1h y valida ownership antes de usarlos en prompts (`apps/backend/src/services/document_service.py`).
+- **RAG con Qdrant Vector DB**: Sistema completo de búsqueda semántica usando Qdrant como base de datos vectorial (`apps/backend/src/services/qdrant_service.py`):
   - **Embeddings**: Modelo `paraphrase-multilingual-MiniLM-L12-v2` (384 dimensiones) para generación de embeddings
   - **Chunking inteligente**: 500 tokens por chunk con 100 tokens de overlap (20%) para preservar contexto
   - **Búsqueda semántica**: Cosine similarity con threshold configurable (0.7 por defecto)
   - **Aislamiento de contexto**: Filtrado obligatorio por `session_id` para prevenir fugas de información entre conversaciones
   - **Estrategias adaptativas**: `SemanticSearchStrategy` y `OverviewStrategy` para diferentes tipos de consultas
-  - **Herramienta MCP**: `get_segments` (`apps/api/src/mcp/tools/get_segments.py`) expone búsqueda semántica como herramienta productiva
+  - **Herramienta MCP**: `get_segments` (`apps/backend/src/mcp/tools/get_segments.py`) expone búsqueda semántica como herramienta productiva
   - **Orquestación**: `AdaptiveRetrievalOrchestrator` selecciona estrategia óptima según tipo de query
 
 ### Cumplimiento COPILOTO_414
-- Coordinador async que ejecuta auditores de disclaimer, formato, tipografía, color, logo, gramática y consistencia (`apps/api/src/services/validation_coordinator.py`).
+- Coordinador async que ejecuta auditores de disclaimer, formato, tipografía, color, logo, gramática y consistencia (`apps/backend/src/services/validation_coordinator.py`).
 - Las políticas se resuelven dinámicamente y cada hallazgo se serializa a `ValidationReport` (Mongo + MinIO).
 
 ### Integración Audit File + Canvas (OpenCanvas)
@@ -266,10 +266,10 @@ Sistema de auditoría con visualización en canvas lateral inspirado en OpenCanv
 **Flujo de Auditoría con Canvas**:
 
 1. **Trigger**: Usuario escribe `"Auditar archivo: filename.pdf"` en el chat
-2. **Handler**: `AuditCommandHandler` (`apps/api/src/domain/audit_handler.py`) intercepta el comando usando Chain of Responsibility
+2. **Handler**: `AuditCommandHandler` (`apps/backend/src/domain/audit_handler.py`) intercepta el comando usando Chain of Responsibility
 3. **Ejecución**: Se ejecuta `validate_document()` con 8 auditores paralelos (disclaimer, format, typography, grammar, logo, color, entity, semantic)
 4. **Generación Dual de Contenido**:
-   - **Human Summary** (para chat): Resumen conversacional y no técnico generado por `generate_human_summary()` (`apps/api/src/services/summary_formatter.py`)
+   - **Human Summary** (para chat): Resumen conversacional y no técnico generado por `generate_human_summary()` (`apps/backend/src/services/summary_formatter.py`)
    - **Technical Report** (para canvas): Reporte técnico completo en Markdown generado por `format_executive_summary_as_markdown()`
 5. **Creación de Artifact**: Se crea un `Artifact` (modelo Beanie) con tipo `MARKDOWN` conteniendo el reporte técnico completo
 6. **Metadata Injection**: El handler incluye `tool_invocations` con `create_artifact` en `decision_metadata` (línea 215-224)
@@ -289,7 +289,7 @@ Sistema de auditoría con visualización en canvas lateral inspirado en OpenCanv
 **Arquitectura de Artifacts**:
 
 ```python
-# apps/api/src/models/artifact.py
+# apps/backend/src/models/artifact.py
 class Artifact(Document):
     id: str                          # UUID
     user_id: str                     # Owner
@@ -330,29 +330,29 @@ class Artifact(Document):
 ```
 
 **Referencias de código**:
-- Backend Handler: `apps/api/src/domain/audit_handler.py:168-176` (creación artifact)
+- Backend Handler: `apps/backend/src/domain/audit_handler.py:168-176` (creación artifact)
 - Frontend Context: `apps/web/src/context/CanvasContext.tsx`
 - Canvas Panel: `apps/web/src/components/canvas/canvas-panel.tsx`
-- Summary Formatter: `apps/api/src/services/summary_formatter.py`
+- Summary Formatter: `apps/backend/src/services/summary_formatter.py`
 
 ### Model Context Protocol (MCP)
-- Servidor FastMCP único con 5 herramientas productivas (`apps/api/src/mcp/server.py`).
-- Adaptador HTTP asegura auth y telemetría (`apps/api/src/mcp/fastapi_adapter.py`).
-- Lazy routing reduce el contexto (discover → load → invoke) (`apps/api/src/mcp/lazy_routes.py`).
+- Servidor FastMCP único con 5 herramientas productivas (`apps/backend/src/mcp/server.py`).
+- Adaptador HTTP asegura auth y telemetría (`apps/backend/src/mcp/fastapi_adapter.py`).
+- Lazy routing reduce el contexto (discover → load → invoke) (`apps/backend/src/mcp/lazy_routes.py`).
 - Cliente frontend expone list/get/invoke/health con cancelaciones (`apps/web/src/lib/mcp/client.ts`).
 - **Buenas prácticas Anthropic**:
-  - `Tool.invoke` valida JSON Schema y normaliza errores (`apps/api/src/mcp/tool.py`), evitando prompts mal formados.
-  - Scopes `mcp:tools.*` / `mcp:admin.*` derivados de `MCP_ADMIN_USERS` protegen rutas sensibles (`apps/api/src/mcp/security.py`).
-  - Telemetría y rate limiting dedicados para rutas `/mcp/lazy/*` (Observer pattern) + métricas Prometheus (`apps/api/src/mcp/metrics.py`).
-  - Versionado centralizado (`apps/api/src/mcp/versioning.py`) y compatibilidad hacia atrás en los contratos `schema_version`.
-  - Herramientas documentadas con esquemas y ejemplos (`apps/api/src/mcp/tools/*`) y cubiertas por `make test-mcp`, `make test-mcp-marker`.
+  - `Tool.invoke` valida JSON Schema y normaliza errores (`apps/backend/src/mcp/tool.py`), evitando prompts mal formados.
+  - Scopes `mcp:tools.*` / `mcp:admin.*` derivados de `MCP_ADMIN_USERS` protegen rutas sensibles (`apps/backend/src/mcp/security.py`).
+  - Telemetría y rate limiting dedicados para rutas `/mcp/lazy/*` (Observer pattern) + métricas Prometheus (`apps/backend/src/mcp/metrics.py`).
+  - Versionado centralizado (`apps/backend/src/mcp/versioning.py`) y compatibilidad hacia atrás en los contratos `schema_version`.
+  - Herramientas documentadas con esquemas y ejemplos (`apps/backend/src/mcp/tools/*`) y cubiertas por `make test-mcp`, `make test-mcp-marker`.
   - Checklist Senior AI: valida scopes antes de montar la herramienta, instrumenta cada invocación (`metrics_collector.track_invocation`), agrega tracing en `FastMCPAdapter`, y prueba rutas `discover/load/invoke` con `scripts/test_mcp_tools.sh`.
 
 ### Seguridad y observabilidad
-- **JWT + lista negra** en Redis (`apps/api/src/middleware/auth.py`, `apps/api/src/services/cache_service.py`).
-- **Rate limiting** por IP y cabeceras de control (`apps/api/src/middleware/rate_limit.py`).
-- **Secret manager** opcional y computed fields (`apps/api/src/core/config.py`).
-- **Telemetry + tracing** con OTEL/Prometheus/structlog (`apps/api/src/core/telemetry.py`).
+- **JWT + lista negra** en Redis (`apps/backend/src/middleware/auth.py`, `apps/backend/src/services/cache_service.py`).
+- **Rate limiting** por IP y cabeceras de control (`apps/backend/src/middleware/rate_limit.py`).
+- **Secret manager** opcional y computed fields (`apps/backend/src/core/config.py`).
+- **Telemetry + tracing** con OTEL/Prometheus/structlog (`apps/backend/src/core/telemetry.py`).
 - **Scopes MCP**: define `MCP_ADMIN_USERS` (usernames o correos separados por comas) para otorgar scopes `mcp:admin.*` en rutas sensibles (`/mcp/lazy/stats`, `/unload`), mientras el resto conserva sólo `mcp:tools.*`.
 
 ## Arquitectura
@@ -800,7 +800,7 @@ make dev
 ```
 Servicios:
 - Frontend http://localhost:3000
-- Backend http://localhost:8001/api
+- Backend http://localhost:8000/api
 - MinIO http://localhost:9001 (console)
 - Mongo/Redis/LangTool corren en la misma red docker.
 
@@ -818,12 +818,12 @@ Ejecuta health checks de contenedores, API, DB y frontend.
 
 ## Flujo de documentos y auditoría
 1. **Upload**: dropzone valida tipo/tamaño y envía multi-part (`apps/web/src/components/document-review/FileDropzone.tsx`).
-2. **Persistencia**: FastAPI guarda streaming en disco, mueve a MinIO y almacena metadatos en Mongo (`apps/api/src/services/storage.py`, `apps/api/src/services/minio_storage.py`).
-3. **Cache + Embeddings**: texto se guarda en Redis (1h TTL); chunks se convierten a embeddings y se almacenan en Qdrant para búsqueda semántica (`apps/api/src/services/document_processing_service.py`).
-4. **Extracción RAG**: herramienta `get_segments` usa búsqueda semántica en Qdrant para recuperar chunks relevantes según la query del usuario (`apps/api/src/mcp/tools/get_segments.py`).
-5. **Auditoría via Chat Command**: comando "Auditar archivo: filename.pdf" ejecuta `AuditCommandHandler` con 8 auditores paralelos vía `ValidationCoordinator` (`apps/api/src/domain/audit_handler.py`, `apps/api/src/services/validation_coordinator.py`).
-6. **Generación Dual de Contenido**: se genera resumen humano para chat y reporte técnico para canvas (`apps/api/src/services/summary_formatter.py`).
-7. **Artifact Creation**: reporte técnico se persiste como `Artifact` con metadata `tool_invocations` para detección frontend (`apps/api/src/domain/audit_handler.py:168-176`).
+2. **Persistencia**: FastAPI guarda streaming en disco, mueve a MinIO y almacena metadatos en Mongo (`apps/backend/src/services/storage.py`, `apps/backend/src/services/minio_storage.py`).
+3. **Cache + Embeddings**: texto se guarda en Redis (1h TTL); chunks se convierten a embeddings y se almacenan en Qdrant para búsqueda semántica (`apps/backend/src/services/document_processing_service.py`).
+4. **Extracción RAG**: herramienta `get_segments` usa búsqueda semántica en Qdrant para recuperar chunks relevantes según la query del usuario (`apps/backend/src/mcp/tools/get_segments.py`).
+5. **Auditoría via Chat Command**: comando "Auditar archivo: filename.pdf" ejecuta `AuditCommandHandler` con 8 auditores paralelos vía `ValidationCoordinator` (`apps/backend/src/domain/audit_handler.py`, `apps/backend/src/services/validation_coordinator.py`).
+6. **Generación Dual de Contenido**: se genera resumen humano para chat y reporte técnico para canvas (`apps/backend/src/services/summary_formatter.py`).
+7. **Artifact Creation**: reporte técnico se persiste como `Artifact` con metadata `tool_invocations` para detección frontend (`apps/backend/src/domain/audit_handler.py:168-176`).
 8. **Canvas Rendering**: `CanvasPanel` detecta artifact en metadata y renderiza el reporte técnico en panel lateral resizable (`apps/web/src/components/canvas/canvas-panel.tsx`).
 9. **Limpieza**: `ChatView` aplica una limpieza agresiva de adjuntos tras la respuesta exitosa, asegurando que no queden archivos huérfanos en la UI (`useFiles` con selectores).
 
@@ -838,7 +838,7 @@ Ejecuta health checks de contenedores, API, DB y frontend.
 | `deep_research` | Investigación | Orquesta iteraciones con Aletheia y devuelve hallazgos+fuentes | `query`, `depth`, `max_iterations` |
 | `extract_document_text` | RAG | Extrae texto multi-tier con cache TTL configurable | `doc_id`, `method`, `page_numbers` |
 
-Todas viven en `apps/api/src/mcp/server.py` y comparten telemetría/seguridad gracias al adaptador FastAPI.
+Todas viven en `apps/backend/src/mcp/server.py` y comparten telemetría/seguridad gracias al adaptador FastAPI.
 
 ## Frontend
 - Next.js 14 (app router) con Tailwind, React Server Components y streaming UI (`apps/web/src/app/...`).
@@ -847,10 +847,10 @@ Todas viven en `apps/api/src/mcp/server.py` y comparten telemetría/seguridad gr
 - Componentes accesibles y testados (jest + Testing Library) para chat composer, adjuntos y listas virtualizadas (`apps/web/src/components/chat`).
 
 ## Backend
-- FastAPI modular con routers especializados (`apps/api/src/routers`).
-- Diseño por dominios + patrones (builder, strategy, chain-of-responsibility) en chat y sesión (`apps/api/src/domain`, `apps/api/src/services`).
+- FastAPI modular con routers especializados (`apps/backend/src/routers`).
+- Diseño por dominios + patrones (builder, strategy, chain-of-responsibility) en chat y sesión (`apps/backend/src/domain`, `apps/backend/src/services`).
 - Integraciones externas encapsuladas (SAPTIVA, Aletheia, MinIO, LanguageTool).
-- Base de datos con Beanie ODM, índices y validaciones (`apps/api/src/models`).
+- Base de datos con Beanie ODM, índices y validaciones (`apps/backend/src/models`).
 
 ## Pruebas y calidad
 
@@ -924,17 +924,17 @@ El proyecto se valida principalmente desde el `Makefile`, lo que encapsula entor
    ```
 
 ### Dónde agregar nuevas pruebas
-- **API**: `apps/api/tests/unit` para unitarias puras, `apps/api/tests/integration` para pruebas con Mongo/Redis (usa fixtures de `conftest.py`), `apps/api/tests/mcp` para herramientas MCP.
+- **API**: `apps/backend/tests/unit` para unitarias puras, `apps/backend/tests/integration` para pruebas con Mongo/Redis (usa fixtures de `conftest.py`), `apps/backend/tests/mcp` para herramientas MCP.
 - **Frontend**: `apps/web/src/components/**/__tests__` (Testing Library) o `apps/web/__tests__` para flujos de páginas. Usa `pnpm test -- FileName`.
 - **Playwright**: `tests/` agrupa escenarios end-to-end; cada spec se ejecuta contra la stack levantada (`make dev`). Puedes crear nuevos specs y reutilizar fixtures de `tests/utils`.
 
 Consejos:
 - `make debug-logs-errors` ayuda cuando un test falla dentro de contenedores.
-- Usa `pytest -k <pattern>` desde `apps/api` si necesitas filtrar una prueba específica (`make shell-api` → `pytest tests/unit/test_chat_service.py -k "happy_path"`).
+- Usa `pytest -k <pattern>` desde `apps/backend` si necesitas filtrar una prueba específica (`make shell-api` → `pytest tests/unit/test_chat_service.py -k "happy_path"`).
 - Para pruebas que dependen de configuraciones específicas (.env), ajusta `envs/.env.local` y reinicia los servicios con `make reload-env`.
 
 ## Observabilidad y DevOps
-- Logs estructurados via structlog + OpenTelemetry exporters (`apps/api/src/core/logging.py`, `apps/api/src/core/telemetry.py`).
+- Logs estructurados via structlog + OpenTelemetry exporters (`apps/backend/src/core/logging.py`, `apps/backend/src/core/telemetry.py`).
 - Dashboards y alertas en `infra/observability/` (Prometheus + Grafana + Alertmanager).
 - Makefile con más de 100 objetivos: rebuild, debug, despliegues, backups (`Makefile`).
 - Scripts operativos en `scripts/` cubren deploy, rollback, health-check y limpieza de cachés.
@@ -975,10 +975,10 @@ Vista rápida de carpetas raíz y submódulos más relevantes. La idea es poder 
 
 | Ruta | Propósito | Patrones / Notas |
 |------|-----------|------------------|
-| `apps/api/src` | Backend FastAPI, integra Chat + MCP + COPILOTO_414 | Clean Architecture (core/routers/services), Chain of Responsibility en chat, Builder para respuestas |
+| `apps/backend/src` | Backend FastAPI, integra Chat + MCP + COPILOTO_414 | Clean Architecture (core/routers/services), Chain of Responsibility en chat, Builder para respuestas |
 | `apps/web/src` | Frontend Next.js 14 con App Router y Zustand | State pattern en stores, Gateway pattern en `lib/api-client.ts`, componentes UI críticos probados |
-| `apps/api/src/mcp` | Servidor FastMCP, herramientas (audit_file, excel_analyzer, etc.) y rutas lazy | Adapter hacia FastAPI, Lazy loading para reducir contexto, integración con telemetría |
-| `apps/api/src/services` | Servicios de dominio (ChatService, ValidationCoordinator, Storage, etc.) | Strategy + Orchestrator para chat/auditorías, integración con MinIO, Redis y SAPTIVA |
+| `apps/backend/src/mcp` | Servidor FastMCP, herramientas (audit_file, excel_analyzer, etc.) y rutas lazy | Adapter hacia FastAPI, Lazy loading para reducir contexto, integración con telemetría |
+| `apps/backend/src/services` | Servicios de dominio (ChatService, ValidationCoordinator, Storage, etc.) | Strategy + Orchestrator para chat/auditorías, integración con MinIO, Redis y SAPTIVA |
 | `docs/` | Documentación detallada (ARCHITECTURE, MCP, auditoría, planes de migración) | Diagramas Mermaid, reportes de fases, guías operativas |
 | `infra/` | Docker Compose, Nginx, observabilidad, pipelines de despliegue | Healthchecks por servicio, perfiles dev/prod, dashboards Prometheus/Grafana |
 | `scripts/` | Scripts bash/python para deploy, salud, limpieza, testing MCP | Automatizan tareas repetitivas (`make troubleshoot`, `deploy.sh`, etc.) |
@@ -988,8 +988,8 @@ Vista rápida de carpetas raíz y submódulos más relevantes. La idea es poder 
 | `packages/` | Librerías TypeScript reutilizables (pnpm workspace) | UI tokens, hooks compartidos y clientes base |
 
 Referencias rápidas para navegar código:
-- `apps/api/src/routers/chat` contiene los endpoints REST/SSE; cada handler llama a estrategias en `apps/api/src/domain/message_handlers`.
-- `apps/api/src/mcp` se divide en `tool.py` (contratos), `lazy_routes.py` (discover/load/invoke) y `tools/*` (implementaciones concretas).
+- `apps/backend/src/routers/chat` contiene los endpoints REST/SSE; cada handler llama a estrategias en `apps/backend/src/domain/message_handlers`.
+- `apps/backend/src/mcp` se divide en `tool.py` (contratos), `lazy_routes.py` (discover/load/invoke) y `tools/*` (implementaciones concretas).
 - `apps/web/src/lib` concentra stores Zustand, clientes HTTP/MCP y hooks reutilizables (imperativo revisar aquí antes de duplicar lógica en componentes).
 - `infra/docker-compose*.yml` define perfiles y nombres de contenedor (`octavios-chat-capital414-*`) usados por el Makefile.
 

@@ -119,8 +119,8 @@ dev:
 	@echo "$(GREEN)🟢━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
 	@echo "  $(BLUE)🔵 Frontend:  $(YELLOW)http://localhost:3000$(NC)"
-	@echo "  $(BLUE)🔵 API:       $(YELLOW)http://localhost:8001$(NC)"
-	@echo "  $(BLUE)🔵 Docs:      $(YELLOW)http://localhost:8001/docs$(NC)"
+	@echo "  $(BLUE)🔵 Backend:   $(YELLOW)http://localhost:8000$(NC)"
+	@echo "  $(BLUE)🔵 Docs:      $(YELLOW)http://localhost:8000/docs$(NC)"
 	@echo ""
 	@echo "$(YELLOW)🟡 Waiting for services to be healthy...$(NC)"
 	@sleep 5
@@ -170,8 +170,8 @@ health:
 	@echo "$(BLUE)🔵 Health Check $(NC)"
 	@echo "$(BLUE)🔵━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@printf "  $(YELLOW)🟡 API Health:         $(NC)"
-	@if curl -sf http://localhost:8001/api/health > /dev/null 2>&1; then \
+	@printf "  $(YELLOW)🟡 Backend Health:     $(NC)"
+	@if curl -sf http://localhost:8000/api/health > /dev/null 2>&1; then \
 		echo "$(GREEN)🟢 Healthy$(NC)"; \
 	else \
 		echo "$(RED)🔴 Unhealthy$(NC)"; \
@@ -235,17 +235,17 @@ endif
 
 test-local:
 	@echo "$(YELLOW)🧪 Running tests locally with .venv...$(NC)"
-	@if [ ! -d "apps/api/.venv" ]; then \
-		echo "$(RED)❌ .venv not found in apps/api. Run 'make setup' or create it manually.$(NC)"; \
+	@if [ ! -d "apps/backend/.venv" ]; then \
+		echo "$(RED)❌ .venv not found in apps/backend. Run 'make setup' or create it manually.$(NC)"; \
 		exit 1; \
 	fi
 	@echo "$(YELLOW)📥 Loading environment from envs/.env.local (if exists)...$(NC)"
 ifdef FILE
 	@eval $$(./scripts/env-manager.sh load local) && \
-	cd apps/api && .venv/bin/python -m pytest $(FILE) $(ARGS)
+	cd apps/backend && .venv/bin/python -m pytest $(FILE) $(ARGS)
 else
 	@eval $$(./scripts/env-manager.sh load local) && \
-	cd apps/api && .venv/bin/python -m pytest tests/ $(ARGS)
+	cd apps/backend && .venv/bin/python -m pytest tests/ $(ARGS)
 endif
 
 # ============================================================================ 

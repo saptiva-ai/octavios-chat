@@ -122,7 +122,7 @@ make test-all && make test-e2e
 - ✅ **Build optimization**: pnpm workspace, standalone output
 - ✅ **Security**: No secrets en imagen final
 
-#### `apps/api/Dockerfile`
+#### `apps/backend/Dockerfile`
 - ✅ **Multi-stage builds**: 3 stages (base, deps, development, production)
 - ✅ **Non-root user**: `api_user` (UID 1001)
 - ✅ **Build optimization**: Separación de build/runtime deps
@@ -206,7 +206,7 @@ make test-all && make test-e2e
 
 ### Workers Directory
 
-**Archivo**: [`apps/api/src/workers/README.md`](/apps/api/src/workers/README.md)
+**Archivo**: [`apps/backend/src/workers/README.md`](/apps/backend/src/workers/README.md)
 
 **Contenido**:
 - 📋 Arquitectura propuesta (Celery vs BullMQ)
@@ -439,13 +439,13 @@ process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001"
 ### Nuevos Archivos
 1. `SECURITY.md` - Reporte completo de vulnerabilidades
 2. `scripts/maintenance/cleanup-server.sh` - Script de mantenimiento
-3. `apps/api/src/workers/README.md` - Arquitectura de workers
+3. `apps/backend/src/workers/README.md` - Arquitectura de workers
 4. `OCTAVIUS_2.0_HYGIENE_REPORT.md` - Este documento
 
 ### Archivos Modificados
 1. `apps/web/.husky/pre-commit` - Integración de secrets detection
-2. `apps/api/src/routers/deep_research.py` - TODOs estructurados
-3. `apps/api/src/services/validation_coordinator.py` - TODOs estructurados
+2. `apps/backend/src/routers/deep_research.py` - TODOs estructurados
+3. `apps/backend/src/services/validation_coordinator.py` - TODOs estructurados
 
 ---
 

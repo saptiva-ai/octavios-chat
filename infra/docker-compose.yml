@@ -181,14 +181,16 @@ services:
       - octavios-network
 
   # ========================================
-  # FASTAPI BACKEND
+  # FASTAPI BACKEND (CORE)
   # ========================================
+  # Renamed from 'api' service - now the Core/Kernel in Plugin-First Architecture
+  # Port changed from 8001 to 8000 as part of architecture refactor
   api:
     build:
-      context: ../apps/api
+      context: ../apps/backend
       dockerfile: Dockerfile
       target: production
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-api
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-backend
     restart: unless-stopped
     env_file:
       - ../envs/.env
@@ -206,7 +208,7 @@ services:
 
       # CORS y Hosts permitidos
       - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:3000"]}
-      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-["localhost","127.0.0.1","web","api"]}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-["localhost","127.0.0.1","web","api","backend"]}
 
       # Logging y debug
       - LOG_LEVEL=${LOG_LEVEL:-info}
@@ -259,8 +261,12 @@ services:
       - RATE_LIMIT_PERIOD=${RATE_LIMIT_PERIOD:-60}
 
       # Observabilidad
-      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-octavios-bridge}
+      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-octavios-backend}
       - JAEGER_ENDPOINT=${JAEGER_ENDPOINT:-http://localhost:14268/api/traces}
+
+      # Plugin URLs (for future Plugin-First Architecture)
+      - FILE_MANAGER_URL=${FILE_MANAGER_URL:-http://file-manager:8003}
+      - CAPITAL414_URL=${CAPITAL414_URL:-http://capital414-auditor:8002}
 
     depends_on:
       mongodb:
@@ -275,15 +281,15 @@ services:
         condition: service_started
 
     ports:
-      - "${API_PORT:-8001}:8001"
+      - "${API_PORT:-8000}:8000"
 
     # Volume mount for hot reload in development
     # Source code is mounted to enable immediate reflection of changes
     volumes:
-      - ../apps/api/src:/app/src
+      - ../apps/backend/src:/app/src
 
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -314,8 +320,8 @@ services:
     environment:
       - PORT=3000
       - NODE_ENV=${NODE_ENV:-development}
-      - API_BASE_URL=http://api:8001
-      # NEXT_PUBLIC_API_URL not set to enable Next.js proxy (/api/* -> http://api:8001/api/*)
+      - API_BASE_URL=http://api:8000
+      # NEXT_PUBLIC_API_URL not set to enable Next.js proxy (/api/* -> http://api:8000/api/*)
       - NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME:-Saptiva Copilot OS}
       - NEXT_PUBLIC_APP_VERSION=${NEXT_PUBLIC_APP_VERSION:-1.0.0}
       - NEXT_PUBLIC_ENABLE_STREAMING=${NEXT_PUBLIC_ENABLE_STREAMING:-true}
@@ -393,7 +399,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-octavios}-playwright
     environment:
       - PLAYWRIGHT_BASE_URL=http://web:3000
-      - API_BASE_URL=http://api:8001
+      - API_BASE_URL=http://api:8000
     volumes:
       - ../tests:/app/tests
       - ../playwright-report:/app/playwright-report
