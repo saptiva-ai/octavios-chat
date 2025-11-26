@@ -108,14 +108,15 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && apt-get autoremove -y
 
-# Create non-root user
-RUN useradd --create-home --shell /bin/bash --uid 1001 api_user
+# Create non-root user (commented for development - volume mount permissions)
+# In production, uncomment the following lines for security
+# RUN useradd --create-home --shell /bin/bash --uid 1001 api_user
 
 # Copy application code
-COPY --chown=api_user:api_user . .
+COPY . .
 
-# Switch to non-root user
-USER api_user
+# Switch to non-root user (disabled for development)
+# USER api_user
 
 # Expose port
 EXPOSE 8000
