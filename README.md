@@ -762,7 +762,7 @@ Arquitectura reactiva moderna con React Query + Zustand, optimistic updates, y e
 **Arquitectura Reactiva**:
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#0f172a','lineColor': '#111827','textColor': '#111827','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#0f172a','primaryBorderColor': '#38bdf8','primaryTextColor': '#0f172a','lineColor': '#111827','textColor': '#111827','secondaryColor': '#ffffff','secondaryBorderColor': '#cbd5e1','secondaryTextColor': '#0f172a','tertiaryColor': '#f8fafc','tertiaryBorderColor': '#cbd5e1','tertiaryTextColor': '#0f172a'}}}%%
 flowchart TB
     User[("👤 Usuario")]:::user
 
@@ -817,7 +817,7 @@ flowchart TB
     classDef cache fill:#e5e7eb,stroke:#94a3b8,color:#0f172a;
     classDef sync fill:#f8fafc,stroke:#cbd5e1,color:#0f172a;
     classDef network fill:#c6f6d5,stroke:#16a34a,color:#0f172a;
-    classDef backend fill:#ffe0a3,stroke:#f59e0b,color:#0f172a;
+    classDef backend fill:#0f172a,stroke:#38bdf8,color:#e2e8f0;
 ```
 
 **Capas de la Arquitectura**:
