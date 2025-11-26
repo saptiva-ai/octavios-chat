@@ -23,8 +23,9 @@ class MinIOService:
         self.secret_key = os.getenv("MINIO_SECRET_KEY", "minioadmin")
         self.secure = os.getenv("MINIO_SECURE", "false").lower() == "true"
 
+        # MinIO 7.2.x API: Constructor now requires named 'endpoint' parameter
         self.client = Minio(
-            self.endpoint,
+            endpoint=self.endpoint,
             access_key=self.access_key,
             secret_key=self.secret_key,
             secure=self.secure,
@@ -43,8 +44,9 @@ class MinIOService:
         """Ensure required buckets exist"""
         for bucket in [self.documents_bucket, self.artifacts_bucket, self.temp_files_bucket, self.thumbnails_bucket]:
             try:
-                if not self.client.bucket_exists(bucket):
-                    self.client.make_bucket(bucket)
+                # MinIO 7.2.x API: bucket_exists() and make_bucket() require named parameters
+                if not self.client.bucket_exists(bucket_name=bucket):
+                    self.client.make_bucket(bucket_name=bucket)
                     logger.info(f"Created MinIO bucket: {bucket}")
 
                     # Configure lifecycle policy for temporary buckets (1 day TTL)

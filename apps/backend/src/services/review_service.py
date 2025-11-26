@@ -25,7 +25,8 @@ from ..models.review_job import (
 )
 from ..schemas.review import ReviewStartRequest
 from .languagetool_client import languagetool_client
-from .color_auditor import color_auditor
+# NOTE: color_auditor moved to plugins/capital414-private (Plugin-First Architecture)
+# from .color_auditor import color_auditor
 from .saptiva_client import saptiva_client
 
 logger = structlog.get_logger(__name__)
@@ -59,7 +60,8 @@ Esquema JSON por bloque:
 
     def __init__(self):
         self.lt_client = languagetool_client
-        self.auditor = color_auditor
+        # NOTE: color_auditor moved to plugins/capital414-private (Plugin-First Architecture)
+        # self.auditor = color_auditor
         self.max_block_tokens = 1200
         self.lt_threshold_for_cortex = 5  # Switch to Cortex if ≥5 LT findings
 
@@ -468,7 +470,10 @@ Devuelve SOLO el JSON con el esquema indicado."""
         full_text = "\n\n".join([page.text_md for page in doc.pages])
 
         # Audit colors
-        audit_result = self.auditor.audit_document_colors(full_text)
+        # NOTE: color_auditor moved to plugins/capital414-private (Plugin-First Architecture)
+        # audit_result = self.auditor.audit_document_colors(full_text)
+        # Temporary: Return empty result until color audit is integrated via plugin
+        audit_result = {"status": "skipped", "message": "Color auditor moved to capital414-private plugin"}
 
         return audit_result
 

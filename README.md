@@ -52,12 +52,156 @@
   - [Licencia y soporte](#licencia-y-soporte)
 
 ## Resumen rápido
+- **Arquitectura Plugin-First (Micro-Kernel)**: Core ligero orquesta plugins públicos (File Manager) y privados (Capital414) como microservicios independientes.
 - Chat multi-modelo (Turbo, Cortex, Ops, etc.) con SSE y chain-of-responsibility (`apps/backend/src/routers/chat/endpoints/message_endpoints.py`).
 - Integración MCP oficial (FastMCP) con lazy loading y telemetría (`apps/backend/src/mcp/server.py`).
 - Pipeline documental: subida segura, cache Redis y extracción multi-tier antes del RAG (`apps/backend/src/services/document_service.py`).
 - COPILOTO_414 coordina auditores de disclaimer, formato, logos, tipografía, gramática y consistencia semántica (`apps/backend/src/services/validation_coordinator.py`).
 - Frontend Next.js 14 + Zustand con herramientas de archivos, research y UI accesible (`apps/web/src/lib/stores/chat-store.ts`).
 - Seguridad empresarial: JWT con revocación en Redis, rate limiting y políticas CSP en Nginx (`apps/backend/src/middleware/auth.py`).
+
+## Arquitectura Plugin-First (Micro-Kernel)
+
+OctaviOS utiliza una arquitectura **Plugin-First** (también conocida como Micro-Kernel) que separa la infraestructura en tres capas:
+
+### Filosofía de Diseño
+
+**Antes (Monolito)**: Un solo backend manejaba chat, archivos, auditorías, embeddings y almacenamiento. Cambios en una funcionalidad requerían rebuild completo.
+
+**Ahora (Plugin-First)**:
+- **Core (Kernel)**: Backend ligero que solo orquesta chat, usuarios y conexiones
+- **Plugins Públicos**: Infraestructura reutilizable (File Manager, Web Browsing, Memory) - Open Source ready
+- **Plugins Privados**: Lógica de negocio propietaria (Capital414 Auditor, Bank Advisor)
+
+### Diagrama de Containers y Dependencias
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#111111','primaryBorderColor': '#4b5563','primaryTextColor': '#f9fafb','lineColor': '#4b5563','secondaryColor': '#ffffff','secondaryBorderColor': '#4b5563','secondaryTextColor': '#111111','tertiaryColor': '#d1d5db','tertiaryBorderColor': '#4b5563','tertiaryTextColor': '#111111'}}}%%
+flowchart TB
+    subgraph Frontend["🎨 Frontend Layer"]
+        web["Next.js 14 Web<br/>Port: 3000<br/>Zustand + React Query"]:::frontend
+    end
+
+    subgraph Core["⚙️ Core Layer (Kernel)"]
+        backend["Backend Core<br/>Port: 8000<br/>Chat · Auth · Orchestration"]:::core
+    end
+
+    subgraph PublicPlugins["🔌 Public Plugins (Open Source Ready)"]
+        filemanager["File Manager Plugin<br/>Port: 8003<br/>Upload · Download · Extract"]:::plugin_public
+    end
+
+    subgraph PrivatePlugins["🔒 Private Plugins (Proprietary)"]
+        capital414["Capital414 Auditor<br/>Port: 8002<br/>COPILOTO_414 Compliance"]:::plugin_private
+    end
+
+    subgraph Infrastructure["🗄️ Infrastructure Layer"]
+        mongo[("MongoDB<br/>Port: 27017<br/>Sessions · Messages")]:::infra
+        redis[("Redis<br/>Port: 6379<br/>Cache · JWT Blacklist")]:::infra
+        minio[("MinIO<br/>Port: 9000<br/>S3 Object Storage")]:::infra
+        qdrant[("Qdrant<br/>Port: 6333<br/>Vector Database")]:::infra
+        languagetool["LanguageTool<br/>Port: 8010<br/>Grammar Check"]:::infra
+    end
+
+    %% User to Frontend
+    user((👤 User)) --> web
+
+    %% Frontend to Core
+    web -->|"HTTP/SSE"| backend
+
+    %% Core depends on Public Plugins
+    backend -.->|"Depends on<br/>(health check)"| filemanager
+
+    %% Private Plugins depend on Public Plugins
+    capital414 -.->|"Depends on<br/>(health check)"| filemanager
+
+    %% Backend to Infrastructure
+    backend --> mongo
+    backend --> redis
+
+    %% File Manager to Infrastructure
+    filemanager --> minio
+    filemanager --> redis
+
+    %% Capital414 to Infrastructure
+    capital414 --> languagetool
+    capital414 -->|"HTTP Client"| filemanager
+
+    %% Core to Private Plugins (optional MCP integration)
+    backend -.->|"MCP Protocol<br/>(optional)"| capital414
+
+    classDef frontend fill:#3b82f6,stroke:#1e40af,color:#ffffff
+    classDef core fill:#10b981,stroke:#059669,color:#ffffff
+    classDef plugin_public fill:#f59e0b,stroke:#d97706,color:#111111
+    classDef plugin_private fill:#ef4444,stroke:#dc2626,color:#ffffff
+    classDef infra fill:#6b7280,stroke:#4b5563,color:#ffffff
+```
+
+### Service Dependency Chain
+
+La cadena de dependencias garantiza inicio ordenado:
+
+```
+1. Infrastructure Layer
+   └─> MongoDB, Redis, MinIO, Qdrant, LanguageTool (parallel start)
+
+2. Public Plugins Layer
+   └─> File Manager (depends on: MinIO healthy, Redis healthy)
+
+3. Core Layer
+   └─> Backend (depends on: MongoDB healthy, Redis healthy, File Manager healthy)
+
+4. Private Plugins Layer
+   └─> Capital414 Auditor (depends on: File Manager healthy, LanguageTool healthy)
+
+5. Frontend Layer
+   └─> Next.js Web (depends on: Backend healthy)
+```
+
+### Beneficios de Plugin-First
+
+| Ventaja | Descripción |
+|---------|-------------|
+| **Desacoplamiento** | Plugins se desarrollan, prueban y despliegan independientemente |
+| **Escalabilidad Horizontal** | Escalar solo el plugin que necesita más recursos (ej: File Manager) |
+| **Open Source Ready** | Plugins públicos pueden liberarse sin exponer lógica de negocio |
+| **Hot Swap** | Reemplazar implementaciones (ej: MinIO File Manager → Google Drive Plugin) |
+| **Ownership Claro** | Cada plugin tiene un owner, CI/CD y versioning independiente |
+
+### Comunicación entre Plugins
+
+**HTTP Client Pattern** (Actual):
+- Core y Capital414 tienen `FileManagerClient` que consume File Manager via HTTP REST
+- Ejemplo: `await file_manager_client.download_to_temp(minio_key)` en Capital414
+
+**MCP Protocol** (Futuro - Opcional):
+- Plugins pueden exponerse como MCP servers para mayor flexibilidad
+- Core puede descubrir y consumir herramientas de plugins via MCP lazy loading
+
+### Ports and URLs
+
+| Service | Port | Internal URL | External URL |
+|---------|------|--------------|--------------|
+| Frontend (Next.js) | 3000 | - | http://localhost:3000 |
+| Backend Core | 8000 | http://backend:8000 | http://localhost:8000 |
+| File Manager | 8003 | http://file-manager:8003 | http://localhost:8003 |
+| Capital414 | 8002 | http://capital414-auditor:8002 | http://localhost:8002 |
+| MongoDB | 27017 | mongodb://mongodb:27017 | - |
+| Redis | 6379 | redis://redis:6379 | - |
+| MinIO | 9000 | http://minio:9000 | http://localhost:9000 |
+| MinIO Console | 9001 | - | http://localhost:9001 |
+| Qdrant | 6333 | http://qdrant:6333 | http://localhost:6333 |
+| LanguageTool | 8010 | http://languagetool:8010 | - |
+
+### Referencias de Código
+
+| Componente | Path |
+|------------|------|
+| Backend Core | `apps/backend/` |
+| File Manager Plugin | `plugins/public/file-manager/` |
+| Capital414 Plugin | `plugins/capital414-private/` |
+| Backend FileManagerClient | `apps/backend/src/clients/file_manager.py` |
+| Capital414 FileManagerClient | `plugins/capital414-private/src/clients/file_manager.py` |
+| Docker Compose | `infra/docker-compose.yml` |
 
 ## Visión de alto nivel
 

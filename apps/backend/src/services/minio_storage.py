@@ -142,8 +142,9 @@ class MinioStorageService:
         """Create buckets if they don't exist."""
         for bucket_name in [self.bucket_documents, self.bucket_reports]:
             try:
-                if not self.client.bucket_exists(bucket_name):
-                    self.client.make_bucket(bucket_name)
+                # MinIO 7.2.x API: bucket_exists() and make_bucket() require named parameters
+                if not self.client.bucket_exists(bucket_name=bucket_name):
+                    self.client.make_bucket(bucket_name=bucket_name)
                     logger.info("Created MinIO bucket", bucket=bucket_name)
                 else:
                     logger.debug("MinIO bucket exists", bucket=bucket_name)
@@ -559,8 +560,9 @@ class MinioStorageService:
         """
         try:
             # Ensure bucket exists
-            if not self.client.bucket_exists(bucket_name):
-                self.client.make_bucket(bucket_name)
+            # MinIO 7.2.x API: bucket_exists() and make_bucket() require named parameters
+            if not self.client.bucket_exists(bucket_name=bucket_name):
+                self.client.make_bucket(bucket_name=bucket_name)
                 logger.info("Created MinIO bucket", bucket=bucket_name)
 
             # Upload to MinIO
