@@ -36,15 +36,23 @@ octavios-repo/
 ├── plugins/
 │   ├── public/                  # OPEN SOURCE
 │   │   └── file-manager/        # Procesador de archivos (REST + MCP)
-│   │       ├── src/
-│   │       │   ├── services/    # MinIO, OCR, extraction
-│   │       │   ├── routers/     # /upload, /download
-│   │       │   └── mcp/         # read_file_text, extract_metadata
-│   │       ├── Dockerfile
-│   │       └── requirements.txt
+│   │   │   ├── src/
+│   │   │   │   ├── services/    # MinIO, OCR, extraction
+│   │   │   │   ├── routers/     # /upload, /download
+│   │   │   │   └── mcp/         # read_file_text, extract_metadata
+│   │   │   ├── Dockerfile
+│   │   │   └── requirements.txt
+│   │   └── deep-research/        # DeepReseach API(REST + MCP)
+│   │   │   ├── src/
+│   │   │   │   ├── services/    # Taavily
+│   │   │   │   ├── routers/     # /research, /deepresearch
+│   │   │   │   └── mcp/         # research, deepreseach
+│   │   │   ├── Dockerfile
+│   │   │   └── requirements.txt
 │   │
 │   └── private/                 # PROPIETARIO (gitignored/submódulos)
-│       └── capital414/          # Ya existe en plugins/capital414-private/
+│       └── capital414/          
+│       └── bajaware_invex/
 │
 ├── apps/web/                    # Frontend (sin cambios)
 └── infra/
@@ -1123,16 +1131,16 @@ make restart
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                         Navegador / Cliente                          │
+│                         Navegador / Cliente                         │
 └──────────────────────────────┬──────────────────────────────────────┘
                                │
                                ↓
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    Nginx (API Gateway)                               │
+│                    Nginx (API Gateway)                              │
 │  ┌────────────────────────────────────────────────────────────────┐ │
 │  │ /api/v1/files/* → file-manager:8003                            │ │
 │  │ /api/*          → backend:8001                                 │ │
-│  │ /               → web:3000                                      │ │
+│  │ /               → web:3000                                     │ │
 │  └────────────────────────────────────────────────────────────────┘ │
 └──────────────────────────────┬──────────────────────────────────────┘
                                │

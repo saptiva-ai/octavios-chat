@@ -13,6 +13,14 @@
 - [Saptiva OctaviOS Chat](#saptiva-octavios-chat)
   - [Tabla de contenidos](#tabla-de-contenidos)
   - [Resumen rápido](#resumen-rápido)
+  - [Arquitectura Plugin-First (Micro-Kernel)](#arquitectura-plugin-first-micro-kernel)
+    - [Filosofía de Diseño](#filosofía-de-diseño)
+    - [Diagrama de Containers y Dependencias](#diagrama-de-containers-y-dependencias)
+    - [Service Dependency Chain](#service-dependency-chain)
+    - [Beneficios de Plugin-First](#beneficios-de-plugin-first)
+    - [Comunicación entre Plugins](#comunicación-entre-plugins)
+    - [Ports and URLs](#ports-and-urls)
+    - [Referencias de Código](#referencias-de-código)
   - [Visión de alto nivel](#visión-de-alto-nivel)
     - [Mapa de arquitectura (alto nivel)](#mapa-de-arquitectura-alto-nivel)
     - [Contenedores principales](#contenedores-principales)
@@ -21,6 +29,7 @@
     - [Plataforma conversacional](#plataforma-conversacional)
     - [Documentos y RAG](#documentos-y-rag)
     - [Cumplimiento COPILOTO\_414](#cumplimiento-copiloto_414)
+    - [Integración Audit File + Canvas (OpenCanvas)](#integración-audit-file--canvas-opencanvas)
     - [Model Context Protocol (MCP)](#model-context-protocol-mcp)
     - [Seguridad y observabilidad](#seguridad-y-observabilidad)
   - [Arquitectura](#arquitectura)
@@ -29,6 +38,7 @@
     - [Integración Frontend ↔ Backend](#integración-frontend--backend)
     - [Flujo de chat (secuencia)](#flujo-de-chat-secuencia)
     - [Pipeline de ingestión y auditoría](#pipeline-de-ingestión-y-auditoría)
+    - [Flujo de Audit Command + Canvas](#flujo-de-audit-command--canvas)
     - [Lazy loading MCP (descubrimiento → invocación)](#lazy-loading-mcp-descubrimiento--invocación)
   - [Inicio rápido](#inicio-rápido)
     - [Prerrequisitos](#prerrequisitos)
@@ -76,7 +86,7 @@ OctaviOS utiliza una arquitectura **Plugin-First** (también conocida como Micro
 ### Diagrama de Containers y Dependencias
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#111111','primaryBorderColor': '#4b5563','primaryTextColor': '#f9fafb','lineColor': '#4b5563','secondaryColor': '#ffffff','secondaryBorderColor': '#4b5563','secondaryTextColor': '#111111','tertiaryColor': '#d1d5db','tertiaryBorderColor': '#4b5563','tertiaryTextColor': '#111111'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#111111','primaryBorderColor': '#4b5563','primaryTextColor': '#4b5563','lineColor': '#4b5563','secondaryColor': '#ffffff','secondaryBorderColor': '#4b5563','secondaryTextColor': '#111111','tertiaryColor': '#d1d5db','tertiaryBorderColor': '#4b5563','tertiaryTextColor': '#111111'}}}%%
 flowchart TB
     subgraph Frontend["🎨 Frontend Layer"]
         web["Next.js 14 Web<br/>Port: 3000<br/>Zustand + React Query"]:::frontend
