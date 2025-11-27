@@ -8,8 +8,7 @@
 #   Producción: docker compose -f infra/docker-compose.yml --profile production up -d
 
 # CRITICAL: Name must match existing production deployment to reuse volumes
-# Production uses "capital414-chat" as project name, not "octavios-chat-capital414"
-name: ${COMPOSE_PROJECT_NAME:-capital414-chat}
+name: ${COMPOSE_PROJECT_NAME:-octavios-chat}
 
 services:
   # ========================================
@@ -266,7 +265,6 @@ services:
 
       # Plugin URLs (for future Plugin-First Architecture)
       - FILE_MANAGER_URL=${FILE_MANAGER_URL:-http://file-manager:8001}
-      - CAPITAL414_URL=${CAPITAL414_URL:-http://file-auditor:8002}
 
     depends_on:
       mongodb:
@@ -322,8 +320,8 @@ services:
     environment:
       - PORT=3000
       - NODE_ENV=${NODE_ENV:-development}
-      - API_BASE_URL=http://api:8000
-      # NEXT_PUBLIC_API_URL not set to enable Next.js proxy (/api/* -> http://api:8000/api/*)
+      - API_BASE_URL=http://backend:8000
+      # NEXT_PUBLIC_API_URL not set to enable Next.js proxy (/api/* -> http://backend:8000/api/*)
       - NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME:-Saptiva Copilot OS}
       - NEXT_PUBLIC_APP_VERSION=${NEXT_PUBLIC_APP_VERSION:-1.0.0}
       - NEXT_PUBLIC_ENABLE_STREAMING=${NEXT_PUBLIC_ENABLE_STREAMING:-true}
@@ -356,7 +354,7 @@ services:
     #       - /app/apps/web/.next
 
     depends_on:
-      api:
+      backend:
         condition: service_healthy
 
     healthcheck:
@@ -380,7 +378,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/nginx.414.saptiva.com.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - nginx_logs:/var/log/nginx
     depends_on:
@@ -408,7 +406,7 @@ services:
     depends_on:
       web:
         condition: service_healthy
-      api:
+      backend:
         condition: service_healthy
     profiles:
       - testing
@@ -419,7 +417,7 @@ services:
   # FILE MANAGER - Public Plugin Service
   # ========================================
   # Plugin-First Architecture: Public plugin for file operations
-  # Other plugins (like capital414) consume files from this service
+  # Other plugins consume files from this service
   file-manager:
     build:
       context: ..
@@ -456,47 +454,6 @@ services:
     networks:
       - octavios-network
 
-  # ========================================
-  # FILE AUDITOR - MCP Plugin Service (Private)
-  # ========================================
-  # Plugin-First Architecture: Private plugin for document auditing
-  # Consumes files from file-manager plugin via HTTP
-  file-auditor:
-    build:
-      context: ..
-      dockerfile: plugins/capital414-private/Dockerfile
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-file-auditor
-    restart: unless-stopped
-    env_file:
-      - ../envs/.env
-    environment:
-      - MCP_SERVER_NAME=file-auditor
-      - MCP_SERVER_PORT=8002
-      - LANGUAGETOOL_URL=http://languagetool:8010/v2/check
-      # Plugin-First: Get files from file-manager instead of direct MinIO
-      - FILE_MANAGER_URL=http://file-manager:8001
-      - PYTHONPATH=/app/src
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-    ports:
-      - "${CAPITAL414_AUDITOR_PORT:-8002}:8002"
-    volumes:
-      # Hot reload in development
-      - ../plugins/capital414-private/src:/app/src
-      # Shared temp directory for PDF reports
-      - /tmp/capital414-reports:/tmp/capital414-reports
-    depends_on:
-      languagetool:
-        condition: service_healthy
-      file-manager:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8002/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    networks:
-      - octavios-network
 
 # ========================================
 # VOLUMES

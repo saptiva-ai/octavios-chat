@@ -28,7 +28,7 @@ services:
       # Anonymous volume for build artifacts
       - /app/apps/web/.next
 
-  api:
+  backend:
     user: "${UID:-1000}:${GID:-1000}"  # Run as host user for volume permissions
     build:
       target: development  # Use development stage with pytest and testing tools

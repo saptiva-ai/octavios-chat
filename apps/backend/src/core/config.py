@@ -199,10 +199,6 @@ class Settings(BaseSettings):
         default="http://file-manager:8001",
         description="File Manager plugin URL for file operations"
     )
-    capital414_url: str = Field(
-        default="http://file-auditor:8002",
-        description="Capital414 auditor plugin URL"
-    )
 
     # SAPTIVA
     saptiva_base_url: str = Field(default="https://api.saptiva.com", description="SAPTIVA API base URL")

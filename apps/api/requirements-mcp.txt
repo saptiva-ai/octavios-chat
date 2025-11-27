@@ -1,4 +1,0 @@
-# MCP (Model Context Protocol) Dependencies
-# https://github.com/jlowin/fastmcp
-
-fastmcp>=2.0.0

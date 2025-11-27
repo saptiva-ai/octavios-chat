@@ -13,7 +13,7 @@ ifneq (,$(wildcard envs/.env))
     export
 endif
 
-PROJECT_NAME := octavios-chat-capital414
+PROJECT_NAME := octavios-chat
 COMPOSE := docker compose -p $(PROJECT_NAME) -f infra/docker-compose.yml
 
 # Colors
