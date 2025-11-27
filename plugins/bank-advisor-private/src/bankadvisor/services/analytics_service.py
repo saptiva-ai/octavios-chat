@@ -86,7 +86,27 @@ class AnalyticsService:
 
         "reservas": "reservas_etapa_todas",
         "cartera vencida": "cartera_vencida",
-        "vencida": "cartera_vencida"
+        "vencida": "cartera_vencida",
+
+        # Capitalización y Tasas (agregadas Phase 4)
+        "icap": "icap_total",
+        "icap_total": "icap_total",  # Direct mapping for legacy flow
+        "capitalización": "icap_total",
+        "capitalizacion": "icap_total",
+        "capital": "icap_total",
+
+        "tda": "tda_cartera_total",
+        "tda_cartera_total": "tda_cartera_total",  # Direct mapping for legacy flow
+        "deterioro": "tda_cartera_total",
+        "tasa deterioro": "tda_cartera_total",
+
+        "tasa_mn": "tasa_mn",
+        "tasa mn": "tasa_mn",
+        "tasa pesos": "tasa_mn",
+
+        "tasa_me": "tasa_me",
+        "tasa me": "tasa_me",
+        "tasa dolares": "tasa_me"
     }
 
     @staticmethod

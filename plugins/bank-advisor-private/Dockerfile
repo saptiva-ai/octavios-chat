@@ -1,21 +1,26 @@
-# BankAdvisor MCP Server Dockerfile
+# BankAdvisor MCP Server Dockerfile - Optimized with uv + hot reload
 FROM python:3.11-slim-bookworm
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies + uv
 RUN apt-get update && apt-get install -y \
     postgresql-client \
     libpq-dev \
     gcc \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Copy requirements and install Python dependencies
-# Context is project root, so use full path to plugin
+# Add uv to PATH
+ENV PATH="/root/.local/bin:$PATH"
+
+# Copy requirements first (for better caching)
 COPY plugins/bank-advisor-private/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+# Install Python dependencies with uv (much faster than pip)
+RUN uv pip install --system --no-cache -r requirements.txt
 
 # Copy application code from plugin directory
 COPY plugins/bank-advisor-private/src/ ./src/
@@ -24,11 +29,8 @@ COPY plugins/bank-advisor-private/data/ ./data/
 # Set PYTHONPATH to include src directory
 ENV PYTHONPATH=/app/src
 
-# Create non-root user
-RUN useradd --create-home --shell /bin/bash --uid 1001 bankadvisor && \
-    chown -R bankadvisor:bankadvisor /app
-
-USER bankadvisor
+# Environment variable for hot reload (dev mode)
+ENV UVICORN_RELOAD=true
 
 # Expose MCP Server port
 EXPOSE 8002
@@ -37,5 +39,5 @@ EXPOSE 8002
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8002/health || exit 1
 
-# Start the MCP server via uvicorn
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8002"]
+# Start the MCP server via uvicorn with hot reload
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8002", "--reload", "--reload-dir", "/app/src"]

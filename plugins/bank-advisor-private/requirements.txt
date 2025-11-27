@@ -2,7 +2,7 @@
 # Core Framework
 fastapi>=0.115.0
 uvicorn[standard]>=0.31.0
-# fastmcp>=2.0.0  # Custom package - not available in PyPI
+fastmcp>=2.0.0  # MCP Protocol library
 
 # Database
 sqlalchemy[asyncio]>=2.0.0

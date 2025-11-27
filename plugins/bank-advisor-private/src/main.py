@@ -12,7 +12,7 @@ Architecture:
 import os
 import asyncio
 from contextlib import asynccontextmanager
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import json
 import structlog
@@ -27,6 +27,8 @@ from bankadvisor.services.analytics_service import AnalyticsService
 from bankadvisor.services.intent_service import IntentService
 from bankadvisor.services.visualization_service import VisualizationService
 
+logger = structlog.get_logger(__name__)
+
 # NL2SQL Phase 2-3 imports (optional - graceful fallback if not available)
 try:
     from bankadvisor.services.query_spec_parser import QuerySpecParser
@@ -37,8 +39,6 @@ try:
 except ImportError as e:
     logger.warning("nl2sql.imports_failed", error=str(e), fallback="Using legacy intent-based logic")
     NL2SQL_AVAILABLE = False
-
-logger = structlog.get_logger(__name__)
 
 # Global instances for NL2SQL services (initialized in lifespan if available)
 _query_parser: Optional["QuerySpecParser"] = None
