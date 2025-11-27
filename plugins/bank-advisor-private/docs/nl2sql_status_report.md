@@ -130,16 +130,20 @@ This report documents the implementation of the NL2SQL architecture for the Bank
 
 ### Metrics Available in Database
 
-| Metric | DB Column | Status |
-|--------|-----------|--------|
-| IMOR | `imor` | ✅ Available |
-| ICOR | `icor` | ✅ Available |
-| CARTERA_COMERCIAL | `cartera_comercial_total` | ✅ Available |
-| CARTERA_TOTAL | `cartera_total` | ✅ Available |
-| CARTERA_CONSUMO | `cartera_consumo_total` | ✅ Available |
-| CARTERA_VIVIENDA | `cartera_vivienda_total` | ✅ Available |
-| CARTERA_VENCIDA | `cartera_vencida` | ✅ Available |
-| RESERVAS | `reservas_etapa_todas` | ✅ Available |
+| Metric | DB Column | Status | Data |
+|--------|-----------|--------|------|
+| IMOR | `imor` | ✅ Available | ✅ Populated (206 records) |
+| ICOR | `icor` | ✅ Available | ✅ Populated (206 records) |
+| CARTERA_COMERCIAL | `cartera_comercial_total` | ✅ Available | ✅ Populated (206 records) |
+| CARTERA_TOTAL | `cartera_total` | ✅ Available | ✅ Populated (206 records) |
+| CARTERA_CONSUMO | `cartera_consumo_total` | ✅ Available | ✅ Populated (206 records) |
+| CARTERA_VIVIENDA | `cartera_vivienda_total` | ✅ Available | ✅ Populated (206 records) |
+| CARTERA_VENCIDA | `cartera_vencida` | ✅ Available | ✅ Populated (206 records) |
+| RESERVAS | `reservas_etapa_todas` | ✅ Available | ✅ Populated (206 records) |
+| **ICAP** | `icap_total` | ✅ **Column added** | ⚠️ **Empty - ETL pending** |
+| **TDA** | `tda_cartera_total` | ✅ **Column added** | ⚠️ **Empty - ETL pending** |
+| **TASA_MN** | `tasa_mn` | ✅ **Column added** | ⚠️ **Empty - ETL pending** |
+| **TASA_ME** | `tasa_me` | ✅ **Column added** | ⚠️ **Empty - ETL pending** |
 
 ### Banks Available in Database
 
@@ -152,25 +156,29 @@ This report documents the implementation of the NL2SQL architecture for the Bank
 
 ## What Doesn't Work Yet ❌
 
-### 1. Missing Database Columns
+### 1. Empty Database Columns (FIXED ✅)
 
-**Impact**: High - Blocks several metrics
+**Status**: ✅ **RESOLVED** - Columns now exist, data loading pending
 
-| Metric | Required Column | Status | Workaround |
-|--------|----------------|--------|------------|
-| ICAP | `icap_total` | ❌ Column doesn't exist | Parser detects and returns error |
-| TDA | `tda_cartera_total` | ❌ Column doesn't exist | Parser detects and returns error |
-| TASA_MN | `tasa_mn` | ❌ Column doesn't exist | Parser detects and returns error |
-| TASA_ME | `tasa_me` | ❌ Column doesn't exist | Parser detects and returns error |
+| Metric | Required Column | Schema Status | Data Status | Impact |
+|--------|----------------|---------------|-------------|--------|
+| ICAP | `icap_total` | ✅ Column exists | ⚠️ Empty (0 records) | Queries work but return empty results |
+| TDA | `tda_cartera_total` | ✅ Column exists | ⚠️ Empty (0 records) | Queries work but return empty results |
+| TASA_MN | `tasa_mn` | ✅ Column exists | ⚠️ Empty (0 records) | Queries work but return empty results |
+| TASA_ME | `tasa_me` | ✅ Column exists | ⚠️ Empty (0 records) | Queries work but return empty results |
 
-**Root Cause**: Columns exist in SQLAlchemy model (`models/kpi.py`) but NOT in PostgreSQL database. The ETL/migration hasn't populated these columns.
+**Resolution Applied** (2025-11-27):
+- ✅ Migration executed: `migrations/001_add_missing_columns.sql`
+- ✅ 4 columns added to PostgreSQL
+- ✅ QuerySpecParser updated to accept these metrics
+- ⚠️ ETL enhancement needed to populate data from source files
 
-**Detection**: QuerySpecParser marks these as `requires_clarification=True` with error message:
-```
-"metric (unsupported - ICAP requires DB columns not available)"
-```
+**Source Files Available**:
+- `data/raw/ICAP_Bancos.xlsx` → icap_total
+- `data/raw/TDA.xlsx` → tda_cartera_total
+- `data/raw/CorporateLoan_CNBVDB.csv` → tasa_mn, tasa_me
 
-**Solution**: Re-run ETL with updated schema or add Alembic migration to create columns.
+**Next Step**: Enhance ETL to load data from these files (see `docs/etl_data_status.md`)
 
 ---
 

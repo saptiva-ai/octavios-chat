@@ -75,12 +75,20 @@ class QuerySpecParser:
         "cartera_vivienda": "CARTERA_VIVIENDA",
         "cartera vencida": "CARTERA_VENCIDA",
         "reservas": "RESERVAS",
-        # UNSUPPORTED (missing DB columns)
-        "icap": None,
-        "icap_total": None,
-        "tda": None,
-        "tasa_mn": None,
-        "tasa_me": None,
+        # SUPPORTED (columns exist but data may be empty - see ETL status)
+        "icap": "ICAP",
+        "icap_cuadro": "ICAP",
+        "icap_total": "ICAP",
+        "capitalizacion": "ICAP",
+        "tda": "TDA",
+        "tda_cuadro": "TDA",
+        "deterioro": "TDA",
+        "tasa_mn": "TASA_MN",
+        "tasa mn": "TASA_MN",
+        "tasa moneda nacional": "TASA_MN",
+        "tasa_me": "TASA_ME",
+        "tasa me": "TASA_ME",
+        "tasa moneda extranjera": "TASA_ME",
     }
 
     # Regex patterns for heuristic fallback
@@ -108,9 +116,9 @@ Consulta del usuario: {user_query}
 Pista de métrica: {intent_hint}
 Modo sugerido: {mode_hint}
 
-Métricas disponibles: IMOR, ICOR, CARTERA_COMERCIAL, CARTERA_TOTAL, CARTERA_CONSUMO, CARTERA_VIVIENDA, CARTERA_VENCIDA, RESERVAS
+Métricas disponibles: IMOR, ICOR, CARTERA_COMERCIAL, CARTERA_TOTAL, CARTERA_CONSUMO, CARTERA_VIVIENDA, CARTERA_VENCIDA, RESERVAS, ICAP, TDA, TASA_MN, TASA_ME
 
-Métricas NO disponibles (reportar como unsupported): ICAP, TDA, TASA_MN, TASA_ME
+Nota: ICAP, TDA, TASA_MN, TASA_ME tienen columnas en DB pero los datos aún no están poblados por el ETL. Las queries se procesarán pero pueden devolver resultados vacíos.
 
 Bancos disponibles: INVEX, SISTEMA (usa SISTEMA para "sistema bancario" o "promedio")
 
@@ -179,15 +187,15 @@ Output:
 Input: "ICAP del sistema"
 Output:
 {{
-  "metric": "",
-  "bank_names": [],
+  "metric": "ICAP",
+  "bank_names": ["SISTEMA"],
   "time_range": {{"type": "all"}},
   "granularity": "month",
   "visualization_type": "bar",
   "comparison_mode": false,
-  "requires_clarification": true,
-  "missing_fields": ["metric (unsupported - ICAP requires DB columns not available)"],
-  "confidence_score": 0.0
+  "requires_clarification": false,
+  "missing_fields": [],
+  "confidence_score": 0.9
 }}
 
 Input: "compara IMOR de INVEX vs Banorte"
@@ -337,15 +345,6 @@ Ahora parsea esta consulta y responde SOLO con el JSON:"""
             missing.append("metric")
             confidence *= 0.5
             metric = ""
-        elif metric == "UNSUPPORTED":
-            return QuerySpec(
-                metric="",
-                bank_names=[],
-                time_range=TimeRangeSpec(type="all"),
-                requires_clarification=True,
-                missing_fields=["metric (unsupported)"],
-                confidence_score=0.0
-            )
 
         # Extract banks
         bank_names = self._extract_banks_heuristic(user_query)
@@ -398,14 +397,10 @@ Ahora parsea esta consulta y responde SOLO con el JSON:"""
             metric = self.METRIC_MAP.get(intent_hint.lower())
             if metric is not None:
                 return metric
-            if metric is None and intent_hint.lower() in self.METRIC_MAP:
-                return "UNSUPPORTED"
 
         query_lower = user_query.lower()
         for keyword, canonical_name in self.METRIC_MAP.items():
             if keyword in query_lower:
-                if canonical_name is None:
-                    return "UNSUPPORTED"
                 return canonical_name
 
         return None
