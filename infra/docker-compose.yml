@@ -266,6 +266,10 @@ services:
       # Plugin URLs (for future Plugin-First Architecture)
       - FILE_MANAGER_URL=${FILE_MANAGER_URL:-http://file-manager:8001}
 
+      # MCP Server URLs (bank-advisor for banking analytics)
+      - MCP_SERVERS_URLS=${MCP_SERVERS_URLS:-["http://bank-advisor:8002/sse"]}
+      - BANK_ADVISOR_URL=${BANK_ADVISOR_URL:-http://bank-advisor:8002}
+
     depends_on:
       mongodb:
         condition: service_healthy
@@ -414,6 +418,74 @@ services:
       - octavios-network
 
 # ========================================
+  # POSTGRESQL - BankAdvisor Database
+  # ========================================
+  # Dedicated PostgreSQL for bank-advisor plugin (INVEX banking data)
+  postgres:
+    image: postgres:15-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-postgres
+    restart: unless-stopped
+    env_file:
+      - ../envs/.env
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-octavios}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-secure_postgres_password}
+      - POSTGRES_DB=${POSTGRES_DB:-bankadvisor}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-octavios} -d ${POSTGRES_DB:-bankadvisor}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - octavios-network
+
+  # ========================================
+  # BANK ADVISOR - Private MCP Plugin
+  # ========================================
+  # Enterprise banking analytics via MCP (Model Context Protocol)
+  # Provides bank_analytics tool for CNBV/INVEX data analysis
+  bank-advisor:
+    build:
+      context: ..
+      dockerfile: plugins/bank-advisor-private/Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-bank-advisor
+    restart: unless-stopped
+    env_file:
+      - ../envs/.env
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8002
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-octavios}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-secure_postgres_password}
+      - POSTGRES_DB=${POSTGRES_DB:-bankadvisor}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-octavios}:${POSTGRES_PASSWORD:-secure_postgres_password}@postgres:5432/${POSTGRES_DB:-bankadvisor}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "${BANK_ADVISOR_PORT:-8002}:8002"
+    volumes:
+      # Hot reload in development
+      - ../plugins/bank-advisor-private/src:/app/src
+      - ../plugins/bank-advisor-private/data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - octavios-network
+
+  # ========================================
   # FILE MANAGER - Public Plugin Service
   # ========================================
   # Plugin-First Architecture: Public plugin for file operations
@@ -471,6 +543,10 @@ volumes:
     driver: local
 
   minio_data:
+    driver: local
+
+  # PostgreSQL for bank-advisor plugin
+  postgres_data:
     driver: local
 
   # These volumes always use Docker-managed storage
