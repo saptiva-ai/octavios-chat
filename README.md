@@ -7,7 +7,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![Next.js](https://img.shields.io/badge/Next.js-14-black.svg)](https://nextjs.org/)
 
-> Plataforma conversacional lista para producción con chat streaming, RAG, auditoría COPILOTO_414 y herramientas MCP sobre FastAPI + Next.js.
+> Plataforma conversacional lista para producción con chat streaming, RAG, auditoría documental y herramientas MCP sobre FastAPI + Next.js.
 
 ## Tabla de contenidos
 - [Saptiva OctaviOS Chat](#saptiva-octavios-chat)
@@ -23,8 +23,8 @@
     - [Referencias de Código](#referencias-de-código)
     - [Comunicación entre Servicios (Código)](#comunicación-entre-servicios-código)
       - [Backend Core → File Manager Plugin (HTTP Client)](#backend-core--file-manager-plugin-http-client)
-      - [Backend Core → Capital414 Plugin (MCP Protocol)](#backend-core--capital414-plugin-mcp-protocol)
-      - [Capital414 Plugin → File Manager Plugin (HTTP Client)](#capital414-plugin--file-manager-plugin-http-client)
+      - [Backend Core → Private Plugin (MCP Protocol)](#backend-core--private-plugin-mcp-protocol)
+      - [Private Plugin → File Manager Plugin (HTTP Client)](#private-plugin--file-manager-plugin-http-client)
   - [Visión de alto nivel](#visión-de-alto-nivel)
     - [Mapa de arquitectura (alto nivel)](#mapa-de-arquitectura-alto-nivel)
     - [Contenedores principales](#contenedores-principales)
@@ -32,7 +32,7 @@
   - [Stack y capacidades](#stack-y-capacidades)
     - [Plataforma conversacional](#plataforma-conversacional)
     - [Documentos y RAG](#documentos-y-rag)
-    - [Cumplimiento COPILOTO\_414](#cumplimiento-copiloto_414)
+    - [Cumplimiento Document Audit](#cumplimiento-document_audit)
     - [Integración Audit File + Canvas (OpenCanvas)](#integración-audit-file--canvas-opencanvas)
     - [Model Context Protocol (MCP)](#model-context-protocol-mcp)
     - [Seguridad y observabilidad](#seguridad-y-observabilidad)
@@ -66,11 +66,11 @@
   - [Licencia y soporte](#licencia-y-soporte)
 
 ## Resumen rápido
-- **Arquitectura Plugin-First (Micro-Kernel)**: Core ligero orquesta plugins públicos (File Manager) y privados (Capital414) como microservicios independientes.
+- **Arquitectura Plugin-First (Micro-Kernel)**: Core ligero orquesta plugins públicos (File Manager) y privados (Private Plugin) como microservicios independientes.
 - Chat multi-modelo (Turbo, Cortex, Ops, etc.) con SSE y chain-of-responsibility (`apps/backend/src/routers/chat/endpoints/message_endpoints.py`).
 - Integración MCP oficial (FastMCP) con lazy loading y telemetría (`apps/backend/src/mcp/server.py`).
 - Pipeline documental: subida segura, cache Redis y extracción multi-tier antes del RAG (`apps/backend/src/services/document_service.py`).
-- COPILOTO_414 coordina auditores de disclaimer, formato, logos, tipografía, gramática y consistencia semántica (`plugins/capital414-private/src/validation_coordinator.py`).
+- Document Audit coordina auditores de disclaimer, formato, logos, tipografía, gramática y consistencia semántica (`plugins/private/src/validation_coordinator.py`).
 - Frontend Next.js 14 + Zustand con herramientas de archivos, research y UI accesible (`apps/web/src/lib/stores/chat-store.ts`).
 - Seguridad empresarial: JWT con revocación en Redis, rate limiting y políticas CSP en Nginx (`apps/backend/src/middleware/auth.py`).
 
@@ -81,7 +81,7 @@ OctaviOS usa arquitectura **Plugin-First**: núcleo mínimo que orquesta y plugi
 ### Filosofía de Diseño
 
 - **Antes (monolito)**: un solo backend manejaba chat, archivos, auditorías, embeddings y storage; cada cambio implicaba rebuild total.
-- **Ahora (plugin-first)**: core ligero para chat/auth; plugins públicos reutilizables (File Manager, browsing, memory); plugins privados con lógica Capital414 o asesoría bancaria.
+- **Ahora (plugin-first)**: core ligero para chat/auth; plugins públicos reutilizables (File Manager, browsing, memory); plugins privados con lógica Private Plugin o asesoría bancaria.
 
 ### Diagrama de Containers y Dependencias
 
@@ -101,7 +101,7 @@ flowchart TB
     end
 
     subgraph PrivatePlugins["🔒 Private Plugins (Proprietary)"]
-        capital414["Capital414 Auditor<br/>Port: 8002<br/>COPILOTO_414 Compliance"]:::plugin_private
+        private_plugin["Private Plugin Auditor<br/>Port: 8002<br/>Document Audit Compliance"]:::plugin_private
     end
 
     subgraph Infrastructure["🗄️ Infrastructure Layer"]
@@ -122,7 +122,7 @@ flowchart TB
     backend -.->|"Depends on<br/>(health check)"| filemanager
 
     %% Private Plugins depend on Public Plugins
-    capital414 -.->|"Depends on<br/>(health check)"| filemanager
+    private_plugin -.->|"Depends on<br/>(health check)"| filemanager
 
     %% Backend to Infrastructure
     backend --> mongo
@@ -132,12 +132,12 @@ flowchart TB
     filemanager --> minio
     filemanager --> redis
 
-    %% Capital414 to Infrastructure
-    capital414 --> languagetool
-    capital414 -->|"HTTP Client"| filemanager
+    %% Private Plugin to Infrastructure
+    private_plugin --> languagetool
+    private_plugin -->|"HTTP Client"| filemanager
 
     %% Core to Private Plugins (optional MCP integration)
-    backend -.->|"MCP Protocol<br/>(optional)"| capital414
+    backend -.->|"MCP Protocol<br/>(optional)"| private_plugin
 
     classDef frontend fill:#c7f0ff,stroke:#0ea5e9,color:#0f172a
     classDef core fill:#ffe0a3,stroke:#f59e0b,color:#0f172a
@@ -161,7 +161,7 @@ La cadena de dependencias garantiza inicio ordenado:
    └─> Backend (depends on: MongoDB healthy, Redis healthy, File Manager healthy)
 
 4. Private Plugins Layer
-   └─> Capital414 Auditor (depends on: File Manager healthy, LanguageTool healthy)
+   └─> Private Plugin Auditor (depends on: File Manager healthy, LanguageTool healthy)
 
 5. Frontend Layer
    └─> Next.js Web (depends on: Backend healthy)
@@ -180,8 +180,8 @@ La cadena de dependencias garantiza inicio ordenado:
 ### Comunicación entre Plugins
 
 **HTTP Client Pattern** (Actual):
-- Core y Capital414 tienen `FileManagerClient` que consume File Manager via HTTP REST
-- Ejemplo: `await file_manager_client.download_to_temp(minio_key)` en Capital414
+- Core y Private Plugin tienen `FileManagerClient` que consume File Manager via HTTP REST
+- Ejemplo: `await file_manager_client.download_to_temp(minio_key)` en Private Plugin
 
 **MCP Protocol** (Futuro - Opcional):
 - Plugins pueden exponerse como MCP servers para mayor flexibilidad
@@ -194,7 +194,7 @@ La cadena de dependencias garantiza inicio ordenado:
 | Frontend (Next.js) | 3000 | - | http://localhost:3000 |
 | Backend Core | 8000 | http://backend:8000 | http://localhost:8000 |
 | File Manager | 8001 | http://file-manager:8001 | http://localhost:8001 |
-| Capital414 | 8002 | http://file-auditor:8002 | http://localhost:8002 |
+| Private Plugin | 8002 | http://file-auditor:8002 | http://localhost:8002 |
 | MongoDB | 27017 | mongodb://<mongo-host>:27017 | - |
 | Redis | 6379 | redis://<redis-host>:6379 | - |
 | MinIO | 9000 | http://minio:9000 | http://localhost:9000 |
@@ -208,9 +208,9 @@ La cadena de dependencias garantiza inicio ordenado:
 |------------|------|
 | Backend Core | `apps/backend/` |
 | File Manager Plugin | `plugins/public/file-manager/` |
-| Capital414 Plugin | `plugins/capital414-private/` |
+| Private Plugin | `plugins/private/` |
 | Backend FileManagerClient | `apps/backend/src/services/file_manager_client.py` |
-| Capital414 FileManagerClient | `plugins/capital414-private/src/clients/file_manager.py` |
+| Private Plugin FileManagerClient | `plugins/private/src/clients/file_manager.py` |
 | Docker Compose | `infra/docker-compose.yml` |
 
 ### Comunicación entre Servicios (Código)
@@ -277,7 +277,7 @@ async def upload_file_endpoint(
     return result
 ```
 
-#### Backend Core → Capital414 Plugin (MCP Protocol)
+#### Backend Core → Private Plugin (MCP Protocol)
 
 ```python
 # apps/backend/src/mcp/client.py
@@ -296,7 +296,7 @@ class MCPClient:
         tool_name: str,
         arguments: dict
     ) -> dict:
-        """Invoke MCP tool on Capital414 Plugin."""
+        """Invoke MCP tool on Private Plugin."""
         logger.info("Invoking MCP tool", tool_name=tool_name)
 
         result = await self.session.call_tool(
@@ -317,19 +317,19 @@ async def chat_endpoint(
     mcp_client: MCPClient = Depends(get_mcp_client)
 ):
     # Detectar comando de auditoría
-    if message.startswith("Auditar archivo:"):
-        # Backend Core delega a Capital414 Plugin vía MCP
+    if message.startswith("Audit document:"):
+        # Backend Core delega a Private Plugin vía MCP
         result = await mcp_client.call_tool(
             tool_name="audit_document_full",
-            arguments={"minio_key": doc_key, "policy_id": "copiloto_414"}
+            arguments={"minio_key": doc_key, "policy_id": "document_audit"}
         )
         return result
 ```
 
-#### Capital414 Plugin → File Manager Plugin (HTTP Client)
+#### Private Plugin → File Manager Plugin (HTTP Client)
 
 ```python
-# plugins/capital414-private/src/clients/file_manager.py
+# plugins/private/src/clients/file_manager.py
 from httpx import AsyncClient
 
 class FileManagerClient:
@@ -352,9 +352,9 @@ class FileManagerClient:
         return temp_path
 ```
 
-**Uso en Capital414 Plugin**:
+**Uso en Private Plugin**:
 ```python
-# plugins/capital414-private/src/handlers/audit_handler.py
+# plugins/private/src/handlers/audit_handler.py
 from clients.file_manager import get_file_manager_client
 
 class AuditCommandHandler:
@@ -362,7 +362,7 @@ class AuditCommandHandler:
         self.fm_client = fm_client
 
     async def handle(self, doc_key: str):
-        # Capital414 consume File Manager Plugin para obtener PDF
+        # Private Plugin consume File Manager Plugin para obtener PDF
         pdf_path = await self.fm_client.download_to_temp(doc_key)
 
         # Ejecutar auditoría con PDF local
@@ -391,9 +391,9 @@ flowchart TB
     web --> core["Backend Core (Kernel)<br/>Chat · Auth · Orchestration<br/>Port 8000"]:::core
 
     core --> filemanager["File Manager Plugin<br/>Upload · Download · Extract<br/>Port 8001"]:::plugin_public
-    core -.->|"MCP Protocol"| capital414["Capital414 Plugin<br/>COPILOTO_414 Audits<br/>Port 8002"]:::plugin_private
+    core -.->|"MCP Protocol"| private_plugin["Private Plugin<br/>Document Audit Audits<br/>Port 8002"]:::plugin_private
 
-    capital414 -->|"HTTP Client"| filemanager
+    private_plugin -->|"HTTP Client"| filemanager
 
     subgraph "Core Services"
         chat_svc["ChatService<br/>Chain of Responsibility"]:::light
@@ -405,7 +405,7 @@ flowchart TB
         extraction["Text Extraction<br/>pypdf → SDK → OCR"]:::light
     end
 
-    subgraph "Capital414 Services"
+    subgraph "Private Plugin Services"
         coordinator["ValidationCoordinator<br/>8 Auditores Paralelos"]:::light
         fm_client["FileManagerClient<br/>Download PDFs"]:::light
     end
@@ -414,8 +414,8 @@ flowchart TB
     core --> file_client
     filemanager --> minio_ops
     filemanager --> extraction
-    capital414 --> coordinator
-    capital414 --> fm_client
+    private_plugin --> coordinator
+    private_plugin --> fm_client
 
     file_client -.->|"Delega"| filemanager
     fm_client -.->|"Delega"| filemanager
@@ -427,7 +427,7 @@ flowchart TB
 
     chat_svc --> observability["Observability<br/>Prometheus · OTel<br/>Structlog"]:::gray
     filemanager --> observability
-    capital414 --> observability
+    private_plugin --> observability
 
     classDef dark fill:#0f172a,stroke:#38bdf8,color:#e2e8f0;
     classDef frontend fill:#c7f0ff,stroke:#0ea5e9,color:#0f172a;
@@ -441,7 +441,7 @@ flowchart TB
 
 **Arquitectura en acción**:
 - Frontend (3000) conversa con el Core (8000) por REST/SSE.
-- Core delega archivos a File Manager (8001) y auditorías a Capital414 (8002) vía HTTP/MCP.
+- Core delega archivos a File Manager (8001) y auditorías a Private Plugin (8002) vía HTTP/MCP.
 - Mongo/Redis cubren sesiones y cache; MinIO guarda archivos y reportes.
 - Observabilidad única con Prometheus + OTel + structlog en todos los servicios.
 
@@ -469,7 +469,7 @@ flowchart TB
         subgraph Handlers["Request Handlers (Thin Layer)"]
             chat_router["Chat Router<br/>StreamingHandler<br/>SSE Response"]:::core
             file_router["File Router<br/>Delegates to File Manager"]:::core
-            audit_router["Audit Router<br/>Delegates to Capital414"]:::core
+            audit_router["Audit Router<br/>Delegates to Private Plugin"]:::core
         end
 
         subgraph CoreServices["Core Services (Orchestration Only)"]
@@ -485,7 +485,7 @@ flowchart TB
 
     chat_router --> chat_service
     file_router --> fm_client
-    audit_router -.->|"MCP Protocol"| capital414_service
+    audit_router -.->|"MCP Protocol"| private_plugin_service
 
     subgraph FileManager["🟠 File Manager Plugin (Public) - Port 8001"]
         fm_routes["Upload · Download<br/>Extract · Thumbnails"]:::plugin_public
@@ -497,17 +497,17 @@ flowchart TB
     fm_routes --> fm_extraction
     fm_extraction --> fm_minio
 
-    subgraph Capital414["🔴 Capital414 Plugin (Private) - Port 8002"]
-        capital414_service["MCP Server<br/>Tool: audit_document_full"]:::plugin_private
-        validation_coord["ValidationCoordinator<br/>COPILOTO_414<br/>Orchestrator Pattern"]:::plugin_private
+    subgraph Private Plugin["🔴 Private Plugin (Private) - Port 8002"]
+        private_plugin_service["MCP Server<br/>Tool: audit_document_full"]:::plugin_private
+        validation_coord["ValidationCoordinator<br/>Document Audit<br/>Orchestrator Pattern"]:::plugin_private
         auditores["8 Auditores Paralelos<br/>Disclaimer · Format · Grammar<br/>Typography · Logo · Color · Entity · Semantic"]:::plugin_private
-        c414_fm_client["FileManagerClient<br/>Download PDF for Audit"]:::plugin_private
+        private_fm_client["FileManagerClient<br/>Download PDF for Audit"]:::plugin_private
     end
 
-    capital414_service --> validation_coord
+    private_plugin_service --> validation_coord
     validation_coord --> auditores
-    auditores --> c414_fm_client
-    c414_fm_client -->|"HTTP Client"| fm_routes
+    auditores --> private_fm_client
+    private_fm_client -->|"HTTP Client"| fm_routes
 
     subgraph Infrastructure["⚙️ Infrastructure Layer"]
         mongo[(MongoDB + Beanie<br/>Sessions · Messages<br/>Documents · Reports)]:::infra
@@ -532,12 +532,12 @@ flowchart TB
 
 **Flujo Plugin-First** (resumen):
 1. Frontend → Core (8000).
-2. Core delega: archivos a File Manager (8001), auditorías a Capital414 (8002) vía HTTP/MCP.
+2. Core delega: archivos a File Manager (8001), auditorías a Private Plugin (8002) vía HTTP/MCP.
 3. File Manager gestiona upload/extract/thumbnails contra MinIO/Redis.
-4. Capital414 orquesta auditores COPILOTO_414 y consume File Manager.
+4. Private Plugin orquesta auditores Document Audit y consume File Manager.
 5. Infra común (Mongo, Redis, MinIO, LanguageTool) compartida por quien la necesita.
 
-**Por qué sirve**: Core liviano, plugins escalan y versionan aparte, File Manager es open-source ready y Capital414 queda aislado con su ciclo propio.
+**Por qué sirve**: Core liviano, plugins escalan y versionan aparte, File Manager es open-source ready y Private Plugin queda aislado con su ciclo propio.
 
 ### Integraciones y observabilidad
 Diagrama que muestra la **integración Plugin-First** con servicios externos, persistencia distribuida, y observabilidad centralizada.
@@ -555,8 +555,8 @@ flowchart TB
         fm_service["Upload/Download/Extract<br/>Multi-tier Extraction<br/>Thumbnail Generation"]:::plugin_public
     end
 
-    subgraph Capital414["🔴 Capital414 Plugin (Port 8002)"]
-        audit_service["MCP Server<br/>COPILOTO_414"]:::plugin_private
+    subgraph Private Plugin["🔴 Private Plugin (Port 8002)"]
+        audit_service["MCP Server<br/>Document Audit"]:::plugin_private
         validation_coord["ValidationCoordinator<br/>8 Auditores Streaming"]:::plugin_private
     end
 
@@ -568,9 +568,9 @@ flowchart TB
     end
 
     subgraph Storage["💾 Almacenamiento Distribuido"]
-        mongo["MongoDB<br/>Core: Sessions · Messages<br/>Capital414: Reports"]:::infra
+        mongo["MongoDB<br/>Core: Sessions · Messages<br/>Private Plugin: Reports"]:::infra
         redis["Redis<br/>Core: Cache · JWT Blacklist<br/>FileManager: Extract Cache"]:::infra
-        minio["MinIO S3<br/>FileManager: Files · Thumbnails<br/>Capital414: Reports"]:::infra
+        minio["MinIO S3<br/>FileManager: Files · Thumbnails<br/>Private Plugin: Reports"]:::infra
     end
 
     subgraph Observability["📊 Stack de Observabilidad"]
@@ -625,7 +625,7 @@ flowchart TB
 **Claves de integración**:
 - Core (8000) solo orquesta chat/auth y clientes HTTP/MCP; no ejecuta operaciones pesadas.
 - File Manager (8001) maneja upload/download/extract multi-tier y thumbnails contra MinIO/Redis.
-- Capital414 (8002) corre COPILOTO_414 con 8 auditores en paralelo y baja PDFs vía File Manager.
+- Private Plugin (8002) corre Document Audit con 8 auditores en paralelo y baja PDFs vía File Manager.
 - Externos: SAPTIVA, Aletheia, LanguageTool, SMTP; observabilidad única con Prometheus + OTel + structlog + Grafana.
 - Patrones: Chain of Responsibility en chat, Builder para respuestas, adapter MCP/HTTP, reaper de storage y coordinador de auditores.
 
@@ -649,25 +649,25 @@ flowchart TB
   - **Herramienta MCP**: `get_segments` (`apps/backend/src/mcp/tools/get_segments.py`) expone búsqueda semántica como herramienta productiva
   - **Orquestación**: `AdaptiveRetrievalOrchestrator` selecciona estrategia óptima según tipo de query
 
-### Cumplimiento COPILOTO_414
-- **Arquitectura**: Plugin privado independiente (`plugins/capital414-private/`) corriendo en puerto 8002
+### Cumplimiento Document Audit
+- **Arquitectura**: Plugin privado independiente (`plugins/private/`) corriendo en puerto 8002
 - **Coordinador**: `ValidationCoordinator` ejecuta 8 auditores en paralelo de forma asíncrona
 - **Auditores**: Disclaimer, Format, Typography, Grammar, Logo, Color, Entity, Semantic
 - **Comunicación**: Backend invoca via MCP protocol o HTTP Client
 - **File Handling**: Plugin consume `file-manager` plugin para descargar PDFs temporales
 - **Persistencia**: Reportes se guardan en MongoDB + MinIO con políticas dinámicas
-- **Ubicación**: `plugins/capital414-private/src/validation_coordinator.py`
+- **Ubicación**: `plugins/private/src/validation_coordinator.py`
 
 ### Integración Audit File + Canvas (OpenCanvas)
 
-Auditoría COPILOTO_414 con panel lateral tipo OpenCanvas: el chat recibe el resumen humano y el canvas muestra el reporte técnico.
+Auditoría Document Audit con panel lateral tipo OpenCanvas: el chat recibe el resumen humano y el canvas muestra el reporte técnico.
 
 **Flujo resumido**:
-1. Usuario envía `"Auditar archivo: filename.pdf"`.
-2. `AuditCommandHandler` (`plugins/capital414-private/src/handlers/audit_handler.py`) detecta el comando y descarga el PDF desde File Manager.
+1. Usuario envía `"Audit document: filename.pdf"`.
+2. `AuditCommandHandler` (`plugins/private/src/handlers/audit_handler.py`) detecta el comando y descarga el PDF desde File Manager.
 3. `ValidationCoordinator` ejecuta 8 auditores en paralelo (disclaimer, format, typography, grammar, logo, color, entity, semantic).
 4. Se generan dos salidas: `generate_human_summary()` para chat y `format_executive_summary_as_markdown()` para canvas (`apps/backend/src/services/summary_formatter.py`).
-5. Se crea un `Artifact` con el reporte técnico y se devuelve en `tool_invocations` (`plugins/capital414-private/src/handlers/audit_handler.py:168-176`).
+5. Se crea un `Artifact` con el reporte técnico y se devuelve en `tool_invocations` (`plugins/private/src/handlers/audit_handler.py:168-176`).
 6. Frontend renderiza el resumen en chat y abre `CanvasPanel` (`apps/web/src/components/canvas/canvas-panel.tsx`) con el artifact vía `CanvasContext`.
 
 **Separación de contenidos**:
@@ -718,7 +718,7 @@ class Artifact(Document):
 ```
 
 **Referencias de código**:
-- Backend Handler: `plugins/capital414-private/src/handlers/audit_handler.py:168-176` (creación artifact)
+- Backend Handler: `plugins/private/src/handlers/audit_handler.py:168-176` (creación artifact)
 - Frontend Context: `apps/web/src/context/CanvasContext.tsx`
 - Canvas Panel: `apps/web/src/components/canvas/canvas-panel.tsx`
 - Summary Formatter: `apps/backend/src/services/summary_formatter.py`
@@ -862,7 +862,7 @@ flowchart TB
 2. **Chat Interface**:
    - **ChatView** orquesta toda la UI con handler SSE integrado y limpieza agresiva de adjuntos.
    - **Logic**: Manejo robusto de estados de carga para chats borradores (`draft`) y temporales, evitando bloqueos de UI.
-   - **Message Display**: ChatMessage con thumbnails/audit, StreamingMessage con typing real-time, FileReviewMessage y MessageAuditCard para COPILOTO_414
+   - **Message Display**: ChatMessage con thumbnails/audit, StreamingMessage con typing real-time, FileReviewMessage y MessageAuditCard para Document Audit
    - **Message Input**: CompactChatComposer con auto-submit para auditoría, PreviewAttachment con botón de audit, ThumbnailImage con fetch autenticado
    - **Content Display**: MarkdownMessage con syntax highlighting y CodeBlock con detección de lenguaje
 
@@ -912,7 +912,7 @@ flowchart TB
 
         chat_r --> chat_svc
         files_r --> fm_client
-        audit_r -.->|"MCP Protocol"| capital414_mcp
+        audit_r -.->|"MCP Protocol"| private_plugin_mcp
         auth_r --> session_svc
     end
 
@@ -933,27 +933,27 @@ flowchart TB
 
     fm_client -->|"HTTP Client"| fm_api
 
-    subgraph Capital414Plugin["🔴 Capital414 Plugin (Port 8002) - Private"]
-        capital414_mcp["MCP Server<br/>Tool: audit_document_full"]:::plugin_private
+    subgraph PrivatePlugin["🔴 Private Plugin (Port 8002) - Private"]
+        private_mcp["MCP Server<br/>Tool: audit_document_full"]:::plugin_private
 
-        subgraph COPILOTO["COPILOTO_414"]
+        subgraph AuditSystem["Document Audit"]
             validator["ValidationCoordinator<br/>Orchestrator Pattern"]:::plugin_private
             auditores["8 Auditors Parallel<br/>Disclaimer · Format · Grammar<br/>Typography · Logo · Color<br/>Entity · Semantic"]:::plugin_private
         end
 
-        c414_fm_client["FileManagerClient<br/>Download PDF"]:::plugin_private
+        private_fm_client["FileManagerClient<br/>Download PDF"]:::plugin_private
 
-        capital414_mcp --> validator
+        private_mcp --> validator
         validator --> auditores
-        auditores --> c414_fm_client
+        auditores --> private_fm_client
     end
 
-    c414_fm_client -->|"HTTP Client"| fm_api
+    private_fm_client -->|"HTTP Client"| fm_api
 
     subgraph Persistence["💾 Persistence (Ports & Adapters)"]
-        mongo[("MongoDB<br/>Core: Sessions · Messages<br/>Capital414: Reports")]:::infra
+        mongo[("MongoDB<br/>Core: Sessions · Messages<br/>Private Plugin: Reports")]:::infra
         redis[("Redis<br/>Core: Cache · JWT Blacklist<br/>FileManager: Extract Cache")]:::infra
-        minio[("MinIO S3<br/>FileManager: Files · Thumbs<br/>Capital414: Reports")]:::infra
+        minio[("MinIO S3<br/>FileManager: Files · Thumbs<br/>Private Plugin: Reports")]:::infra
     end
 
     chat_svc --> mongo
@@ -987,9 +987,9 @@ flowchart TB
 **Capa a capa**:
 - **Core 8000**: middleware (auth, rate-limit, cache, telemetry), routers delgados y servicios de orquestación. No ejecuta trabajos pesados.
 - **File Manager 8001**: REST `/upload|download|extract`, extracción multi-tier + thumbnails, persiste en MinIO/Redis.
-- **Capital414 8002**: MCP tool `audit_document_full`, ValidationCoordinator con 8 auditores, descarga PDFs vía File Manager y persiste reportes en Mongo/MinIO.
+- **Private Plugin 8002**: MCP tool `audit_document_full`, ValidationCoordinator con 8 auditores, descarga PDFs vía File Manager y persiste reportes en Mongo/MinIO.
 
-**Ventajas**: core simple, plugins escalan y versionan aparte, File Manager publicable, Capital414 aislado y con inversión de dependencias (HTTP/MCP).
+**Ventajas**: core simple, plugins escalan y versionan aparte, File Manager publicable, Private Plugin aislado y con inversión de dependencias (HTTP/MCP).
 
 **Patrones clave**: HTTP Client inter-plugin, MCP tools, Builder en ChatService, Orchestrator en ValidationCoordinator, adapters de persistencia, micro-kernel para separar concerns.
 
@@ -1011,7 +1011,7 @@ flowchart LR
 
     streaming --> chat_service
     mcp_adapter --> fastmcp["FastMCP Server"]:::dark
-    fastmcp --> validation["COPILOTO_414 Auditors"]:::light
+    fastmcp --> validation["Document Audit Auditors"]:::light
     validation --> languagetool["LanguageTool"]:::light
     fastmcp --> aletheia["Aletheia Research"]:::light
 
@@ -1057,7 +1057,7 @@ Funcionamiento: el request crea un `ChatContext`, el `StreamingHandler` lanza un
 
 ### Pipeline de ingestión y auditoría
 
-Secuencia de subida de archivos, persistencia y ejecución del coordinador COPILOTO_414.
+Secuencia de subida de archivos, persistencia y ejecución del coordinador Document Audit.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'actorBorder': '#94a3b8','actorBkg': '#f8fafc','actorTextColor': '#111827','signalColor': '#111827','signalTextColor': '#111827','activationBorderColor': '#cbd5e1','activationBkgColor': '#e2e8f0','sequenceNumberColor': '#0ea5e9'}}}%%
@@ -1068,7 +1068,7 @@ sequenceDiagram
     participant MinIO as MinIO S3
     participant Mongo as MongoDB
     participant Redis as Redis Cache
-    participant Auditor as COPILOTO_414
+    participant Auditor as Document Audit
 
     Dropzone->>API: multipart/form-data
     API->>Storage: save_upload()
@@ -1088,7 +1088,7 @@ Pipeline en etapas: Upload → Persistencia → Cache → Auditoría. Dropzone v
 
 ### Flujo de Audit Command + Canvas (Plugin-First)
 
-Secuencia completa desde el comando "Auditar archivo:" hasta la renderización dual (chat + canvas) mostrando la **arquitectura Plugin-First**.
+Secuencia completa desde el comando "Audit document:" hasta la renderización dual (chat + canvas) mostrando la **arquitectura Plugin-First**.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'actorBorder': '#94a3b8','actorBkg': '#f8fafc','actorTextColor': '#111827','signalColor': '#111827','signalTextColor': '#111827','activationBorderColor': '#cbd5e1','activationBkgColor': '#e2e8f0','sequenceNumberColor': '#0ea5e9'}}}%%
@@ -1097,23 +1097,23 @@ sequenceDiagram
     participant Chat as ChatView
     participant BackendCore as Backend Core<br/>(Port 8000)
     participant MCPClient as MCP Client
-    participant Capital414 as Capital414 Plugin<br/>(Port 8002)
-    participant Handler as AuditCommandHandler<br/>(en Capital414)
-    participant Coordinator as ValidationCoordinator<br/>(en Capital414)
+    participant Private Plugin as Private Plugin<br/>(Port 8002)
+    participant Handler as AuditCommandHandler<br/>(en Private Plugin)
+    participant Coordinator as ValidationCoordinator<br/>(en Private Plugin)
     participant FileManager as File Manager Plugin<br/>(Port 8001)
-    participant Formatter as SummaryFormatter<br/>(en Capital414)
+    participant Formatter as SummaryFormatter<br/>(en Private Plugin)
     participant ArtifactDB as Artifact Model<br/>(MongoDB)
     participant Canvas as Canvas Panel
 
-    User->>Chat: "Auditar archivo: doc.pdf"
+    User->>Chat: "Audit document: doc.pdf"
     Chat->>BackendCore: POST /api/chat con mensaje + file_ids
 
-    Note over BackendCore,Capital414: Backend Core delega a Capital414 Plugin
+    Note over BackendCore,Private Plugin: Backend Core delega a Private Plugin
     BackendCore->>MCPClient: call_tool("audit_document_full")
-    MCPClient->>Capital414: MCP Protocol invocation
+    MCPClient->>Private Plugin: MCP Protocol invocation
 
-    Note over Capital414,FileManager: Capital414 Plugin ejecuta auditoría
-    Capital414->>Handler: can_handle() → True
+    Note over Private Plugin,FileManager: Private Plugin ejecuta auditoría
+    Private Plugin->>Handler: can_handle() → True
     Handler->>Handler: _find_target_document()
     Handler->>FileManager: HTTP GET /download/{doc_id}
     FileManager-->>Handler: pdf_bytes
@@ -1129,8 +1129,8 @@ sequenceDiagram
     Handler->>ArtifactDB: Artifact.insert()
     ArtifactDB-->>Handler: artifact.id
 
-    Handler-->>Capital414: Audit result + artifact_id
-    Capital414-->>MCPClient: MCP response
+    Handler-->>Private Plugin: Audit result + artifact_id
+    Private Plugin-->>MCPClient: MCP response
     MCPClient-->>BackendCore: ChatProcessingResult {<br/>  content: human_summary,<br/>  metadata: {<br/>    tool_invocations: [{<br/>      tool_name: "create_artifact",<br/>      result: {id, title, type}<br/>    }]<br/>  }<br/>}
 
     BackendCore-->>Chat: Response with metadata
@@ -1146,8 +1146,8 @@ sequenceDiagram
 ```
 
 **Flujo resumido**:
-- Core detecta el comando y lo delega vía MCP a Capital414.
-- Capital414 baja el PDF desde File Manager, ejecuta 8 auditores y genera resumen humano + reporte técnico (markdown).
+- Core detecta el comando y lo delega vía MCP a Private Plugin.
+- Private Plugin baja el PDF desde File Manager, ejecuta 8 auditores y genera resumen humano + reporte técnico (markdown).
 - Se crea un Artifact con el reporte, se inyecta en `tool_invocations` y el frontend lo pinta: chat muestra el resumen, canvas el reporte.
 
 ### Lazy loading MCP (descubrimiento → invocación)
@@ -1192,7 +1192,7 @@ make setup-quick   # valores por defecto (CI/CD)
 ### 2. Levantar entorno
 ```bash
 make dev
-# Usa docker compose -p capital414-chat (contenedores: capital414-chat-api, -web, etc.)
+# Usa docker compose -p octavios-chat (contenedores: octavios-chat-api, -web, etc.)
 ```
 Servicios:
 - Frontend http://localhost:3000
@@ -1216,7 +1216,7 @@ Ejecuta health checks de contenedores, API, DB y frontend.
 1. Upload validado en dropzone → FastAPI guarda y envía a MinIO con metadatos en Mongo.
 2. Redis cachea texto; Qdrant guarda embeddings para RAG (`document_processing_service.py`).
 3. `get_segments` expone la búsqueda semántica como herramienta MCP.
-4. Comando "Auditar archivo" dispara `AuditCommandHandler` + `ValidationCoordinator` (8 auditores) y genera resumen humano + reporte técnico.
+4. Comando "Audit document" dispara `AuditCommandHandler` + `ValidationCoordinator` (8 auditores) y genera resumen humano + reporte técnico.
 5. Se crea un Artifact con el reporte (referenciado en `tool_invocations`) y el canvas lo renderiza; la UI limpia adjuntos tras responder.
 
 > **Nota RAG**: Sistema completo con Qdrant vector DB (embeddings 384-dim usando `paraphrase-multilingual-MiniLM-L12-v2`, cosine similarity con threshold 0.7, chunking inteligente con 500 tokens/chunk y 100 tokens overlap para preservar contexto). Ver configuración detallada en `docs/RAG_CONFIGURATION.md`.
@@ -1224,7 +1224,7 @@ Ejecuta health checks de contenedores, API, DB y frontend.
 ## Herramientas MCP
 | Herramienta | Categoría | Descripción | Entrada principal |
 |-------------|-----------|-------------|-------------------|
-| `audit_file` | Compliance | Ejecuta COPILOTO_414 con selección de política y auditores opcionales | `doc_id`, `policy_id`, flags |
+| `audit_file` | Compliance | Ejecuta Document Audit con selección de política y auditores opcionales | `doc_id`, `policy_id`, flags |
 | `excel_analyzer` | Datos | Perfilado, agregaciones y validaciones de planillas | `doc_id`, `operations`, `aggregate_columns` |
 | `viz_tool` | Insights | Genera voz narrativa + gráficos ligeros a partir de tablas | `prompt`, `data_source` |
 | `deep_research` | Investigación | Orquesta iteraciones con Aletheia y devuelve hallazgos+fuentes | `query`, `depth`, `max_iterations` |
@@ -1252,9 +1252,9 @@ El proyecto se valida principalmente desde el `Makefile`, lo que encapsula entor
 |---------|---------|----------|
 | `make test-all` | Full suite (Docker) | Ejecuta `test-api` + `test-web` + `test-sh` dentro de contenedores; ideal antes de PR. |
 | `make test` | Alias rápido | Invoca `test-api` + `test-web` + `test-sh` manteniendo los contenedores ya levantados. |
-| `make test-api` | API (contenedor `capital414-chat-api`) | Corre `pytest` con cobertura; acepta `FILE=...` y `ARGS=...` para casos específicos. |
+| `make test-api` | API (contenedor `octavios-chat-api`) | Corre `pytest` con cobertura; acepta `FILE=...` y `ARGS=...` para casos específicos. |
 | `make test-unit-host` | API (host/.venv) | Ejecuta pytest desde `.venv`, útil cuando no quieres depender de Docker. |
-| `make test-web` | Frontend | Lanza `pnpm test` en el contenedor `capital414-chat-web`; soporta `FILE` y `ARGS`. |
+| `make test-web` | Frontend | Lanza `pnpm test` en el contenedor `octavios-chat-web`; soporta `FILE` y `ARGS`. |
 | `make test-e2e` | Playwright | Corre la carpeta `tests/` usando la stack en marcha (`make dev`). |
 | `make test-mcp` | MCP | Suite dedicada (unit + integration); ver variantes `test-mcp-lazy`, `test-mcp-marker`, `test-mcp-diff`. |
 | `make lint` / `make lint-fix` | Calidad | Ruff + ESLint; `lint-fix` aplica autofixes seguros. |
@@ -1295,7 +1295,7 @@ El proyecto se valida principalmente desde el `Makefile`, lo que encapsula entor
    make shell-api  # (opcional) si quieres entrar al contenedor api
    ```
 2. **Backend (pytest)**  
-   - Contenedores: `make test-api` (usa `capital414-chat-api`) o `make test` para correr API + web en un solo paso.  
+   - Contenedores: `make test-api` (usa `octavios-chat-api`) o `make test` para correr API + web en un solo paso.  
    - Host/.venv: `make test-unit-host ARGS="-k streaming"` cuando necesites debugear sin Docker.  
    - Casos MCP: `make test-mcp`, `make test-mcp-lazy` o `make test-mcp-integration`.
 3. **Frontend (jest)**  
@@ -1366,8 +1366,8 @@ Vista rápida de carpetas raíz y submódulos más relevantes. La idea es poder 
 │   │       │   └── services/    # minio_client.py, redis_client.py, extraction_service.py
 │   │       ├── Dockerfile
 │   │       └── requirements.txt
-│   └── capital414-private/      # 🔴 Private Plugins (Proprietary)
-│       └── file-auditor/  # Puerto 8002 - COPILOTO_414 Compliance
+│   └── private/                     # 🔴 Private Plugins (Proprietary)
+│       └── file-auditor/  # Puerto 8002 - Document Audit Compliance
 │           ├── src/
 │           │   ├── auditors/    # disclaimer, format, grammar, logo, typography, color
 │           │   ├── clients/     # file_manager_client.py (HTTP client)
@@ -1394,7 +1394,7 @@ Vista rápida de carpetas raíz y submódulos más relevantes. La idea es poder 
 | `apps/backend/src` | **Core (Kernel)** - Backend ligero solo orquesta chat, auth y sesiones | Clean Architecture (core/routers/services), Chain of Responsibility en chat, Builder para respuestas. Delega a plugins via HTTP/MCP |
 | `apps/web/src` | **Frontend** - Next.js 14 con App Router, React Query y Zustand | State pattern en stores, Gateway pattern en `lib/api-client.ts`, Optimistic updates, componentes UI probados |
 | `plugins/public/file-manager/` | **Public Plugin** - Infraestructura de archivos (Upload/Download/Extract) | Expone endpoints REST, usa MinIO para storage, Redis para cache, independiente del core |
-| `plugins/capital414-private/` | **Private Plugin** - COPILOTO_414 compliance auditing | ValidationCoordinator ejecuta 8 auditores en paralelo, expone MCP tools, consume file-manager via HTTP client |
+| `plugins/private/` | **Private Plugin** - Document Audit compliance auditing | ValidationCoordinator ejecuta 8 auditores en paralelo, expone MCP tools, consume file-manager via HTTP client |
 | `apps/backend/src/services` | **Core Services** - ChatService, DocumentService, FileManagerClient | Strategy pattern para chat, HTTP clients para comunicación con plugins, NO contiene auditores (movidos a plugin) |
 | `apps/backend/src/mcp` | **MCP Client** - Comunicación con plugins MCP | Lazy loading, tool discovery, invocación remota de herramientas en plugins |
 | `docs/` | Documentación técnica (arquitectura, migración, testing) | ARCHITECTURE_MIGRATION.md explica Monolito → Plugin-First, diagramas Mermaid actualizados |
@@ -1407,13 +1407,13 @@ Vista rápida de carpetas raíz y submódulos más relevantes. La idea es poder 
 Referencias rápidas para navegar código (Plugin-First):
 - **Core Backend**: `apps/backend/src/routers/chat` → Endpoints REST/SSE, delega a `domain/message_handlers`
 - **File Manager Plugin**: `plugins/public/file-manager/src/routers/` → Upload, download, extract endpoints
-- **Capital414 Plugin**: `plugins/capital414-private/src/` → ValidationCoordinator, 8 auditores, MCP tools
+- **Private Plugin**: `plugins/private/src/` → ValidationCoordinator, 8 auditores, MCP tools
 - **Plugin Communication**:
   - Backend → File Manager: `apps/backend/src/services/file_manager_client.py` (HTTP client)
-  - Capital414 → File Manager: `plugins/capital414-private/src/clients/file_manager_client.py` (HTTP client)
-  - Backend → Capital414: `apps/backend/src/mcp/client.py` (MCP protocol)
+  - Private Plugin → File Manager: `plugins/private/src/clients/file_manager_client.py` (HTTP client)
+  - Backend → Private Plugin: `apps/backend/src/mcp/client.py` (MCP protocol)
 - **Frontend Stores**: `apps/web/src/lib/stores/` → Zustand state management con React Query
-- **Docker Orchestration**: `infra/docker-compose.yml` → Dependency chain + healthchecks (contenedores `capital414-chat-*`)
+- **Docker Orchestration**: `infra/docker-compose.yml` → Dependency chain + healthchecks (contenedores `octavios-chat-*`)
 
 Tips rápidos:
 - Variables y comandos centrales viven en el `Makefile`, por lo que la mayoría de los flujos (setup, dev, verify, debug) son accesibles vía `make`.
@@ -1422,7 +1422,7 @@ Tips rápidos:
 
 ## Documentación adicional
 - `docs/ARCHITECTURE.md`: detalle técnico Back/Front/MCP.
-- `docs/AUDIT_SYSTEM_ARCHITECTURE.md`: COPILOTO_414 end-to-end.
+- `docs/AUDIT_SYSTEM_ARCHITECTURE.md`: Document Audit end-to-end.
 - `docs/MCP_ARCHITECTURE.md` y `docs/MCP_TOOLS_GUIDE.md`: guías para herramientas.
 - `docs/TROUBLESHOOTING.md`: recetas extendidas.
 
