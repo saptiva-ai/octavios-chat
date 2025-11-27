@@ -17,7 +17,7 @@ Design Philosophy:
 """
 
 import re
-from typing import List, Set
+from typing import List, Set, Optional, Tuple
 import structlog
 
 from ..specs import ValidationResult
@@ -212,7 +212,7 @@ class SqlValidator:
             warnings=warnings
         )
 
-    def _check_forbidden_keywords(self, sql_upper: str) -> str | None:
+    def _check_forbidden_keywords(self, sql_upper: str) -> Optional[str]:
         """
         Check for forbidden keywords in SQL.
 
@@ -223,11 +223,18 @@ class SqlValidator:
             First forbidden keyword found, or None
         """
         for keyword in self.FORBIDDEN_KEYWORDS:
-            # Use word boundary to avoid false positives
-            # e.g., "SELECT_INTO" should NOT match "INTO"
-            pattern = rf"\b{re.escape(keyword)}\b"
-            if re.search(pattern, sql_upper):
-                return keyword
+            # For keywords with word characters (alphanumeric), use word boundaries
+            # For special characters (like --, /*, #), just check if they're in the string
+            if keyword.isalnum() or "_" in keyword:
+                # Use word boundary to avoid false positives
+                # e.g., "SELECT_INTO" should NOT match "INTO"
+                pattern = rf"\b{re.escape(keyword)}\b"
+                if re.search(pattern, sql_upper):
+                    return keyword
+            else:
+                # For special characters, just check if they exist
+                if keyword in sql_upper:
+                    return keyword
         return None
 
     def _extract_table_names(self, sql: str) -> Set[str]:
@@ -261,7 +268,7 @@ class SqlValidator:
 
         return tables
 
-    def _detect_suspicious_patterns(self, sql: str) -> str | None:
+    def _detect_suspicious_patterns(self, sql: str) -> Optional[str]:
         """
         Detect suspicious SQL injection patterns.
 
@@ -277,7 +284,7 @@ class SqlValidator:
                 return f"Pattern: {match.group(0)[:50]}"
         return None
 
-    def _sanitize_sql(self, sql: str) -> tuple[str, List[str]]:
+    def _sanitize_sql(self, sql: str) -> Tuple[str, List[str]]:
         """
         Sanitize SQL query by adding safety constraints.
 

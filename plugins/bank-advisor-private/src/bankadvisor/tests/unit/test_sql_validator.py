@@ -61,7 +61,8 @@ class TestSqlValidator:
         result = self.validator.validate(sql)
 
         assert result.valid is False
-        assert "INSERT" in result.error_message
+        # Either INSERT or INTO should be detected (both are forbidden)
+        assert "INSERT" in result.error_message or "INTO" in result.error_message
 
     def test_reject_update(self):
         """Test UPDATE is rejected."""

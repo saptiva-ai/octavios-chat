@@ -27,7 +27,23 @@ from bankadvisor.services.analytics_service import AnalyticsService
 from bankadvisor.services.intent_service import IntentService
 from bankadvisor.services.visualization_service import VisualizationService
 
+# NL2SQL Phase 2-3 imports (optional - graceful fallback if not available)
+try:
+    from bankadvisor.services.query_spec_parser import QuerySpecParser
+    from bankadvisor.services.nl2sql_context_service import Nl2SqlContextService
+    from bankadvisor.services.sql_generation_service import SqlGenerationService
+    from bankadvisor.services.sql_validator import SqlValidator
+    NL2SQL_AVAILABLE = True
+except ImportError as e:
+    logger.warning("nl2sql.imports_failed", error=str(e), fallback="Using legacy intent-based logic")
+    NL2SQL_AVAILABLE = False
+
 logger = structlog.get_logger(__name__)
+
+# Global instances for NL2SQL services (initialized in lifespan if available)
+_query_parser: Optional["QuerySpecParser"] = None
+_context_service: Optional["Nl2SqlContextService"] = None
+_sql_generator: Optional["SqlGenerationService"] = None
 
 
 # ============================================================================
@@ -80,6 +96,8 @@ async def ensure_data_populated():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan: startup and shutdown logic"""
+    global _query_parser, _context_service, _sql_generator
+
     logger.info("bankadvisor.starting", version="1.0.0")
 
     # Initialize database
@@ -90,11 +108,69 @@ async def lifespan(app: FastAPI):
     IntentService.initialize()
     logger.info("nlp.initialized")
 
+    # Initialize NL2SQL services (Phase 2-3) if available
+    if NL2SQL_AVAILABLE:
+        try:
+            from bankadvisor.services.rag_bridge import get_rag_bridge
+
+            # Attempt to inject RAG services from main backend
+            rag_bridge = get_rag_bridge()
+            rag_available = rag_bridge.inject_from_main_backend()
+
+            # Initialize parser (always available)
+            _query_parser = QuerySpecParser()
+
+            # Initialize SQL generator with SAPTIVA LLM client
+            from bankadvisor.services.llm_client import get_saptiva_llm_client
+            llm_client = get_saptiva_llm_client(model="SAPTIVA_TURBO")
+            _sql_generator = SqlGenerationService(
+                validator=SqlValidator(),
+                llm_client=llm_client
+            )
+
+            if llm_client:
+                logger.info("nl2sql.llm_enabled", provider="SAPTIVA", model="SAPTIVA_TURBO")
+            else:
+                logger.warning("nl2sql.llm_disabled", message="SAPTIVA client not available, using templates only")
+
+            # Initialize context service with or without RAG
+            if rag_available:
+                _context_service = Nl2SqlContextService(
+                    qdrant_service=rag_bridge.get_qdrant_service(),
+                    embedding_service=rag_bridge.get_embedding_service()
+                )
+
+                # Ensure RAG collections exist
+                _context_service.ensure_collections()
+
+                logger.info(
+                    "nl2sql.initialized",
+                    rag_enabled=True,
+                    qdrant_collection=rag_bridge.get_qdrant_service().collection_name,
+                    note="RAG fully enabled. Seed collections with scripts/seed_nl2sql_rag.py"
+                )
+            else:
+                _context_service = Nl2SqlContextService()  # No RAG - will use fallback
+
+                logger.info(
+                    "nl2sql.initialized",
+                    rag_enabled=False,
+                    note="Running in template-only mode (no RAG). RAG services not available."
+                )
+
+        except Exception as e:
+            logger.error("nl2sql.initialization_failed", error=str(e), exc_info=True)
+            _query_parser = None
+            _context_service = None
+            _sql_generator = None
+    else:
+        logger.info("nl2sql.disabled", reason="NL2SQL services not available, using legacy intent logic")
+
     # Ensure data is populated
     await ensure_data_populated()
 
     port = int(os.getenv("PORT", "8002"))
-    logger.info("bankadvisor.ready", port=port)
+    logger.info("bankadvisor.ready", port=port, nl2sql_enabled=NL2SQL_AVAILABLE)
     yield
 
     logger.info("bankadvisor.shutdown")
@@ -128,9 +204,19 @@ async def _bank_analytics_impl(
     Esta tool consulta 103 meses de datos históricos (2017-2025) de la CNBV.
     Incluye validación de seguridad (whitelist) y NLP para entender queries.
 
+    Phase 2-3 NL2SQL Pipeline:
+        1. Parse NL → QuerySpec (if NL2SQL available)
+        2. Retrieve RAG context (schema/metrics/examples)
+        3. Generate SQL from templates or LLM
+        4. Validate SQL security
+        5. Execute and visualize
+
+    Fallback to Legacy:
+        If NL2SQL fails or unavailable → intent-based logic (backward compatible)
+
     Args:
         metric_or_query: Nombre de métrica o query natural.
-                        Ejemplos: "cartera comercial", "IMOR", "cartera total"
+                        Ejemplos: "cartera comercial", "IMOR de INVEX últimos 3 meses"
         mode: Modo de visualización ("dashboard" o "timeline")
 
     Returns:
@@ -142,19 +228,56 @@ async def _bank_analytics_impl(
 
     Examples:
         >>> await bank_analytics("cartera comercial")
-        >>> await bank_analytics("IMOR", mode="timeline")
+        >>> await bank_analytics("IMOR de INVEX últimos 3 meses")
+        >>> await bank_analytics("Compara IMOR INVEX vs Sistema 2024")
 
     Security:
         - Whitelist SAFE_METRIC_COLUMNS (15 métricas autorizadas)
-        - Guard method _get_safe_column() previene inyección
-        - NLP fuzzy matching con cutoff 0.8 (80% similitud)
+        - SQL validation via SqlValidator (blacklist/whitelist)
+        - LIMIT injection (max 1000 rows)
     """
     logger.info(
         "tool.bank_analytics.invoked",
         metric_or_query=metric_or_query,
-        mode=mode
+        mode=mode,
+        nl2sql_available=NL2SQL_AVAILABLE
     )
 
+    # =========================================================================
+    # PHASE 2-3: TRY NL2SQL PIPELINE FIRST
+    # =========================================================================
+    if NL2SQL_AVAILABLE and _query_parser and _context_service and _sql_generator:
+        try:
+            nl2sql_result = await _try_nl2sql_pipeline(metric_or_query, mode)
+            if nl2sql_result and nl2sql_result.get("success"):
+                logger.info(
+                    "tool.bank_analytics.nl2sql_success",
+                    query=metric_or_query,
+                    pipeline="nl2sql"
+                )
+                return nl2sql_result
+
+            # NL2SQL returned error or low confidence - try legacy fallback
+            logger.warning(
+                "tool.bank_analytics.nl2sql_fallback",
+                query=metric_or_query,
+                reason=nl2sql_result.get("error_code") if nl2sql_result else "unknown",
+                fallback="Using legacy intent-based logic"
+            )
+
+        except Exception as e:
+            logger.error(
+                "tool.bank_analytics.nl2sql_error",
+                query=metric_or_query,
+                error=str(e),
+                exc_info=True,
+                fallback="Using legacy intent-based logic"
+            )
+            # Continue to legacy fallback
+
+    # =========================================================================
+    # LEGACY FALLBACK: INTENT-BASED LOGIC (BACKWARD COMPATIBLE)
+    # =========================================================================
     try:
         # Disambiguate user query using NLP
         intent = IntentService.disambiguate(metric_or_query)
@@ -163,7 +286,8 @@ async def _bank_analytics_impl(
             logger.warning(
                 "tool.bank_analytics.ambiguous",
                 query=metric_or_query,
-                options=intent.options[:3]
+                options=intent.options[:3],
+                pipeline="legacy"
             )
             return {
                 "error": "ambiguous_query",
@@ -196,7 +320,8 @@ async def _bank_analytics_impl(
             "tool.bank_analytics.success",
             metric=config["field"],
             months_returned=len(payload["data"]["months"]),
-            data_as_of=data_as_of
+            data_as_of=data_as_of,
+            pipeline="legacy"
         )
 
         return {
@@ -225,6 +350,128 @@ async def _bank_analytics_impl(
             "error": "internal_error",
             "message": "Error interno procesando la consulta"
         }
+
+
+async def _try_nl2sql_pipeline(user_query: str, mode: str) -> Optional[Dict[str, Any]]:
+    """
+    Attempt NL2SQL pipeline for query processing.
+
+    Pipeline:
+        1. Parse NL → QuerySpec
+        2. Retrieve RAG context
+        3. Generate SQL
+        4. Execute SQL
+        5. Build visualization
+
+    Args:
+        user_query: Natural language query
+        mode: Visualization mode
+
+    Returns:
+        Result dict or None if pipeline fails
+
+    Raises:
+        Exception: If any step fails (caught by caller)
+    """
+    logger.debug("nl2sql_pipeline.start", query=user_query)
+
+    # Step 1: Parse to QuerySpec
+    spec = await _query_parser.parse(
+        user_query=user_query,
+        intent_hint=None,  # Let parser auto-detect
+        mode_hint=mode
+    )
+
+    if not spec.is_complete():
+        logger.warning(
+            "nl2sql_pipeline.incomplete_spec",
+            query=user_query,
+            confidence=spec.confidence_score,
+            missing=spec.missing_fields
+        )
+        return {
+            "success": False,
+            "error_code": "incomplete_spec",
+            "error": "ambiguous_query",
+            "message": f"Query is incomplete. Missing: {', '.join(spec.missing_fields)}",
+            "confidence": spec.confidence_score
+        }
+
+    # Step 2: Retrieve RAG context
+    ctx = await _context_service.rag_context_for_spec(spec, original_query=user_query)
+
+    # Step 3: Generate SQL
+    sql_result = await _sql_generator.build_sql_from_spec(spec, ctx)
+
+    if not sql_result.success:
+        logger.warning(
+            "nl2sql_pipeline.sql_generation_failed",
+            query=user_query,
+            error_code=sql_result.error_code,
+            error_message=sql_result.error_message
+        )
+        return {
+            "success": False,
+            "error_code": sql_result.error_code,
+            "error": sql_result.error_code,
+            "message": sql_result.error_message,
+            "metadata": sql_result.metadata
+        }
+
+    # Step 4: Execute SQL
+    logger.info(
+        "nl2sql_pipeline.executing_sql",
+        query=user_query,
+        sql_preview=sql_result.sql[:100] if sql_result.sql else None
+    )
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(text(sql_result.sql))
+        rows = result.fetchall()
+
+    # Step 5: Transform to visualization format
+    # Convert SQL rows to months format expected by VisualizationService
+    months_data = []
+    for row in rows:
+        # Assuming columns: fecha, [banco_nombre], metric_value
+        row_dict = dict(row._mapping)
+        months_data.append(row_dict)
+
+    # Build Plotly config
+    # Use spec to determine title and styling
+    title = f"{spec.metric} - {' vs '.join(spec.bank_names) if spec.bank_names else 'Sistema'}"
+
+    plotly_config = VisualizationService.build_plotly_config(
+        months_data,
+        {
+            "title": title,
+            "field": spec.metric.lower(),
+            "description": f"Query: {user_query}"
+        }
+    )
+
+    logger.info(
+        "nl2sql_pipeline.success",
+        query=user_query,
+        rows_returned=len(months_data),
+        template_used=sql_result.metadata.get("template")
+    )
+
+    return {
+        "success": True,
+        "data": {"months": months_data},
+        "metadata": {
+            "metric": spec.metric,
+            "data_as_of": "2025-11-27",  # TODO: Extract from actual data
+            "title": title,
+            "pipeline": "nl2sql",
+            "template_used": sql_result.metadata.get("template"),
+            "sql_generated": sql_result.sql
+        },
+        "plotly_config": plotly_config,
+        "title": title,
+        "data_as_of": "2025-11-27"
+    }
 
 
 # ============================================================================

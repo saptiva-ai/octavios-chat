@@ -2,7 +2,7 @@
 # Core Framework
 fastapi>=0.115.0
 uvicorn[standard]>=0.31.0
-fastmcp>=2.0.0
+# fastmcp>=2.0.0  # Custom package - not available in PyPI
 
 # Database
 sqlalchemy[asyncio]>=2.0.0
@@ -10,9 +10,9 @@ asyncpg>=0.30.0
 psycopg2-binary>=2.9.9
 
 # Data Processing
-pandas>=2.2.0
+pandas>=2.0.0
 openpyxl>=3.1.0
-numpy>=1.26.0
+numpy>=1.24.0
 
 # Utilities
 python-dotenv>=1.0.0
