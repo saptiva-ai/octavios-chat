@@ -15,7 +15,7 @@ El ETL Enhancement carga datos desde archivos Excel/CSV hacia la tabla `monthly_
 - ✅ ICAP: 204 registros cargados (102 INVEX + 102 SISTEMA)
 - ✅ TDA: 206 registros cargados (103 INVEX + 103 SISTEMA)
 - ✅ TASA_MN: 205 registros cargados (102 INVEX + 103 SISTEMA)
-- ⚠️ TASA_ME: 0 registros (no hay datos ME en el archivo fuente)
+- ✅ TASA_ME: 203 registros cargados (100 INVEX + 103 SISTEMA)
 
 ## Estructura de Archivos
 
@@ -74,7 +74,7 @@ docker exec -i octavios-chat-bajaware_invex-postgres psql -U octavios -d bankadv
 ```
  total_rows | icap_count | tda_count | tasa_mn_count | tasa_me_count
 ------------+------------+-----------+---------------+---------------
-        206 |        204 |       206 |           205 |             0
+        206 |        204 |       206 |           205 |           203
 ```
 
 **Ver datos de ejemplo**:
@@ -107,8 +107,10 @@ docker exec -i octavios-chat-bajaware_invex-postgres psql -U octavios -d bankadv
 #### `load_tasas_data(data_root: str) -> pd.DataFrame`
 - Lee `CorporateLoan_CNBVDB.csv` (228 MB)
 - Usa chunking (50,000 rows/chunk) para manejar tamaño
-- Procesa 1,380,781 registros
-- Filtra por tipo de moneda (Pesos = MN, Dólares = ME)
+- Procesa 1,746,826 registros totales (1.38M MN + 366K ME)
+- **IMPORTANTE**: Usa columna `'Currency'` (no `'Currency type'`) para distinguir:
+  - `'Moneda nacional'` → TASA_MN
+  - `'Moneda extranjera'` → TASA_ME
 - Retorna DataFrame con: `[fecha, cve_inst, currency_type, tasa_promedio]`
 
 #### `aggregate_sistema_metrics(df, metric_col) -> pd.DataFrame`
@@ -148,9 +150,10 @@ WHERE DATE_TRUNC('month', mk.fecha) = DATE_TRUNC('month', ti.fecha)
 
 **TASA_MN**: 1 registro sin datos (205/206 = 99.5% coverage)
 
-**TASA_ME**: Sin datos (0/206 = 0%)
-- Archivo fuente solo contiene créditos en Pesos
-- No hay registros con "DOLARES" o "DÓLARES"
+**TASA_ME**: 3 registros sin datos (203/206 = 98.5% coverage)
+- Archivo fuente contiene 366,045 registros de Moneda Extranjera
+- 12,797 registros INVEX en ME procesados
+- Fechas disponibles: 2016-06 a 2025-07
 
 ## Tiempo de Ejecución
 

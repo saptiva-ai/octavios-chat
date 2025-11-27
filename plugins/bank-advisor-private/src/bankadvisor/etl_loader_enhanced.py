@@ -120,6 +120,10 @@ def load_tasas_data(data_root: str) -> pd.DataFrame:
     Returns DataFrame with columns: [fecha, cve_inst, currency_type, tasa_promedio]
 
     Note: This is a large file (228MB), so we use chunking
+
+    IMPORTANT: Uses 'Currency' column (not 'Currency type') to distinguish MN vs ME
+    - 'Currency' = 'Moneda nacional' → MN
+    - 'Currency' = 'Moneda extranjera' → ME
     """
     logger.info("Loading Tasas data (this may take a while)...")
     file_path = os.path.join(data_root, "CorporateLoan_CNBVDB.csv")
@@ -134,15 +138,11 @@ def load_tasas_data(data_root: str) -> pd.DataFrame:
 
     for chunk in pd.read_csv(file_path, chunksize=chunk_size):
         # Filter for relevant columns
-        chunk_filtered = chunk[['Monitoring Term', 'Institution Code', 'Currency type', 'Average Rate']].copy()
+        # CORRECTED: Use 'Currency' instead of 'Currency type'
+        chunk_filtered = chunk[['Monitoring Term', 'Institution Code', 'Currency', 'Average Rate']].copy()
 
         # Only keep rows with valid data
         chunk_filtered = chunk_filtered.dropna(subset=['Monitoring Term', 'Institution Code', 'Average Rate'])
-
-        # Filter for corporate size if column exists
-        if 'Corporate Size' in chunk.columns:
-            # Keep all sizes for now, we'll aggregate later
-            pass
 
         chunks.append(chunk_filtered)
 
@@ -153,7 +153,7 @@ def load_tasas_data(data_root: str) -> pd.DataFrame:
     df_clean = df.rename(columns={
         'Monitoring Term': 'fecha',
         'Institution Code': 'cve_inst',
-        'Currency type': 'currency_type',
+        'Currency': 'currency_type',  # CORRECTED: renamed from 'Currency type'
         'Average Rate': 'tasa_promedio'
     })
 
@@ -161,7 +161,7 @@ def load_tasas_data(data_root: str) -> pd.DataFrame:
     df_clean['fecha'] = pd.to_datetime(df_clean['fecha'], errors='coerce')
 
     # Normalize currency type
-    df_clean['currency_type'] = df_clean['currency_type'].str.upper().str.strip()
+    df_clean['currency_type'] = df_clean['currency_type'].str.strip()
 
     # Remove nulls
     df_result = df_clean.dropna(subset=['fecha', 'cve_inst', 'tasa_promedio'])
@@ -317,8 +317,9 @@ def update_monthly_kpis_with_metrics(engine, icap_df, tda_df, tasas_df):
             tasas_df['banco_norm'] = tasas_df['cve_inst'].apply(map_institution_to_banco_norm)
 
             # Separate MN and ME
-            tasas_mn = tasas_df[tasas_df['currency_type'] == 'PESOS'].copy()
-            tasas_me = tasas_df[tasas_df['currency_type'].isin(['DOLARES', 'DÓLARES', 'DOLLARS'])].copy()
+            # CORRECTED: Use proper column values from 'Currency' column
+            tasas_mn = tasas_df[tasas_df['currency_type'] == 'Moneda nacional'].copy()
+            tasas_me = tasas_df[tasas_df['currency_type'] == 'Moneda extranjera'].copy()
 
             # Update TASA_MN for INVEX
             if not tasas_mn.empty:

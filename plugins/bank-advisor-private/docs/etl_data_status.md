@@ -28,7 +28,7 @@ All required columns now exist in `monthly_kpis` table and are fully populated:
 | `icor` | double precision | ✅ Populated | 206 records |
 | `reservas_etapa_todas` | double precision | ✅ Populated | 206 records |
 | **`tasa_mn`** | double precision | ✅ **Populated (205 records)** | **Loaded 2025-11-27** |
-| **`tasa_me`** | double precision | ⚠️ **Empty (0 records)** | **No ME data in source** |
+| **`tasa_me`** | double precision | ✅ **Populated (203 records)** | **Loaded 2025-11-27** |
 | **`icap_total`** | double precision | ✅ **Populated (204 records)** | **Loaded 2025-11-27** |
 | **`tda_cartera_total`** | double precision | ✅ **Populated (206 records)** | **Loaded 2025-11-27** |
 
@@ -58,7 +58,7 @@ The following source files were successfully loaded into `monthly_kpis`:
 | `ICAP_Bancos.xlsx` | ICAP | → `icap_total` | ✅ **Loaded** | 204 (102 INVEX + 102 SISTEMA) |
 | `TDA.xlsx` | TDA | → `tda_cartera_total` | ✅ **Loaded** | 206 (103 INVEX + 103 SISTEMA) |
 | `CorporateLoan_CNBVDB.csv` | Tasas MN | → `tasa_mn` | ✅ **Loaded** | 205 (102 INVEX + 103 SISTEMA) |
-| `CorporateLoan_CNBVDB.csv` | Tasas ME | → `tasa_me` | ⚠️ **No data** | 0 (no ME loans in source) |
+| `CorporateLoan_CNBVDB.csv` | Tasas ME | → `tasa_me` | ✅ **Loaded** | 203 (100 INVEX + 103 SISTEMA) |
 | `TE_Invex_Sistema.xlsx` | Tasas Efectivas | → (reference data) | ℹ️ Not needed | - |
 
 ---
@@ -90,12 +90,14 @@ The following source files were successfully loaded into `monthly_kpis`:
 - ✅ **TASA_MN** (Tasa Corporativa Moneda Nacional)
   - Source: `CorporateLoan_CNBVDB.csv`
   - 1,380,781 raw records processed (228 MB CSV)
+  - Filters: `Currency = 'Moneda nacional'`
   - 205 monthly averages loaded
 
-- ⚠️ **TASA_ME** (Tasa Corporativa Moneda Extranjera)
+- ✅ **TASA_ME** (Tasa Corporativa Moneda Extranjera)
   - Source: `CorporateLoan_CNBVDB.csv`
-  - 0 records with "DOLARES" or "DÓLARES" found in source
-  - Column exists but remains empty
+  - 366,045 raw ME records processed (from same CSV)
+  - Filters: `Currency = 'Moneda extranjera'` (12,797 INVEX records)
+  - 203 monthly averages loaded (100 INVEX + 103 SISTEMA)
 
 ### Implementation Details
 
@@ -194,7 +196,7 @@ docker exec -i octavios-chat-bajaware_invex-postgres psql -U octavios -d bankadv
 ```
  total_rows | icap_count | tda_count | tasa_mn_count | tasa_me_count
 ------------+------------+-----------+---------------+---------------
-        206 |        204 |       206 |           205 |             0
+        206 |        204 |       206 |           205 |           203
 ```
 
 ---
@@ -203,26 +205,15 @@ docker exec -i octavios-chat-bajaware_invex-postgres psql -U octavios -d bankadv
 
 ### Queries Now Supported
 
-Users can now query ICAP, TDA, and TASA_MN metrics:
+Users can now query **ALL 4 new metrics** (ICAP, TDA, TASA_MN, TASA_ME):
 
 **Example Queries**:
 1. ✅ "ICAP del sistema últimos 6 meses" → Returns line chart with ICAP values
 2. ✅ "TDA de INVEX en 2024" → Returns timeline with TDA values
-3. ✅ "tasa MN últimos 3 meses" → Returns bar chart with interest rates
-4. ✅ "compara ICAP de INVEX vs Sistema" → Returns dual-line chart
-
-### TASA_ME Status
-
-**Current**: TASA_ME column exists but is empty
-
-**Reason**: The source file `CorporateLoan_CNBVDB.csv` contains only "Pesos" (MN) loans, no foreign currency (ME) loans
-
-**User Message** (if querying TASA_ME):
-```
-"La métrica TASA_ME no tiene datos disponibles. El archivo fuente solo contiene
-créditos en Moneda Nacional (MN). Si necesitas tasas en Moneda Extranjera,
-por favor proporciona un archivo con datos de créditos en dólares."
-```
+3. ✅ "tasa MN últimos 3 meses" → Returns bar chart with MN interest rates
+4. ✅ "tasa ME de INVEX vs Sistema" → Returns comparison of ME rates
+5. ✅ "compara ICAP de INVEX vs Sistema" → Returns dual-line chart
+6. ✅ "muéstrame tasa ME últimos 12 meses" → Returns ME rate timeline
 
 ---
 
@@ -332,4 +323,4 @@ DROP COLUMN IF EXISTS tda_cartera_total;
 - ICAP: 204/206 rows (99.0%)
 - TDA: 206/206 rows (100%)
 - TASA_MN: 205/206 rows (99.5%)
-- TASA_ME: 0/206 rows (0% - no source data)
+- TASA_ME: 203/206 rows (98.5%)
