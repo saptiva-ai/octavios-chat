@@ -23,7 +23,8 @@ from ..core.constants import (
     TOOL_NAME_AUDIT,
     TOOL_NAME_EXCEL,
     TOOL_NAME_RESEARCH,
-    TOOL_NAME_EXTRACT
+    TOOL_NAME_EXTRACT,
+    TOOL_NAME_BANK_ANALYTICS
 )
 
 logger = structlog.get_logger(__name__)
@@ -34,6 +35,7 @@ TOOL_CACHE_TTL = {
     TOOL_NAME_EXCEL: 1800,   # 30 min (data might update)
     TOOL_NAME_RESEARCH: 86400,   # 24 hours (research is expensive)
     TOOL_NAME_EXTRACT: 3600,  # 1 hour (text is stable)
+    TOOL_NAME_BANK_ANALYTICS: 300,  # 5 min (queries may change)
 }
 
 class ToolExecutionService:
@@ -318,3 +320,116 @@ class ToolExecutionService:
             # Return empty results on error
 
         return results
+
+    @classmethod
+    async def invoke_bank_analytics(
+        cls,
+        message: str,
+        user_id: str,
+        mode: str = "dashboard"
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Invoke bank_analytics MCP tool if message appears to be a banking query.
+
+        This is a message-based tool (not document-based), so it uses the
+        bank_analytics_client directly instead of the MCP adapter.
+
+        Args:
+            message: User message text
+            user_id: User ID for logging
+            mode: Visualization mode (dashboard or timeline)
+
+        Returns:
+            BankChartData dict if successful, None otherwise
+        """
+        from .bank_analytics_client import (
+            is_bank_query,
+            query_bank_analytics,
+            BankAdvisorUnavailableError,
+            BankAdvisorQueryError
+        )
+
+        try:
+            # Quick check if it's a banking query
+            if not await is_bank_query(message):
+                logger.debug(
+                    "Message is not a banking query",
+                    message_preview=message[:50]
+                )
+                return None
+
+            logger.info(
+                "bank_analytics.detected",
+                message_preview=message[:100],
+                user_id=user_id
+            )
+
+            # Try cache first
+            cache = None
+            cache_key = None
+            try:
+                cache = await get_redis_cache()
+                cache_key = cls._generate_cache_key(
+                    TOOL_NAME_BANK_ANALYTICS,
+                    message[:100],  # Use message prefix as doc_id
+                    {"mode": mode}
+                )
+                cached_result = await cache.get(cache_key)
+                if cached_result:
+                    logger.info(
+                        "bank_analytics.cache_hit",
+                        message_preview=message[:50]
+                    )
+                    return cached_result
+            except Exception as e:
+                logger.warning(
+                    "bank_analytics.cache_error",
+                    error=str(e)
+                )
+
+            # Query bank advisor
+            response = await query_bank_analytics(
+                metric_or_query=message,
+                mode=mode
+            )
+
+            if response.success and response.data:
+                result = response.data.model_dump()
+
+                # Cache the result
+                if cache and cache_key:
+                    try:
+                        ttl = TOOL_CACHE_TTL.get(TOOL_NAME_BANK_ANALYTICS, 300)
+                        await cache.set(cache_key, result, expire=ttl)
+                    except Exception as e:
+                        logger.warning(
+                            "bank_analytics.cache_set_error",
+                            error=str(e)
+                        )
+
+                logger.info(
+                    "bank_analytics.success",
+                    metric=result.get("metric_name"),
+                    banks=result.get("bank_names")
+                )
+
+                return result
+
+            return None
+
+        except (BankAdvisorUnavailableError, BankAdvisorQueryError) as e:
+            logger.warning(
+                "bank_analytics.query_failed",
+                message_preview=message[:50],
+                error=str(e)
+            )
+            return None
+
+        except Exception as e:
+            logger.error(
+                "bank_analytics.unexpected_error",
+                message_preview=message[:50],
+                error=str(e),
+                exc_info=True
+            )
+            return None

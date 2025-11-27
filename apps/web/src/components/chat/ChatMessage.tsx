@@ -7,12 +7,14 @@ import { Button, Badge } from "../ui";
 import { StreamingMessage } from "./StreamingMessage";
 import { FileReviewMessage } from "./FileReviewMessage";
 import { MessageAuditCard } from "./MessageAuditCard";
+import { BankChartMessage } from "./BankChartMessage";
 import { PreviewAttachment } from "./PreviewAttachment";
 import { featureFlags } from "../../lib/feature-flags";
 import type {
   ChatMessage as ChatMessageType,
   ChatMessageKind,
   FileReviewData,
+  BankChartData,
 } from "../../lib/types";
 import type { ToolInvocation } from "@/lib/types";
 import type { FileAttachment } from "../../types/files";
@@ -148,6 +150,12 @@ export function ChatMessage({
     };
     return <FileReviewMessage message={message} />;
   }
+
+  // Check for bank_chart kind (BA-P0-002)
+  const isBankChart = kind === "bank_chart" || (artifact as any)?.type === "bank_chart";
+  const bankChartData: BankChartData | null = isBankChart
+    ? (artifact as BankChartData) || (metadata?.artifact as BankChartData)
+    : null;
 
   // Identify audit messages to append inline audit card after content
   const isAuditMessage =
@@ -367,6 +375,14 @@ export function ChatMessage({
               />
             </div>
           )}
+
+        {/* Bank chart visualization (BA-P0-002) */}
+        {isAssistant && bankChartData && (
+          <BankChartMessage
+            data={bankChartData}
+            className={cn(isUser ? "ml-auto" : "")}
+          />
+        )}
 
         {/* Artifact cards should appear after the assistant's summary (and audit card) */}
         {artifactInvocations.length > 0 && (

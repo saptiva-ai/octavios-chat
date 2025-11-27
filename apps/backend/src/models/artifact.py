@@ -17,6 +17,7 @@ class ArtifactType(str, Enum):
     MARKDOWN = "markdown"
     CODE = "code"
     GRAPH = "graph"
+    BANK_CHART = "bank_chart"  # BA-P0-003: BankAdvisor visualization
 
 
 class ArtifactVersion(BaseModel):

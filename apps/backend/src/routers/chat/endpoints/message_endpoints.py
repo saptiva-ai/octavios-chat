@@ -214,6 +214,20 @@ async def send_chat_message(
 
         # 4.5. Invoke MCP tools before LLM (NEW: Phase 2 MCP integration)
         tool_results = await ToolExecutionService.invoke_relevant_tools(context, user_id)
+
+        # 4.6. Check for bank analytics query (BA-P0-001)
+        bank_chart_data = await ToolExecutionService.invoke_bank_analytics(
+            message=context.message,
+            user_id=user_id
+        )
+        if bank_chart_data:
+            tool_results["bank_analytics"] = bank_chart_data
+            logger.info(
+                "Bank analytics result added",
+                metric=bank_chart_data.get("metric_name"),
+                request_id=context.request_id
+            )
+
         if tool_results:
             # Update context with tool results for LLM injection
             context = ChatContext(
@@ -277,6 +291,7 @@ async def send_chat_message(
 
             # Extract validation_report_id from tool results if present
             validation_report_id = None
+            bank_chart_artifact = None
             if tool_results:
                 for key, result in tool_results.items():
                     # Check for audit_file result
@@ -284,27 +299,43 @@ async def send_chat_message(
                         validation_report_id = result.get("validation_report_id")
                         if validation_report_id:
                             break
+                    # Check for bank_analytics result (BA-P0-001)
+                    if key == "bank_analytics" and isinstance(result, dict):
+                        bank_chart_artifact = result
+                        logger.info(
+                            "Bank chart artifact detected",
+                            metric=result.get("metric_name")
+                        )
 
             logger.info(
                 "🔍 DEBUG: About to save assistant message with metadata",
                 decision_metadata=decision_metadata,
                 tool_invocations=tool_invocations,
                 has_tool_invocations=len(tool_invocations) > 0,
-                validation_report_id=validation_report_id
+                validation_report_id=validation_report_id,
+                has_bank_chart=bank_chart_artifact is not None
             )
+
+            # Build message metadata
+            message_metadata = {
+                "strategy_used": handler_result.strategy_used,
+                "processing_time_ms": handler_result.processing_time_ms,
+                "tokens_used": handler_result.metadata.tokens_used if handler_result.metadata else None,
+                "decision_metadata": decision_metadata,
+                "tool_invocations": tool_invocations,
+                "validation_report_id": validation_report_id
+            }
+
+            # Add bank_chart artifact if present (BA-P0-001)
+            if bank_chart_artifact:
+                message_metadata["artifact"] = bank_chart_artifact
+                message_metadata["kind"] = "bank_chart"
 
             assistant_message = await chat_service.add_assistant_message(
                 chat_session=chat_session,
                 content=handler_result.sanitized_content or handler_result.content,
                 model=context.model,
-                metadata={
-                    "strategy_used": handler_result.strategy_used,
-                    "processing_time_ms": handler_result.processing_time_ms,
-                    "tokens_used": handler_result.metadata.tokens_used if handler_result.metadata else None,
-                    "decision_metadata": decision_metadata,
-                    "tool_invocations": tool_invocations,  # Add tool_invocations at top level for frontend
-                    "validation_report_id": validation_report_id  # Inject validation_report_id for UI card
-                }
+                metadata=message_metadata
             )
 
             logger.info(
@@ -323,12 +354,18 @@ async def send_chat_message(
             # Invalidate caches
             await cache.invalidate_chat_history(chat_session.id)
 
-            # Return response
-            return (ChatResponseBuilder()
+            # Build response
+            response_builder = (ChatResponseBuilder()
                 .from_processing_result(handler_result)
                 .with_metadata("processing_time_ms", (time.time() - start_time) * 1000)
-                .with_metadata("assistant_message_id", str(assistant_message.id))
-                .build())
+                .with_metadata("assistant_message_id", str(assistant_message.id)))
+
+            # Add bank_chart artifact to response (BA-P0-001)
+            if bank_chart_artifact:
+                response_builder = response_builder.with_artifact(bank_chart_artifact)
+                response_builder = response_builder.with_metadata("kind", "bank_chart")
+
+            return response_builder.build()
 
         # Fallback (should not happen with StandardChatHandler)
         logger.warning(
