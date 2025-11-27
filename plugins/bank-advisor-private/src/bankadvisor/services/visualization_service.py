@@ -47,9 +47,16 @@ class VisualizationService:
         values = latest_month["data"]
         
         categories = [item["category"] for item in values]
-        vals = [item["value"] for item in values]
+        # Handle NULL values: replace None with 0 for display
+        vals = [item["value"] if item["value"] is not None else 0 for item in values]
         colors = [COLOR_INVEX if "INVEX" in c.upper() else COLOR_SISTEMA for c in categories]
-        
+
+        # Format text labels, handling None values
+        def format_value(v, is_ratio):
+            if v is None or v == 0:
+                return "N/A"
+            return f"{v:.2f}%" if is_ratio else f"{v:,.0f}"
+
         return {
             "data": [
                 {
@@ -57,7 +64,7 @@ class VisualizationService:
                     "x": categories,
                     "y": vals,
                     "marker": {"color": colors},
-                    "text": [f"{v:.2f}%" if is_ratio else f"{v:,.0f}" for v in vals],
+                    "text": [format_value(v, is_ratio) for v in vals],
                     "textposition": "auto"
                 }
             ],
@@ -84,10 +91,12 @@ class VisualizationService:
         
         for month in data:
             for item in month["data"]:
+                # Handle NULL values: use None for gaps in line charts
+                value = item["value"] if item["value"] is not None else None
                 if "INVEX" in item["category"].upper():
-                    invex_data.append(item["value"])
+                    invex_data.append(value)
                 elif "SISTEMA" in item["category"].upper():
-                    sistema_data.append(item["value"])
+                    sistema_data.append(value)
         
         traces = []
         if invex_data:

@@ -27,6 +27,28 @@ class IntentService:
         cls._sections = {s["id"]: s for s in data["sections"]}
         cls._build_index()
 
+    # Explicit aliases for ambiguous terms (bypasses keyword intersection logic)
+    _explicit_aliases: Dict[str, str] = {
+        # Tasas - very specific mappings
+        "tasa_mn": "tasa_mn_cuadro",
+        "tasa mn": "tasa_mn_cuadro",
+        "tasa pesos": "tasa_mn_cuadro",
+        "tasa moneda nacional": "tasa_mn_cuadro",
+        "tasa_me": "tasa_me_cuadro",
+        "tasa me": "tasa_me_cuadro",
+        "tasa dolares": "tasa_me_cuadro",
+        "tasa moneda extranjera": "tasa_me_cuadro",
+        # Direct metric names
+        "icap": "icap_cuadro",
+        "icap_total": "icap_cuadro",
+        "capitalización": "icap_cuadro",
+        "capitalizacion": "icap_cuadro",
+        "tda": "tda_cuadro",
+        "tda_cartera_total": "tda_cuadro",
+        "deterioro": "tda_cuadro",
+        "tasa deterioro": "tda_cuadro",
+    }
+
     @classmethod
     def _build_index(cls):
         """Construye un índice simple de palabras clave a IDs de sección."""
@@ -34,13 +56,13 @@ class IntentService:
             # Extraer palabras clave del título e ID
             title_words = config["title"].lower().split()
             id_words = section_id.replace("_", " ").lower().split()
-            
+
             keywords = set(title_words + id_words)
             # Filtrar palabras comunes irrelevantes
             keywords.discard("cuadro")
             keywords.discard("grafica")
             keywords.discard("evolucion")
-            
+
             for kw in keywords:
                 if len(kw) < 3: continue
                 if kw not in cls._keyword_map:
@@ -56,7 +78,11 @@ class IntentService:
     def disambiguate(cls, query: str) -> AmbiguityResult:
         cls.initialize()
         query_lower = query.lower().strip()
-        
+
+        # 0. Check explicit aliases FIRST (highest priority)
+        if query_lower in cls._explicit_aliases:
+            return AmbiguityResult(is_ambiguous=False, options=[], resolved_id=cls._explicit_aliases[query_lower])
+
         # 1. Búsqueda Exacta por ID
         if query_lower in cls._sections:
             return AmbiguityResult(is_ambiguous=False, options=[], resolved_id=query_lower)

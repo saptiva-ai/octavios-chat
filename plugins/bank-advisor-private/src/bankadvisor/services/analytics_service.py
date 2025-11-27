@@ -293,6 +293,11 @@ class AnalyticsService:
                 if date_str not in data_by_month:
                     data_by_month[date_str] = []
 
+                # Handle NULL values: skip records with NULL metric values
+                # This prevents "unsupported format string passed to NoneType" errors
+                if val is None:
+                    continue
+
                 # Normalizar ratios a porcentaje
                 if final_column_name in ["imor", "icor"]:
                     val = val * 100 if val else 0
