@@ -355,4 +355,4 @@ debug_tool.py
 .logs/
 
 # Large data files (>100MB)
-plugins/bank-advisor-private/data/raw/CorporateLoan_CNBVDB.csv
+plugins/bank-advisor-private/data/raw/

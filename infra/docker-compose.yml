@@ -8,7 +8,7 @@
 #   Producción: docker compose -f infra/docker-compose.yml --profile production up -d
 
 # CRITICAL: Name must match existing production deployment to reuse volumes
-name: ${COMPOSE_PROJECT_NAME:-octavios-chat}
+name: ${COMPOSE_PROJECT_NAME:-octavios-chat-bajaware_invex}
 
 services:
   # ========================================
@@ -16,7 +16,7 @@ services:
   # ========================================
   mongodb:
     image: mongo:7.0
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-mongodb
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat-bajaware_invex}-mongodb
     restart: unless-stopped
     env_file:
       - ../envs/.env
@@ -43,7 +43,7 @@ services:
   # ========================================
   redis:
     image: redis:7-alpine
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-redis
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat-bajaware_invex}-redis
     restart: unless-stopped
     env_file:
       - ../envs/.env
@@ -71,7 +71,7 @@ services:
   # ========================================
   languagetool:
     image: erikvl87/languagetool:latest
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-languagetool
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat-bajaware_invex}-languagetool
     restart: unless-stopped
     environment:
       - Java_Xms=512m
@@ -92,7 +92,7 @@ services:
   # ========================================
   minio:
     image: minio/minio:latest
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-minio
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat-bajaware_invex}-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
     env_file:
@@ -135,7 +135,7 @@ services:
   # - Memory-mapped storage for efficient large-scale deployments
   qdrant:
     image: qdrant/qdrant:v1.12.5
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-qdrant
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat-bajaware_invex}-qdrant
     restart: unless-stopped
     env_file:
       - ../envs/.env
@@ -189,7 +189,7 @@ services:
       context: ../apps/backend
       dockerfile: Dockerfile
       target: production
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-backend
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat-bajaware_invex}-backend
     restart: unless-stopped
     env_file:
       - ../envs/.env
@@ -316,7 +316,7 @@ services:
         NODE_ENV: production
         UID: ${UID:-1000}
         GID: ${GID:-1000}
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-web
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat-bajaware_invex}-web
     restart: unless-stopped
     user: "${UID:-1000}:${GID:-1000}"
     env_file:
@@ -376,7 +376,7 @@ services:
   # ========================================
   nginx:
     image: nginx:1.25-alpine
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-nginx
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat-bajaware_invex}-nginx
     restart: unless-stopped
     ports:
       - "80:80"
@@ -400,7 +400,7 @@ services:
     build:
       context: ..
       dockerfile: tests/Dockerfile.playwright
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-playwright
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat-bajaware_invex}-playwright
     environment:
       - PLAYWRIGHT_BASE_URL=http://web:3000
       - API_BASE_URL=http://backend:8000
@@ -423,7 +423,7 @@ services:
   # Dedicated PostgreSQL for bank-advisor plugin (INVEX banking data)
   postgres:
     image: postgres:15-alpine
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-postgres
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat-bajaware_invex}-postgres
     restart: unless-stopped
     env_file:
       - ../envs/.env
@@ -453,7 +453,7 @@ services:
     build:
       context: ..
       dockerfile: plugins/bank-advisor-private/Dockerfile
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-bank-advisor
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat-bajaware_invex}-bank-advisor
     restart: unless-stopped
     env_file:
       - ../envs/.env
@@ -494,7 +494,7 @@ services:
     build:
       context: ..
       dockerfile: plugins/public/file-manager/Dockerfile
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-file-manager
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat-bajaware_invex}-file-manager
     restart: unless-stopped
     env_file:
       - ../envs/.env

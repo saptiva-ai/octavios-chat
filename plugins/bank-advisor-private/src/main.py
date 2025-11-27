@@ -1,8 +1,13 @@
 """
 BankAdvisor MCP Server - Enterprise Banking Analytics Microservice
 
-Exposes banking analytics tools via MCP (Model Context Protocol) over SSE.
+Exposes banking analytics tools via MCP (Model Context Protocol) over HTTP.
 This service is completely decoupled from the octavios-core monolith.
+
+Architecture:
+- FastMCP handles MCP protocol and tool registration
+- FastAPI handles health checks and SSE endpoint
+- Uses HTTP transport for remote access from octavios-core
 """
 import os
 import asyncio
@@ -11,7 +16,7 @@ from typing import Any, Dict
 
 import structlog
 from fastapi import FastAPI
-from mcp.server.fastapi import FastMCP
+from fastmcp import FastMCP
 from sqlalchemy import text
 
 # Import bankadvisor modules
@@ -29,10 +34,22 @@ logger = structlog.get_logger(__name__)
 async def ensure_data_populated():
     """
     Verifica si la base de datos tiene datos. Si está vacía, ejecuta el ETL.
-    Reutiliza la lógica de apps/api/scripts/startup.sh
     """
     try:
         async with AsyncSessionLocal() as session:
+            # Check if table exists and has data
+            result = await session.execute(
+                text("""
+                    SELECT COUNT(*) FROM information_schema.tables
+                    WHERE table_name = 'monthly_kpis'
+                """)
+            )
+            table_exists = result.scalar() > 0
+
+            if not table_exists:
+                logger.info("database.table_missing", message="Table monthly_kpis doesn't exist yet")
+                return
+
             # Check if table has recent data
             result = await session.execute(
                 text("SELECT COUNT(*) FROM monthly_kpis WHERE fecha > '2025-01-01'")
@@ -40,11 +57,9 @@ async def ensure_data_populated():
             row_count = result.scalar()
 
             if row_count == 0:
-                logger.info("database.empty", message="No data found, running ETL")
-                # Import and execute ETL
-                from bankadvisor.etl_loader import main as etl_main
-                etl_main()
-                logger.info("etl.completed", message="ETL executed successfully")
+                logger.info("database.empty", message="No data found. ETL must be run manually via: python -m bankadvisor.etl_loader")
+                # Skip automatic ETL - it's too slow for startup (228MB file)
+                # ETL should be run manually after first deployment
             else:
                 logger.info(
                     "database.ready",
@@ -57,6 +72,9 @@ async def ensure_data_populated():
         pass
 
 
+# ============================================================================
+# FASTAPI APP WITH LIFESPAN
+# ============================================================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan: startup and shutdown logic"""
@@ -73,16 +91,26 @@ async def lifespan(app: FastAPI):
     # Ensure data is populated
     await ensure_data_populated()
 
-    logger.info("bankadvisor.ready", port=8000)
+    port = int(os.getenv("PORT", "8002"))
+    logger.info("bankadvisor.ready", port=port)
     yield
 
     logger.info("bankadvisor.shutdown")
 
 
+# Create FastAPI app for health checks
+app = FastAPI(
+    title="BankAdvisor MCP Server",
+    description="Enterprise Banking Analytics via MCP",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+
 # ============================================================================
 # MCP SERVER INITIALIZATION
 # ============================================================================
-mcp = FastMCP("BankAdvisor Enterprise", lifespan=lifespan)
+mcp = FastMCP("BankAdvisor Enterprise")
 
 
 # ============================================================================
@@ -192,9 +220,9 @@ async def bank_analytics(
 
 
 # ============================================================================
-# HEALTH CHECK ENDPOINT
+# HEALTH CHECK ENDPOINT (FastAPI)
 # ============================================================================
-@mcp.get("/health")
+@app.get("/health")
 async def health_check():
     """Health check endpoint for Docker healthcheck"""
     try:
@@ -216,18 +244,30 @@ async def health_check():
 
 
 # ============================================================================
+# MOUNT MCP SERVER TO FASTAPI
+# ============================================================================
+# Get the ASGI app from FastMCP and mount it
+mcp_app = mcp.http_app(path="/mcp")
+app.mount("/mcp", mcp_app)
+
+# Also mount SSE endpoint for compatibility
+sse_app = mcp.sse_app(path="/sse")
+app.mount("/sse", sse_app)
+
+
+# ============================================================================
 # MAIN ENTRY POINT
 # ============================================================================
 if __name__ == "__main__":
     import uvicorn
 
-    port = int(os.getenv("PORT", "8000"))
+    port = int(os.getenv("PORT", "8002"))
     host = os.getenv("HOST", "0.0.0.0")
 
     logger.info("bankadvisor.server_starting", host=host, port=port)
 
     uvicorn.run(
-        "src.main:mcp",
+        "src.main:app",
         host=host,
         port=port,
         log_level="info",
