@@ -22,7 +22,7 @@ from typing import Any, Dict, Optional
 import httpx
 import structlog
 
-from schemas.bank_chart import BankChartData, BankAnalyticsResponse
+from ..schemas.bank_chart import BankChartData, BankAnalyticsResponse
 
 logger = structlog.get_logger(__name__)
 
@@ -75,9 +75,9 @@ async def query_bank_analytics(
 
     try:
         async with httpx.AsyncClient(timeout=BANK_ADVISOR_TIMEOUT) as client:
-            # JSON-RPC 2.0 call to MCP endpoint
+            # JSON-RPC 2.0 call to RPC endpoint (direct endpoint, not FastMCP)
             response = await client.post(
-                f"{BANK_ADVISOR_URL}/mcp",
+                f"{BANK_ADVISOR_URL}/rpc",
                 json={
                     "jsonrpc": "2.0",
                     "id": "bank-analytics-call",

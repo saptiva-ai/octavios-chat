@@ -14,8 +14,10 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import Any, Dict
 
+import json
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastmcp import FastMCP
 from sqlalchemy import text
 
@@ -114,10 +116,9 @@ mcp = FastMCP("BankAdvisor Enterprise")
 
 
 # ============================================================================
-# MCP TOOL: bank_analytics
+# CORE BANK ANALYTICS LOGIC (callable directly)
 # ============================================================================
-@mcp.tool()
-async def bank_analytics(
+async def _bank_analytics_impl(
     metric_or_query: str,
     mode: str = "dashboard"
 ) -> Dict[str, Any]:
@@ -188,19 +189,26 @@ async def bank_analytics(
             config
         )
 
+        # Extract data_as_of from payload (structure varies)
+        data_as_of = payload.get("data_as_of", payload.get("metadata", {}).get("data_as_of", "N/A"))
+
         logger.info(
             "tool.bank_analytics.success",
             metric=config["field"],
             months_returned=len(payload["data"]["months"]),
-            data_as_of=payload["metadata"]["data_as_of"]
+            data_as_of=data_as_of
         )
 
         return {
             "data": payload["data"],
-            "metadata": payload["metadata"],
+            "metadata": {
+                "metric": config["field"],
+                "data_as_of": data_as_of,
+                "title": payload.get("title", config.get("title", "Análisis Bancario")),
+            },
             "plotly_config": plotly_config,
-            "title": config.get("title", "Análisis Bancario"),
-            "data_as_of": payload["metadata"]["data_as_of"]
+            "title": config.get("title", payload.get("title", "Análisis Bancario")),
+            "data_as_of": data_as_of
         }
 
     except ValueError as ve:
@@ -217,6 +225,21 @@ async def bank_analytics(
             "error": "internal_error",
             "message": "Error interno procesando la consulta"
         }
+
+
+# ============================================================================
+# MCP TOOL WRAPPER (registered with FastMCP)
+# ============================================================================
+@mcp.tool()
+async def bank_analytics(
+    metric_or_query: str,
+    mode: str = "dashboard"
+) -> Dict[str, Any]:
+    """
+    Consulta métricas bancarias (INVEX + Sistema Financiero Mexicano).
+    Wrapper para FastMCP que llama a la implementación real.
+    """
+    return await _bank_analytics_impl(metric_or_query, mode)
 
 
 # ============================================================================
@@ -244,7 +267,103 @@ async def health_check():
 
 
 # ============================================================================
-# MOUNT MCP SERVER TO FASTAPI
+# JSON-RPC 2.0 ENDPOINT FOR BACKEND COMPATIBILITY
+# ============================================================================
+@app.post("/rpc")
+async def json_rpc_endpoint(request: Request):
+    """
+    JSON-RPC 2.0 endpoint for direct tool invocation from OctaviOS backend.
+
+    This endpoint provides a simple JSON-RPC interface that matches the
+    pattern used by other MCP clients in the monolith (audit_mcp_client).
+    """
+    try:
+        body = await request.json()
+
+        # Validate JSON-RPC 2.0 structure
+        if body.get("jsonrpc") != "2.0":
+            return JSONResponse({
+                "jsonrpc": "2.0",
+                "id": body.get("id"),
+                "error": {"code": -32600, "message": "Invalid Request: jsonrpc must be '2.0'"}
+            }, status_code=400)
+
+        method = body.get("method")
+        params = body.get("params", {})
+        rpc_id = body.get("id", "1")
+
+        # Handle tools/call method
+        if method == "tools/call":
+            tool_name = params.get("name")
+            arguments = params.get("arguments", {})
+
+            if tool_name == "bank_analytics":
+                # Invoke the bank_analytics implementation directly
+                result = await _bank_analytics_impl(
+                    metric_or_query=arguments.get("metric_or_query", ""),
+                    mode=arguments.get("mode", "dashboard")
+                )
+
+                return JSONResponse({
+                    "jsonrpc": "2.0",
+                    "id": rpc_id,
+                    "result": {
+                        "content": [{"type": "text", "text": json.dumps(result)}]
+                    }
+                })
+            else:
+                return JSONResponse({
+                    "jsonrpc": "2.0",
+                    "id": rpc_id,
+                    "error": {"code": -32601, "message": f"Tool not found: {tool_name}"}
+                }, status_code=404)
+
+        # Handle tools/list method
+        elif method == "tools/list":
+            return JSONResponse({
+                "jsonrpc": "2.0",
+                "id": rpc_id,
+                "result": {
+                    "tools": [{
+                        "name": "bank_analytics",
+                        "description": "Consulta métricas bancarias (INVEX + Sistema Financiero Mexicano)",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "metric_or_query": {"type": "string", "description": "Metric name or natural language query"},
+                                "mode": {"type": "string", "enum": ["dashboard", "timeline"], "default": "dashboard"}
+                            },
+                            "required": ["metric_or_query"]
+                        }
+                    }]
+                }
+            })
+
+        else:
+            return JSONResponse({
+                "jsonrpc": "2.0",
+                "id": rpc_id,
+                "error": {"code": -32601, "message": f"Method not found: {method}"}
+            }, status_code=404)
+
+    except json.JSONDecodeError:
+        return JSONResponse({
+            "jsonrpc": "2.0",
+            "id": None,
+            "error": {"code": -32700, "message": "Parse error"}
+        }, status_code=400)
+
+    except Exception as e:
+        logger.error("json_rpc.error", error=str(e), exc_info=True)
+        return JSONResponse({
+            "jsonrpc": "2.0",
+            "id": body.get("id") if 'body' in dir() else None,
+            "error": {"code": -32603, "message": f"Internal error: {str(e)}"}
+        }, status_code=500)
+
+
+# ============================================================================
+# MOUNT MCP SERVER TO FASTAPI (for native MCP clients)
 # ============================================================================
 # Get the ASGI app from FastMCP and mount it
 mcp_app = mcp.http_app(path="/mcp")
