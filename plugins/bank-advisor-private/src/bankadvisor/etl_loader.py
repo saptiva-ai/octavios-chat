@@ -1,10 +1,10 @@
 import os
 import pandas as pd
 from sqlalchemy import create_engine
-from src.bankadvisor.io_loader import load_all, get_data_paths
-from src.bankadvisor.transforms import prepare_cnbv, prepare_castigos, enrich_with_castigos
-from src.bankadvisor.metrics import monthly_kpis
-from src.core.config import get_settings
+from bankadvisor.io_loader import load_all, get_data_paths
+from bankadvisor.transforms import prepare_cnbv, prepare_castigos, enrich_with_castigos
+from bankadvisor.metrics import monthly_kpis
+from core.config import get_settings
 
 settings = get_settings()
 
@@ -86,23 +86,14 @@ def run_etl():
 
     # 5. Cargar a Postgres
     print("💾 Guardando en PostgreSQL...")
-    
-    # Construir URL de conexión Sincrona (psycopg2) para Pandas
-    # Usamos las variables de entorno del container
-    user = os.getenv("POSTGRES_USER", "octavios")
-    password = os.getenv("POSTGRES_PASSWORD", "secure_postgres_password")
-    db = os.getenv("POSTGRES_DB", "bankadvisor")
-    host = os.getenv("POSTGRES_HOST", "postgres") # Nombre del servicio en docker network
-    port = os.getenv("POSTGRES_PORT", "5432")
-    
-    # IMPORTANTE: Si corremos esto DESDE el host (fuera de docker), el host es localhost
-    # y el puerto mapeado es 5432.
-    # Detectar si estamos en docker o local
+
+    # Use sync database URL from settings
+    db_url = settings.database_url_sync
+
+    # Override host if running outside docker
     if not os.path.exists("/.dockerenv"):
-        host = "localhost"
-    
-    db_url = f"postgresql://{user}:{password}@{host}:{port}/{db}"
-    
+        db_url = db_url.replace(f"@{settings.postgres_host}:", "@localhost:")
+
     engine = create_engine(db_url)
     
     # Guardar (reemplazar tabla completa para idempodencia en dev)
@@ -110,5 +101,10 @@ def run_etl():
     
     print(f"✅ Carga completada! {len(final_df)} registros insertados.")
 
-if __name__ == "__main__":
+def main():
+    """Entry point for ETL execution."""
     run_etl()
+
+
+if __name__ == "__main__":
+    main()

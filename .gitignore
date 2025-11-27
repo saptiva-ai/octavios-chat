@@ -353,3 +353,6 @@ debug_tool.py
 
 # Logs and deprecated files
 .logs/
+
+# Large data files (>100MB)
+plugins/bank-advisor-private/data/raw/CorporateLoan_CNBVDB.csv

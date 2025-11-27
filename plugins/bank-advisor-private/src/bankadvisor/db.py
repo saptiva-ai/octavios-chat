@@ -1,28 +1,65 @@
+"""
+Database configuration for BankAdvisor MCP Server.
+
+Uses SQLAlchemy async engine for PostgreSQL connections.
+"""
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import text
+
 from core.config import get_settings
 
 settings = get_settings()
 
-# Construct PostgreSQL URL from settings (assuming you add these to Settings or env vars)
-# Fallback to a default if not in settings for now, but ideally add to config.py
-# Using a direct construction here based on the docker-compose values for now
-POSTGRES_USER = "octavios" 
-POSTGRES_PASSWORD = "secure_postgres_password"
-POSTGRES_DB = "bankadvisor"
-POSTGRES_HOST = "postgres"
-POSTGRES_PORT = "5432"
-
-DATABASE_URL = f"postgresql+asyncpg://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
-
-engine = create_async_engine(DATABASE_URL, echo=settings.debug)
-AsyncSessionLocal = sessionmaker(
-    engine, class_=AsyncSession, expire_on_commit=False
+# Create async engine using settings
+engine = create_async_engine(
+    settings.database_url,
+    echo=settings.debug,
+    pool_pre_ping=True,
+    pool_size=5,
+    max_overflow=10
 )
 
-Base = declarative_base()
+AsyncSessionLocal = sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False
+)
 
-# Dependency for FastAPI routes if needed
+# Import Base from models to ensure single source of truth
+from bankadvisor.models.kpi import Base
+
+
+async def init_db():
+    """
+    Initialize database schema.
+    Creates the monthly_kpis table if it doesn't exist.
+    """
+    async with engine.begin() as conn:
+        # Create table if not exists
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS monthly_kpis (
+                id SERIAL PRIMARY KEY,
+                fecha TIMESTAMP,
+                institucion VARCHAR(100),
+                banco_norm VARCHAR(100),
+                cartera_total NUMERIC,
+                cartera_comercial_total NUMERIC,
+                cartera_consumo_total NUMERIC,
+                cartera_vivienda_total NUMERIC,
+                entidades_gubernamentales_total NUMERIC,
+                entidades_financieras_total NUMERIC,
+                empresarial_total NUMERIC,
+                cartera_vencida NUMERIC,
+                imor NUMERIC,
+                icor NUMERIC,
+                reservas_etapa_todas NUMERIC,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+
+
 async def get_db():
+    """Dependency for FastAPI routes if needed."""
     async with AsyncSessionLocal() as session:
         yield session

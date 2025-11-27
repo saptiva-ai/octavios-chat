@@ -148,7 +148,20 @@ def load_te(paths: DataPaths) -> pd.DataFrame:
 
 
 def load_corporate_loan(paths: DataPaths, *, encoding: str = "latin-1") -> pd.DataFrame:
+    """
+    Load corporate loan data from CSV if available.
+
+    Note: This file (CorporateLoan_CNBVDB.csv) is 218MB and excluded from git.
+    Returns empty DataFrame if file doesn't exist.
+    """
     path = paths.file("CorporateLoan_CNBVDB.csv")
+    if not path.exists():
+        # Return empty DataFrame with expected columns if file not present
+        return pd.DataFrame(columns=[
+            "institution_code", "institution", "monitoring_term",
+            "funded", "draw_down_amount"
+        ])
+
     df = pd.read_csv(path, encoding=encoding, low_memory=False)
     # Normalise header spacing for downstream use.
     df.columns = [col.strip().lower().replace(" ", "_") for col in df.columns]

@@ -1,5 +1,8 @@
 from sqlalchemy import Column, Integer, Float, String, Date, DateTime
-from bankadvisor.db import Base
+from sqlalchemy.orm import declarative_base
+
+# Use local Base to avoid circular import with db.py
+Base = declarative_base()
 
 class MonthlyKPI(Base):
     __tablename__ = "monthly_kpis"
