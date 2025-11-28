@@ -281,8 +281,8 @@ class SqlGenerationService:
         Returns:
             SqlGenerationResult with generated SQL
         """
-        # Build SELECT clause
-        select_clause = f"fecha, {metric_column}"
+        # Build SELECT clause (include banco_nombre for proper data transformation)
+        select_clause = f"banco_nombre, fecha, {metric_column}"
 
         # Build WHERE clauses
         where_clauses = []
