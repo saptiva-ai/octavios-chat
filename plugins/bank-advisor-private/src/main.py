@@ -430,24 +430,59 @@ async def _try_nl2sql_pipeline(user_query: str, mode: str) -> Optional[Dict[str,
         rows = result.fetchall()
 
     # Step 5: Transform to visualization format
-    # Convert SQL rows to months format expected by VisualizationService
-    months_data = []
+    # Convert SQL rows to legacy format expected by VisualizationService
+    # Legacy format: [{"month_label": "Jan 2024", "data": [{"category": "INVEX", "value": 0.05}]}]
+
+    from collections import defaultdict
+    from datetime import datetime
+
+    # Group by month (fecha column)
+    data_by_month = defaultdict(dict)
+    metric_col = spec.metric.lower()
+
     for row in rows:
-        # Assuming columns: fecha, [banco_nombre], metric_value
         row_dict = dict(row._mapping)
-        months_data.append(row_dict)
+        fecha = row_dict.get('fecha')
+        banco = row_dict.get('banco_nombre', 'Sistema')
+        value = row_dict.get(metric_col)
+
+        if fecha:
+            # Format month label (e.g., "Jan 2024")
+            if isinstance(fecha, datetime):
+                month_label = fecha.strftime("%b %Y")
+            else:
+                month_label = str(fecha)[:7]  # "2024-01"
+
+            data_by_month[month_label][banco] = value
+
+    # Convert to legacy format
+    months_data = []
+    for month_label, banco_values in sorted(data_by_month.items()):
+        month_entry = {
+            "month_label": month_label,
+            "data": [
+                {"category": banco, "value": val}
+                for banco, val in banco_values.items()
+            ]
+        }
+        months_data.append(month_entry)
 
     # Build Plotly config
     # Use spec to determine title and styling
     title = f"{spec.metric} - {' vs '.join(spec.bank_names) if spec.bank_names else 'Sistema'}"
 
+    # Add section_config with mode based on template
+    section_config = {
+        "title": title,
+        "field": spec.metric.lower(),
+        "description": f"Query: {user_query}",
+        "mode": "timeline_with_summary" if sql_result.metadata.get("template") == "metric_timeseries" else "dashboard_month_comparison",
+        "type": "ratio" if spec.metric.upper() in ["IMOR", "ICOR", "ICAP", "TDA"] else "absolute"
+    }
+
     plotly_config = VisualizationService.build_plotly_config(
         months_data,
-        {
-            "title": title,
-            "field": spec.metric.lower(),
-            "description": f"Query: {user_query}"
-        }
+        section_config
     )
 
     logger.info(
