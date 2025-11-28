@@ -416,6 +416,28 @@ DEFAULT_AVAILABLE_TOOLS = {
         }
     },
 
+    # === Banking Analytics Tools (MCP) - BA-P0-001 ===
+    "bank_analytics": {
+        "name": "bank_analytics",
+        "description": "Consultar y visualizar métricas bancarias CNBV (IMOR, ROE, ROA, Morosidad, Liquidez, CAP) con NL2SQL. Soporta consultas en lenguaje natural sobre datos históricos bancarios mexicanos 2017-2025.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "metric_or_query": {
+                    "type": "string",
+                    "description": "Consulta en lenguaje natural o métrica bancaria (ej: 'IMOR de INVEX en 2024', 'ROE de Santander vs BBVA 2023', 'bancos con mayor morosidad')"
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["dashboard", "comparison", "trend", "ranking"],
+                    "default": "dashboard",
+                    "description": "Tipo de visualización: dashboard (métrica única), comparison (varios bancos), trend (evolución temporal), ranking (top/bottom bancos)"
+                }
+            },
+            "required": ["metric_or_query"]
+        }
+    },
+
     # === Utility Tools ===
     "calculator": {
         "name": "calculator",
