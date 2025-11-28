@@ -251,6 +251,7 @@ def _build_chart_data(result: Dict[str, Any], query: str) -> BankChartData:
         data_as_of=result.get("data_as_of", metadata.get("data_as_of", "")),
         source="bank-advisor-mcp",
         title=result.get("title"),
+        metadata=metadata,  # BA-P0-004: Include metadata with sql_generated
     )
 
 

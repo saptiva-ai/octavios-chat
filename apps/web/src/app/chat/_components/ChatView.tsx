@@ -762,9 +762,11 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                     // console.log("[🔍 STREAMING DEBUG] Done event - has content:", !!event.data.content, "accumulated:", accumulatedContent.length);
                     response = {
                       ...event.data,
-                      // Ensure metadata from SSE is preserved for downstream (report_pdf_url, attachments, artifact)
-                      metadata:
-                        event.data?.metadata || (response as any)?.metadata,
+                      // BA-P0-004: Merge accumulated metaData (bank_chart_data, etc.) with event metadata
+                      metadata: {
+                        ...(event.data?.metadata || (response as any)?.metadata || {}),
+                        ...(metaData || {}),
+                      },
                     } as ChatResponse;
                   } else if (event.type === "error") {
                     // Handle both string and object error formats

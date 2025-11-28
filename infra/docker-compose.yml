@@ -447,6 +447,7 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-bankadvisor}
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-octavios}:${POSTGRES_PASSWORD:-secure_postgres_password}@postgres:5432/${POSTGRES_DB:-bankadvisor}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # SAPTIVA LLM Configuration loaded from env_file (BA-P0-001)
     ports:
       - "${BANK_ADVISOR_PORT:-8002}:8002"
     volumes:

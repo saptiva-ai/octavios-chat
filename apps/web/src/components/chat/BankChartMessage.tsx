@@ -29,10 +29,22 @@ export interface BankChartMessageProps {
 export function BankChartMessage({ data, className }: BankChartMessageProps) {
   const [isExpanded, setIsExpanded] = React.useState(false);
 
+  console.log("[📊 BANK_CHART_MESSAGE] Rendering with data:", {
+    hasPlotlyConfig: !!data.plotly_config,
+    plotlyDataLength: data.plotly_config?.data?.length,
+    plotlyData: data.plotly_config?.data,
+    plotlyLayout: data.plotly_config?.layout,
+    metricName: data.metric_name,
+    fullData: data
+  });
+
   // Extract chart config with defaults
   const plotlyData = data.plotly_config?.data || [];
+
+  // Merge backend layout with frontend theme overrides
+  const backendLayout = data.plotly_config?.layout || {};
   const plotlyLayout = {
-    ...data.plotly_config?.layout,
+    ...backendLayout,
     autosize: true,
     height: isExpanded ? 500 : 350,
     margin: { l: 50, r: 30, t: 50, b: 50 },
@@ -40,17 +52,17 @@ export function BankChartMessage({ data, className }: BankChartMessageProps) {
     plot_bgcolor: "rgba(255,255,255,0.02)",
     font: { color: "rgba(255,255,255,0.8)", size: 12 },
     xaxis: {
-      ...data.plotly_config?.layout?.xaxis,
+      ...(backendLayout.xaxis || {}),  // Preserve backend xaxis config (type, title, etc.)
       gridcolor: "rgba(255,255,255,0.1)",
       linecolor: "rgba(255,255,255,0.2)",
     },
     yaxis: {
-      ...data.plotly_config?.layout?.yaxis,
+      ...(backendLayout.yaxis || {}),  // Preserve backend yaxis config
       gridcolor: "rgba(255,255,255,0.1)",
       linecolor: "rgba(255,255,255,0.2)",
     },
     legend: {
-      ...data.plotly_config?.layout?.legend,
+      ...(backendLayout.legend || {}),  // Preserve backend legend config
       bgcolor: "rgba(0,0,0,0)",
       font: { color: "rgba(255,255,255,0.8)" },
     },

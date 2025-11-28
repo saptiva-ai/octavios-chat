@@ -2,16 +2,15 @@
 LLM Client for NL2SQL - SAPTIVA Integration
 
 Provides SQL generation capabilities using SAPTIVA's LLM models.
-Integrates with the existing SaptivaClient from the main backend.
+Standalone implementation using httpx for direct API calls.
 
 Architecture:
-    - Reuses SaptivaClient from apps/backend
+    - Direct HTTP calls to SAPTIVA API
     - Specialized prompts for SQL generation
     - Retry logic and error handling
 """
 
 import os
-import sys
 from typing import Optional, Dict, Any
 import structlog
 
@@ -35,44 +34,26 @@ class SaptivaLlmClient:
         """
         self.model = model
         self.temperature = temperature
-        self._saptiva_client = None
+
+        # Load SAPTIVA configuration from environment variables
+        self.api_key = os.getenv("SAPTIVA_API_KEY", "")
+        self.base_url = os.getenv("SAPTIVA_BASE_URL", "https://api.saptiva.com")
+        self.timeout = int(os.getenv("SAPTIVA_TIMEOUT", "30"))
+
+        if not self.api_key:
+            logger.error(
+                "llm_client.saptiva.no_api_key",
+                message="SAPTIVA_API_KEY environment variable not set"
+            )
+            raise ValueError("SAPTIVA_API_KEY not configured")
 
         logger.info(
-            "llm_client.saptiva.initializing",
+            "llm_client.saptiva.initialized",
             model=model,
+            base_url=self.base_url,
+            api_key_configured=bool(self.api_key),
             temperature=temperature
         )
-
-        # Import SaptivaClient from main backend
-        try:
-            # Add backend to path if not already there
-            backend_path = os.environ.get(
-                "BACKEND_SRC_PATH",
-                "/home/jazielflo/Proyects/octavios-chat-bajaware_invex/apps/backend/src"
-            )
-
-            if backend_path not in sys.path:
-                sys.path.insert(0, backend_path)
-
-            from services.saptiva_client import SaptivaClient, SaptivaMessage, SaptivaRequest
-
-            self._saptiva_client = SaptivaClient()
-            self._SaptivaMessage = SaptivaMessage
-            self._SaptivaRequest = SaptivaRequest
-
-            logger.info(
-                "llm_client.saptiva.initialized",
-                model=model,
-                api_key_configured=bool(self._saptiva_client.api_key)
-            )
-
-        except ImportError as e:
-            logger.error(
-                "llm_client.saptiva.import_failed",
-                error=str(e),
-                message="Could not import SaptivaClient from main backend"
-            )
-            raise
 
     async def generate_sql(
         self,
@@ -91,10 +72,6 @@ class SaptivaLlmClient:
         Returns:
             SQL string or None if generation fails
         """
-        if not self._saptiva_client:
-            logger.error("llm_client.saptiva.not_initialized")
-            return None
-
         try:
             # Build prompt
             prompt = self._build_sql_prompt(user_query, query_spec, rag_context)
@@ -105,33 +82,45 @@ class SaptivaLlmClient:
                 prompt_length=len(prompt)
             )
 
-            # Create SAPTIVA request
-            request = self._SaptivaRequest(
-                model=self.model,
-                messages=[
-                    self._SaptivaMessage(
-                        role="system",
-                        content="Eres un experto en SQL para PostgreSQL. Generas consultas SQL seguras y eficientes basadas en esquemas y requerimientos proporcionados."
-                    ),
-                    self._SaptivaMessage(
-                        role="user",
-                        content=prompt
-                    )
-                ],
-                temperature=self.temperature,
-                max_tokens=800,
-                stream=False  # No streaming for SQL generation
-            )
+            # Call SAPTIVA API directly with httpx
+            import httpx
 
-            # Call SAPTIVA API
-            response = await self._saptiva_client.create_completion(request)
+            # Map model name to SAPTIVA format (spaces, not underscores)
+            saptiva_model = self.model.replace("_", " ")
+
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    f"{self.base_url}/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": saptiva_model,
+                        "messages": [
+                            {
+                                "role": "system",
+                                "content": "Eres un experto en SQL para PostgreSQL. Generas consultas SQL seguras y eficientes basadas en esquemas y requerimientos proporcionados."
+                            },
+                            {
+                                "role": "user",
+                                "content": prompt
+                            }
+                        ],
+                        "temperature": self.temperature,
+                        "max_tokens": 800,
+                        "stream": False
+                    }
+                )
+                response.raise_for_status()
+                data = response.json()
 
             # Extract SQL from response
-            if not response.choices or len(response.choices) == 0:
+            if not data.get("choices") or len(data["choices"]) == 0:
                 logger.warning("llm_client.saptiva.no_choices")
                 return None
 
-            content = response.choices[0].get("message", {}).get("content", "")
+            content = data["choices"][0].get("message", {}).get("content", "")
 
             if not content:
                 logger.warning("llm_client.saptiva.empty_content")

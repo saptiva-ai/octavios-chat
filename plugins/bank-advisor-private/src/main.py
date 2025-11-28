@@ -457,8 +457,23 @@ async def _try_nl2sql_pipeline(user_query: str, mode: str) -> Optional[Dict[str,
             data_by_month[month_label][banco] = value
 
     # Convert to legacy format
+    # Sort months chronologically, not alphabetically (BA-P0-004)
+    from datetime import datetime
+
+    def parse_month_label(label: str):
+        """Parse month label like 'Jan 2024' to datetime for sorting"""
+        try:
+            return datetime.strptime(label, "%b %Y")
+        except:
+            # Fallback: try ISO format "2024-01"
+            try:
+                return datetime.strptime(label, "%Y-%m")
+            except:
+                # If parsing fails, return label as-is (will sort alphabetically)
+                return label
+
     months_data = []
-    for month_label, banco_values in sorted(data_by_month.items()):
+    for month_label, banco_values in sorted(data_by_month.items(), key=lambda x: parse_month_label(x[0])):
         month_entry = {
             "month_label": month_label,
             "data": [

@@ -124,6 +124,10 @@ class VisualizationService:
             "layout": {
                 "title": f"Evolución {title}",
                 "hovermode": "x unified",
+                "xaxis": {
+                    "type": "category",  # Treat month labels as categories for proper ordering
+                    "title": "Período"
+                },
                 "yaxis": {
                     "title": unit,
                     "tickformat": ".1%" if is_ratio else "s" # 's' es SI prefix para miles/millones

@@ -5,7 +5,7 @@
 # Original: 2624 lines → Consolidated: ~150 lines (94% reduction)
 # ============================================================================ 
 
-.PHONY: help setup dev stop restart clean logs shell test deploy db health install install-web env-check env-info env-strict
+.PHONY: help setup dev dev-rebuild dev-no-build dev-reset stop stop-all restart restart-dev clean logs logs-follow shell test deploy db health install install-web env-check env-info env-strict status ps
 
 # --- CONFIGURATION ---
 ifneq (,$(wildcard envs/.env))
@@ -13,9 +13,9 @@ ifneq (,$(wildcard envs/.env))
     export
 endif
 
-PROJECT_NAME := octavios-chat
-COMPOSE := docker compose -p $(PROJECT_NAME) -f infra/docker-compose.yml
-COMPOSE_DEV := docker compose -p $(PROJECT_NAME) -f infra/docker-compose.yml -f infra/docker-compose.dev.yml
+PROJECT_NAME := octavios-chat-bajaware_invex
+COMPOSE := docker compose -f infra/docker-compose.yml
+COMPOSE_DEV := docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml
 
 # Colors
 GREEN  := \033[0;32m
@@ -39,15 +39,22 @@ help:
 	@echo "$(CYAN)🚀 Lifecycle:$(NC)"
 	@echo "  $(YELLOW)make setup$(NC)              - Initial project setup (interactive)"
 	@echo "  $(YELLOW)make env-check$(NC)          - Validate environment variables"
-	@echo "  $(YELLOW)make dev$(NC)                - Start development environment (hot reload)"
-	@echo "  $(YELLOW)make stop$(NC)               - Stop all services"
-	@echo "  $(YELLOW)make restart [S=api]$(NC)    - Restart all services or specific one"
+	@echo "  $(YELLOW)make dev$(NC)                - Start development environment (uses existing images)"
+	@echo "  $(YELLOW)make dev-rebuild$(NC)        - Rebuild & start dev environment with hot reload"
+	@echo "  $(YELLOW)make dev-no-build$(NC)       - Start dev environment without any build"
+	@echo "  $(YELLOW)make dev-reset$(NC)          - Complete reset: stop, remove, rebuild everything"
+	@echo "  $(YELLOW)make stop$(NC)               - Stop all services (preserves containers)"
+	@echo "  $(YELLOW)make stop-all$(NC)           - Stop and remove all containers"
+	@echo "  $(YELLOW)make restart [S=backend]$(NC) - Restart all services or specific one"
+	@echo "  $(YELLOW)make restart-dev$(NC)        - Quick restart of dev services (backend, web, bank-advisor)"
+	@echo "  $(YELLOW)make status$(NC) / $(YELLOW)make ps$(NC)   - Show status of all containers"
 	@echo ""
 	@echo "$(CYAN)🔧 Development:$(NC)"
-	@echo "  $(YELLOW)make logs [S=api]$(NC)       - View logs (all or specific service)"
-	@echo "  $(YELLOW)make shell S=api$(NC)        - Open shell in container (api, web, db)"
-	@echo "  $(YELLOW)make health$(NC)             - Check all services health"
-	@echo "  $(YELLOW)make reload-env S=api$(NC)   - Reload environment variables"
+	@echo "  $(YELLOW)make logs [S=backend]$(NC)   - View last 100 logs (all or specific service)"
+	@echo "  $(YELLOW)make logs-follow [S=backend]$(NC) - Follow logs in real-time"
+	@echo "  $(YELLOW)make shell S=backend$(NC)    - Open shell in container (backend, web, db)"
+	@echo "  $(YELLOW)make health$(NC)             - Check all services health status"
+	@echo "  $(YELLOW)make reload-env S=backend$(NC) - Reload environment variables for service"
 	@echo ""
 	@echo "$(CYAN)🧪 Testing:$(NC)"
 	@echo "  $(YELLOW)make test$(NC)               - Run all tests"
@@ -109,39 +116,101 @@ env-strict:
 	@./scripts/env-checker.sh strict
 
 dev:
-	@echo "$(YELLOW)🟡 Starting development environment with hot-reload...$(NC)"
+	@echo "$(YELLOW)🟡 Starting development environment (using existing images)...$(NC)"
 	@echo ""
 	@$(MAKE) --no-print-directory env-check || { echo "$(RED)❌ Environment validation failed. Run 'make setup' to fix.$(NC)"; exit 1; }
 	@echo ""
 	@$(COMPOSE_DEV) up -d
 	@echo ""
 	@echo "$(GREEN)🟢━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
-	@echo "$(GREEN)🟢  Services started $(NC)"
+	@echo "$(GREEN)🟢  Development Environment Started (Hot Reload Enabled) $(NC)"
 	@echo "$(GREEN)🟢━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@echo "  $(BLUE)🔵 Frontend:     $(YELLOW)http://localhost:3000$(NC)"
-	@echo "  $(BLUE)🔵 Backend:      $(YELLOW)http://localhost:8000$(NC)"
-	@echo "  $(BLUE)🔵 File Manager: $(YELLOW)http://localhost:8001$(NC)"
+	@echo "  $(BLUE)🔵 Frontend:     $(YELLOW)http://localhost:3000$(NC)  (Next.js dev server)"
+	@echo "  $(BLUE)🔵 Backend:      $(YELLOW)http://localhost:8000$(NC)  (Uvicorn --reload)"
+	@echo "  $(BLUE)🔵 File Manager: $(YELLOW)http://localhost:8001$(NC)  (Uvicorn --reload)"
+	@echo "  $(BLUE)🔵 Bank Advisor: $(YELLOW)http://localhost:8002$(NC)  (Uvicorn --reload)"
 	@echo "  $(BLUE)🔵 Docs:         $(YELLOW)http://localhost:8000/docs$(NC)"
 	@echo ""
+	@echo "$(YELLOW)💡 Hot reload is active - code changes will auto-reload$(NC)"
 	@echo "$(YELLOW)🟡 Waiting for services to be healthy...$(NC)"
 	@sleep 5
 	@$(MAKE) --no-print-directory health
 
+dev-rebuild:
+	@echo "$(YELLOW)🔨 Rebuilding development environment with hot reload...$(NC)"
+	@echo ""
+	@$(MAKE) --no-print-directory env-check || { echo "$(RED)❌ Environment validation failed. Run 'make setup' to fix.$(NC)"; exit 1; }
+	@echo ""
+	@echo "$(YELLOW)🛑 Stopping existing containers...$(NC)"
+	@$(COMPOSE_DEV) down
+	@echo ""
+	@echo "$(YELLOW)🔨 Building containers for development (backend, web, bank-advisor)...$(NC)"
+	@$(COMPOSE_DEV) up -d --build backend web bank-advisor
+	@echo ""
+	@echo "$(GREEN)🟢━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(GREEN)🟢  Development Environment Rebuilt (Hot Reload Enabled) $(NC)"
+	@echo "$(GREEN)🟢━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@echo "  $(BLUE)🔵 Frontend:     $(YELLOW)http://localhost:3000$(NC)  (Next.js dev server)"
+	@echo "  $(BLUE)🔵 Backend:      $(YELLOW)http://localhost:8000$(NC)  (Uvicorn --reload)"
+	@echo "  $(BLUE)🔵 File Manager: $(YELLOW)http://localhost:8001$(NC)  (Uvicorn --reload)"
+	@echo "  $(BLUE)🔵 Bank Advisor: $(YELLOW)http://localhost:8002$(NC)  (Uvicorn --reload)"
+	@echo "  $(BLUE)🔵 Docs:         $(YELLOW)http://localhost:8000/docs$(NC)"
+	@echo ""
+	@echo "$(YELLOW)💡 Hot reload is active - code changes will auto-reload$(NC)"
+	@echo "$(YELLOW)🟡 Waiting for services to be healthy...$(NC)"
+	@sleep 5
+	@$(MAKE) --no-print-directory health
+
+dev-no-build:
+	@echo "$(YELLOW)🟡 Starting development environment (no build)...$(NC)"
+	@$(COMPOSE_DEV) up -d --no-build
+	@echo "$(GREEN)✅ Services started (no build performed)$(NC)"
+
+dev-reset:
+	@echo "$(RED)⚠️  WARNING: This will stop, remove, and rebuild all containers!$(NC)"
+	@echo "$(YELLOW)Press Ctrl+C within 5 seconds to cancel...$(NC)"
+	@sleep 5
+	@echo ""
+	@echo "$(YELLOW)🛑 Stopping all containers...$(NC)"
+	@$(COMPOSE_DEV) down --remove-orphans
+	@echo ""
+	@echo "$(YELLOW)🔨 Rebuilding from scratch...$(NC)"
+	@$(COMPOSE_DEV) build --no-cache backend web bank-advisor
+	@echo ""
+	@echo "$(YELLOW)🚀 Starting fresh environment...$(NC)"
+	@$(COMPOSE_DEV) up -d
+	@echo ""
+	@echo "$(GREEN)✅ Complete reset done! All services rebuilt and started.$(NC)"
+	@$(MAKE) --no-print-directory status
+
 stop:
 	@echo "$(YELLOW)🛑 Stopping services...$(NC)"
 	@$(COMPOSE) down
-	@echo "$(GREEN)✅ Services stopped$(NC)"
+	@echo "$(GREEN)✅ Services stopped (containers preserved)$(NC)"
+
+stop-all:
+	@echo "$(YELLOW)🛑 Stopping and removing all containers...$(NC)"
+	@$(COMPOSE_DEV) down --remove-orphans
+	@echo "$(GREEN)✅ All containers stopped and removed$(NC)"
 
 restart:
 ifdef S
 	@echo "$(YELLOW)♻️  Restarting service: $(S)...$(NC)"
 	@$(COMPOSE) restart $(S)
+	@echo "$(GREEN)✅ Service $(S) restarted$(NC)"
 else
 	@echo "$(YELLOW)♻️  Restarting all services...$(NC)"
 	@$(COMPOSE) restart
+	@echo "$(GREEN)✅ All services restarted$(NC)"
 endif
-	@echo "$(GREEN)✅ Restart complete$(NC)"
+
+restart-dev:
+	@echo "$(YELLOW)♻️  Quick restart of dev services (backend, web, bank-advisor)...$(NC)"
+	@$(COMPOSE_DEV) restart backend web bank-advisor
+	@echo "$(GREEN)✅ Dev services restarted$(NC)"
+	@echo "$(YELLOW)💡 Hot reload is active on all services$(NC)"
 
 # ============================================================================ 
 # DEVELOPMENT TOOLS
@@ -149,10 +218,29 @@ endif
 
 logs:
 ifdef S
+	@$(COMPOSE) logs --tail=100 $(S)
+else
+	@$(COMPOSE) logs --tail=100
+endif
+
+logs-follow:
+ifdef S
+	@echo "$(YELLOW)📜 Following logs for $(S)... (Ctrl+C to stop)$(NC)"
 	@$(COMPOSE) logs -f --tail=100 $(S)
 else
+	@echo "$(YELLOW)📜 Following logs for all services... (Ctrl+C to stop)$(NC)"
 	@$(COMPOSE) logs -f --tail=100
 endif
+
+status:
+	@echo "$(BLUE)🔵━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BLUE)🔵 Container Status $(NC)"
+	@echo "$(BLUE)🔵━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@docker ps --filter "name=$(PROJECT_NAME)" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" || echo "$(RED)No containers found$(NC)"
+	@echo ""
+
+ps: status
 
 shell:
 ifndef S

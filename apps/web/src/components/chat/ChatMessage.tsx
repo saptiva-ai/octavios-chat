@@ -201,8 +201,23 @@ export function ChatMessage({
   const isBankChart =
     kind === "bank_chart" || (artifact as any)?.type === "bank_chart";
   const bankChartData: BankChartData | null = isBankChart
-    ? (artifact as BankChartData) || (metadata?.artifact as BankChartData)
-    : null;
+    ? (artifact as BankChartData) ||
+      (metadata?.artifact as BankChartData) ||
+      (metadata?.bank_chart_data as BankChartData)
+    : (metadata?.bank_chart_data as BankChartData) || null;
+
+  // Debug logging for bank chart data
+  if (metadata?.bank_chart_data) {
+    console.log("[🔍 BANK_CHART DEBUG] Found bank_chart_data in metadata:", {
+      isBankChart,
+      hasData: !!bankChartData,
+      isAssistant,
+      willRender: isAssistant && !!bankChartData,
+      plotlyData: metadata.bank_chart_data.plotly_config?.data,
+      plotlyLayout: metadata.bank_chart_data.plotly_config?.layout,
+      fullMetadata: metadata.bank_chart_data
+    });
+  }
 
   // Identify audit messages to append inline audit card after content
   const isAuditMessage =

@@ -75,10 +75,11 @@ class BankChartData(BaseModel):
     metric_name: str = Field(..., description="Name of the metric being displayed")
     bank_names: List[str] = Field(..., description="Banks included in the visualization")
     time_range: TimeRange = Field(..., description="Time range of the data")
-    plotly_config: PlotlyChartSpec = Field(..., description="Plotly.js chart configuration")
+    plotly_config: Dict[str, Any] = Field(..., description="Plotly.js chart configuration (passed through without validation)")
     data_as_of: str = Field(..., description="Data freshness timestamp")
     source: str = Field(default="bank-advisor-mcp", description="Data source identifier")
     title: Optional[str] = Field(None, description="Human-readable chart title")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata (sql_generated, pipeline, etc.)")
 
     class Config:
         json_schema_extra = {

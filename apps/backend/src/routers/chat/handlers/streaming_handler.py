@@ -1426,11 +1426,63 @@ class StreamingHandler:
             if document_context:
                 system_prompt += f"\n\n**Documentos adjuntos por el usuario:**\n{document_context}"
 
+            # BA-P0-004: Add bank analytics context if available
+            if bank_chart_data:
+                metric_name = bank_chart_data.get("metric_name", "N/A")
+                bank_names = ", ".join(bank_chart_data.get("bank_names", []))
+                time_range = bank_chart_data.get("time_range", {})
+                data_as_of = bank_chart_data.get("data_as_of", "N/A")
+
+                # Extract SQL if available (from metadata or direct field)
+                sql_query = None
+                if isinstance(bank_chart_data, dict):
+                    metadata = bank_chart_data.get("metadata", {})
+                    sql_query = metadata.get("sql_generated") or bank_chart_data.get("sql_generated")
+
+                bank_context = f"""
+
+**Análisis bancario disponible:**
+- Métrica consultada: {metric_name}
+- Bancos: {bank_names}
+- Período: {time_range.get('start', 'N/A')} a {time_range.get('end', 'N/A')}
+- Datos actualizados al: {data_as_of}"""
+
+                # Add SQL query if available
+                if sql_query:
+                    bank_context += f"""
+- Consulta SQL generada:
+```sql
+{sql_query}
+```"""
+
+                bank_context += f"""
+
+**IMPORTANTE**: Los datos del gráfico de {metric_name} ya están siendo enviados al usuario.
+Genera una respuesta que:
+1. Confirme que se encontraron los datos solicitados
+2. Mencione el banco y período consultado
+3. Indique que el gráfico interactivo está disponible"""
+
+                if sql_query:
+                    bank_context += f"""
+4. Incluya un bloque de código SQL mostrando la consulta generada (usa markdown ```sql)
+5. Proporcione un breve análisis o contexto sobre la métrica {metric_name}"""
+                else:
+                    bank_context += f"""
+4. Proporcione un breve análisis o contexto sobre la métrica {metric_name}"""
+
+                bank_context += """
+
+NO digas que no tienes información - los datos YA ESTÁN disponibles en el gráfico."""
+
+                system_prompt += bank_context
+
             logger.info(
                 "Resolved system prompt for streaming",
                 model=context.model,
                 prompt_hash=model_params.get("_metadata", {}).get("system_hash"),
-                has_documents=bool(document_context)
+                has_documents=bool(document_context),
+                has_bank_chart=bool(bank_chart_data)
             )
 
             # ISSUE-004: Implement backpressure with producer-consumer pattern
@@ -1468,13 +1520,15 @@ class StreamingHandler:
 
                     # BA-P0-004: Send bank_chart event if data exists
                     if bank_chart_data:
+                        # Serialize as dict, preserving all fields including nested xaxis
+                        chart_data_dict = bank_chart_data if isinstance(bank_chart_data, dict) else bank_chart_data.model_dump(mode='json')
                         await event_queue.put({
                             "event": "bank_chart",
-                            "data": json.dumps(bank_chart_data)
+                            "data": json.dumps(chart_data_dict)
                         })
                         logger.info(
                             "Sent bank_chart event to stream",
-                            metric=bank_chart_data.get("metric_name")
+                            metric=chart_data_dict.get("metric_name")
                         )
 
                     # FIX-001: Use resolved system_prompt (not hardcoded system_message)
