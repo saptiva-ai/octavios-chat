@@ -67,27 +67,6 @@ services:
       - octavios-network
 
   # ========================================
-  # LANGUAGETOOL - Grammar Checking Service
-  # ========================================
-  languagetool:
-    image: erikvl87/languagetool:latest
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat-bajaware_invex}-languagetool
-    restart: unless-stopped
-    environment:
-      - Java_Xms=512m
-      - Java_Xmx=1g
-    ports:
-      - "8010:8010"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8010/v2/languages"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    networks:
-      - octavios-network
-
-  # ========================================
   # MINIO - S3-Compatible Object Storage
   # ========================================
   minio:
@@ -220,7 +199,6 @@ services:
       - ALETHEIA_API_KEY=${ALETHEIA_API_KEY:-}
       - ALETHEIA_TIMEOUT=${ALETHEIA_TIMEOUT:-120}
       - ALETHEIA_MAX_RETRIES=${ALETHEIA_MAX_RETRIES:-3}
-      - LANGUAGETOOL_URL=http://languagetool:8010
 
       # Object Storage (MinIO)
       - MINIO_ENDPOINT=minio:9000
@@ -274,8 +252,6 @@ services:
       mongodb:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      languagetool:
         condition: service_healthy
       minio:
         condition: service_healthy
