@@ -96,7 +96,7 @@ def load_hostile_queries() -> Dict[str, Any]:
 def get_rpc_endpoint() -> str:
     """Get the JSON-RPC endpoint URL from environment or default."""
     import os
-    return os.environ.get("BANKADVISOR_RPC_URL", "http://localhost:8000/rpc")
+    return os.environ.get("BANKADVISOR_RPC_URL", "http://localhost:8002/rpc")
 
 
 class HostileQueryRunner:
@@ -109,16 +109,18 @@ class HostileQueryRunner:
     def close(self):
         self.client.close()
 
-    def build_rpc_payload(self, query: str, method: str = "bank_advisor.query") -> Dict[str, Any]:
+    def build_rpc_payload(self, query: str, method: str = "tools/call") -> Dict[str, Any]:
         """Build JSON-RPC 2.0 payload for query."""
         return {
             "jsonrpc": "2.0",
             "id": f"test-{int(time.time() * 1000)}",
             "method": method,
             "params": {
-                "query": query,
-                "bank_names": [],  # Let the parser extract from query
-                "time_range": None,  # Let the parser extract from query
+                "name": "bank_analytics",
+                "arguments": {
+                    "metric_or_query": query,
+                    "mode": "dashboard"
+                }
             }
         }
 
