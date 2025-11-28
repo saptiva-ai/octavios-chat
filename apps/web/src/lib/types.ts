@@ -148,6 +148,7 @@ export type ArtifactType = "markdown" | "code" | "graph" | "bank_chart";
 
 // BankAdvisor chart data structure (BA-P0-003)
 export interface BankChartData {
+  title?: string;
   metric_name: string;
   bank_names: string[];
   time_range: {

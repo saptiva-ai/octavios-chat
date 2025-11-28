@@ -149,8 +149,11 @@ RUN echo "# IMPORTANT: API URL should NOT include /api suffix - routes already i
     echo "NEXT_PUBLIC_FEATURE_MIC=$NEXT_PUBLIC_FEATURE_MIC" >> /app/apps/web/.env.production && \
     cat /app/apps/web/.env.production
 
-# Build application as non-root user
-RUN pnpm --filter web build
+# Install deps and build
+WORKDIR /app
+RUN pnpm install --frozen-lockfile
+WORKDIR /app/apps/web
+RUN pnpm build
 
 # =========================================
 # PRODUCTION STAGE
