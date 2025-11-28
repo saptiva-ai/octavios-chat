@@ -787,19 +787,19 @@ class ApiClient {
 
                 // Use the event type from the "event:" line
                 if (currentEvent === "meta") {
-                  // console.log("[🔍 SSE DEBUG] Yielding meta event");
+                  console.log("[🔍 SSE] Meta event received:", parsed);
                   yield { type: "meta", data: parsed };
                 } else if (currentEvent === "bank_chart") {
-                  // console.log("[🔍 SSE DEBUG] Yielding bank_chart event");
+                  console.log("[📊 BANK_CHART] Event received from SSE:", parsed);
                   yield { type: "bank_chart", data: parsed };
                 } else if (currentEvent === "chunk") {
-                  // console.log("[🔍 SSE DEBUG] Yielding chunk event");
+                  // Chunk logging disabled to avoid spam
                   yield { type: "chunk", data: parsed };
                 } else if (currentEvent === "done") {
-                  // console.log("[🔍 SSE DEBUG] Yielding done event");
+                  console.log("[🔍 SSE] Done event received");
                   yield { type: "done", data: parsed as ChatResponse };
                 } else if (currentEvent === "error") {
-                  // console.log("[🔍 SSE DEBUG] Yielding error event");
+                  console.log("[❌ SSE] Error event received:", parsed);
                   yield { type: "error", data: parsed };
                 }
 

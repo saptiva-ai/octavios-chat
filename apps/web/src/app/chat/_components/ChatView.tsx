@@ -748,9 +748,11 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                     }
                   } else if (event.type === "bank_chart") {
                     // BA-P0-004: Handle bank_chart event from streaming
+                    console.log("[📊 BANK_CHART] Event received in ChatView:", event.data);
                     // Store bank_chart data in metadata to be included in done event
                     if (!metaData) metaData = {};
                     metaData.bank_chart_data = event.data;
+                    console.log("[📊 BANK_CHART] Stored in metaData:", metaData);
                   } else if (event.type === "chunk") {
                     accumulatedContent += event.data.content;
                     // console.log("[🔍 STREAMING DEBUG] Chunk received - content length:", event.data.content?.length, "accumulated:", accumulatedContent.length);

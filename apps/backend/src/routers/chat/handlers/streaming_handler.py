@@ -760,6 +760,11 @@ class StreamingHandler:
 
             # BA-P0-004: Check for bank analytics query BEFORE streaming
             from ....services.tool_execution_service import ToolExecutionService
+            logger.info(
+                "Checking for bank analytics query",
+                message_preview=context.message[:100],
+                request_id=context.request_id
+            )
             bank_chart_data = await ToolExecutionService.invoke_bank_analytics(
                 message=context.message,
                 user_id=user_id
@@ -769,6 +774,11 @@ class StreamingHandler:
                 logger.info(
                     "Bank analytics result will be streamed",
                     metric=bank_chart_data.get("metric_name"),
+                    request_id=context.request_id
+                )
+            else:
+                logger.info(
+                    "No bank analytics data returned",
                     request_id=context.request_id
                 )
 

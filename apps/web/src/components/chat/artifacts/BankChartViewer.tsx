@@ -67,6 +67,8 @@ interface BankChartViewerProps {
 }
 
 export function BankChartViewer({ data, className }: BankChartViewerProps) {
+  console.log("[📊 BANK_CHART_VIEWER] Rendering with data:", data);
+
   const {
     plotly_config,
     title,
@@ -79,6 +81,13 @@ export function BankChartViewer({ data, className }: BankChartViewerProps) {
 
   const [showSql, setShowSql] = React.useState(false);
   const sqlQuery = metadata?.sql_generated;
+
+  console.log("[📊 BANK_CHART_VIEWER] Chart config:", {
+    metric: metric_name,
+    banks: bank_names,
+    traces: plotly_config?.data?.length,
+    hasLayout: !!plotly_config?.layout
+  });
 
   // Default layout enhancements for dark theme
   const enhancedLayout: Partial<PlotlyLayout> = {

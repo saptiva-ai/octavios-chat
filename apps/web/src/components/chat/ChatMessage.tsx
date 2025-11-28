@@ -131,9 +131,12 @@ export function ChatMessage({
   // Fetch artifact content for bank_chart types
   React.useEffect(() => {
     const fetchArtifacts = async () => {
+      console.log("[🎨 ARTIFACTS] Checking artifact invocations:", artifactInvocations);
       for (const inv of artifactInvocations) {
         const artifactId = inv.result?.id as string;
         const artifactType = inv.result?.type as string;
+
+        console.log(`[🎨 ARTIFACTS] Found artifact: type=${artifactType}, id=${artifactId}`);
 
         // Only fetch if it's a bank_chart and we haven't loaded it yet
         if (
@@ -142,16 +145,20 @@ export function ChatMessage({
           !artifactData[artifactId]
         ) {
           try {
+            console.log(`[📊 BANK_CHART] Fetching artifact content for ${artifactId}`);
             const response = await fetch(`/api/artifacts/${artifactId}`);
             if (response.ok) {
               const data = await response.json();
+              console.log(`[📊 BANK_CHART] Artifact content loaded:`, data.content);
               setArtifactData((prev) => ({
                 ...prev,
                 [artifactId]: data.content,
               }));
+            } else {
+              console.error(`[📊 BANK_CHART] Failed to fetch artifact: ${response.status} ${response.statusText}`);
             }
           } catch (error) {
-            console.error(`Failed to fetch artifact ${artifactId}:`, error);
+            console.error(`[📊 BANK_CHART] Error fetching artifact ${artifactId}:`, error);
           }
         }
       }
@@ -436,6 +443,8 @@ export function ChatMessage({
               const artifactId = (inv.result?.id as string) || "";
               const artifactType = (inv.result?.type as any) || "markdown";
               const content = artifactData[artifactId];
+
+              console.log(`[🎨 RENDER] Rendering artifact card: id=${artifactId}, type=${artifactType}, hasContent=${!!content}`);
 
               return (
                 <ArtifactCard
