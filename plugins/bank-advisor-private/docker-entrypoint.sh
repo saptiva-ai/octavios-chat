@@ -35,14 +35,24 @@ except Exception as e:
 echo "📊 Current record count: $RECORD_COUNT"
 
 if [ "$RECORD_COUNT" -eq "0" ]; then
-  echo "🚀 Database is empty. Running ETLs to load initial data..."
+  echo "🚀 Database is empty. Running migrations and ETLs to load initial data..."
 
-  echo "📊 Step 1/2: Running base ETL (cartera, IMOR, ICOR)..."
+  echo "📝 Step 1/3: Running database migrations..."
+  PGPASSWORD="${POSTGRES_PASSWORD:-secure_postgres_password}" psql \
+    -h "${POSTGRES_HOST:-postgres}" \
+    -p "${POSTGRES_PORT:-5432}" \
+    -U "${POSTGRES_USER:-octavios}" \
+    -d bankadvisor \
+    -f /app/migrations/001_add_missing_columns.sql || {
+    echo "⚠️  Migration failed, but continuing..."
+  }
+
+  echo "📊 Step 2/3: Running base ETL (cartera, IMOR, ICOR)..."
   python -m bankadvisor.etl_loader || {
     echo "⚠️  Base ETL failed, but continuing..."
   }
 
-  echo "📊 Step 2/2: Running enhanced ETL (ICAP, TDA, TASA_MN, TASA_ME)..."
+  echo "📊 Step 3/3: Running enhanced ETL (ICAP, TDA, TASA_MN, TASA_ME)..."
   python -m bankadvisor.etl_loader_enhanced || {
     echo "⚠️  Enhanced ETL failed, but continuing..."
   }

@@ -25,6 +25,7 @@ RUN uv pip install --system --no-cache -r requirements.txt
 # Copy application code from plugin directory
 COPY plugins/bank-advisor-private/src/ ./src/
 COPY plugins/bank-advisor-private/data/ ./data/
+COPY plugins/bank-advisor-private/migrations/ ./migrations/
 
 # Copy and setup entrypoint script for automatic ETL initialization
 COPY plugins/bank-advisor-private/docker-entrypoint.sh /usr/local/bin/
