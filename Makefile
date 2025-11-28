@@ -15,6 +15,7 @@ endif
 
 PROJECT_NAME := octavios-chat
 COMPOSE := docker compose -p $(PROJECT_NAME) -f infra/docker-compose.yml
+COMPOSE_DEV := docker compose -p $(PROJECT_NAME) -f infra/docker-compose.yml -f infra/docker-compose.dev.yml
 
 # Colors
 GREEN  := \033[0;32m
@@ -108,11 +109,11 @@ env-strict:
 	@./scripts/env-checker.sh strict
 
 dev:
-	@echo "$(YELLOW)🟡 Starting development environment...$(NC)"
+	@echo "$(YELLOW)🟡 Starting development environment with hot-reload...$(NC)"
 	@echo ""
 	@$(MAKE) --no-print-directory env-check || { echo "$(RED)❌ Environment validation failed. Run 'make setup' to fix.$(NC)"; exit 1; }
 	@echo ""
-	@$(COMPOSE) up -d
+	@$(COMPOSE_DEV) up -d
 	@echo ""
 	@echo "$(GREEN)🟢━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo "$(GREEN)🟢  Services started $(NC)"
