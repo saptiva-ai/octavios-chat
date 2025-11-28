@@ -229,7 +229,7 @@ async def send_chat_message(
             )
 
             # NUEVO: Persist as artifact (BA-P0-003)
-            from ...models.artifact import Artifact, ArtifactType
+            from ....models.artifact import Artifact, ArtifactType
             from datetime import datetime
 
             try:

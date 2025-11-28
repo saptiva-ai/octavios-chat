@@ -38,20 +38,22 @@ const nextConfig = {
     ]
   },
   async rewrites() {
-    // SAFE REWRITES: Never intercept /_next, /api, or static files
-    if (process.env.NODE_ENV === 'development') {
+    // Enable API proxy when API_BASE_URL is set (Docker) or in development mode
+    const apiUrl = process.env.API_BASE_URL || process.env.NEXT_DEV_API_PROXY
+
+    if (apiUrl) {
       // Use API_BASE_URL (internal Docker network) for server-side proxy
       // This avoids CORS issues by proxying through Next.js
-      const apiUrl = process.env.NEXT_DEV_API_PROXY || process.env.API_BASE_URL || 'http://localhost:8080'
       console.log('[Next.js Rewrites] Proxying /api/* to:', apiUrl)
       return [
         {
-          // Proxy API calls to backend in dev
+          // Proxy API calls to backend
           source: '/api/:path*',
           destination: `${apiUrl}/api/:path*`,
         }
       ];
     }
+
     return [];
   },
 }

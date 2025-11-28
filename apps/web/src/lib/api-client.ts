@@ -589,6 +589,7 @@ class ApiClient {
         type: "meta";
         data: { chat_id: string; user_message_id: string; model: string };
       }
+    | { type: "bank_chart"; data: any }
     | { type: "chunk"; data: { content: string } }
     | { type: "done"; data: ChatResponse }
     | { type: "error"; data: { error: string } },
@@ -788,6 +789,9 @@ class ApiClient {
                 if (currentEvent === "meta") {
                   // console.log("[🔍 SSE DEBUG] Yielding meta event");
                   yield { type: "meta", data: parsed };
+                } else if (currentEvent === "bank_chart") {
+                  // console.log("[🔍 SSE DEBUG] Yielding bank_chart event");
+                  yield { type: "bank_chart", data: parsed };
                 } else if (currentEvent === "chunk") {
                   // console.log("[🔍 SSE DEBUG] Yielding chunk event");
                   yield { type: "chunk", data: parsed };

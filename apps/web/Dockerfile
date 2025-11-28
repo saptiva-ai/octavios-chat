@@ -91,6 +91,7 @@ FROM base AS builder
 
 # Build-time environment variables (with production defaults)
 # IMPORTANT: Do NOT include /api suffix - routes already include it
+ARG API_BASE_URL=http://backend:8000
 ARG NEXT_PUBLIC_API_URL=https://414.saptiva.com
 ARG NEXT_PUBLIC_APP_NAME="Saptiva Copilot OS - Capital 414"
 ARG NEXT_PUBLIC_MAX_FILE_SIZE_MB=50
@@ -104,6 +105,7 @@ ARG NEXT_PUBLIC_FEATURE_MIC=false
 ARG NODE_ENV=production
 
 # Set environment variables for build
+ENV API_BASE_URL=$API_BASE_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
 ENV NEXT_PUBLIC_MAX_FILE_SIZE_MB=$NEXT_PUBLIC_MAX_FILE_SIZE_MB

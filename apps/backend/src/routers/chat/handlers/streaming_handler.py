@@ -758,6 +758,20 @@ class StreamingHandler:
                 metadata=user_message_metadata if user_message_metadata else None
             )
 
+            # BA-P0-004: Check for bank analytics query BEFORE streaming
+            from ....services.tool_execution_service import ToolExecutionService
+            bank_chart_data = await ToolExecutionService.invoke_bank_analytics(
+                message=context.message,
+                user_id=user_id
+            )
+            # Note: bank_chart_data will be passed to _stream_chat_response
+            if bank_chart_data:
+                logger.info(
+                    "Bank analytics result will be streamed",
+                    metric=bank_chart_data.get("metric_name"),
+                    request_id=context.request_id
+                )
+
             # Check for audit command (NOW supported in streaming!)
             if context.message.strip().startswith("Auditar archivo:"):
                 async for event in self._stream_audit_response(
@@ -768,7 +782,8 @@ class StreamingHandler:
 
             # Stream chat response
             async for event in self._stream_chat_response(
-                context, chat_service, chat_session, cache, user_message
+                context, chat_service, chat_session, cache, user_message,
+                bank_chart_data=bank_chart_data  # BA-P0-004: Pass bank analytics result
             ):
                 yield event
 
@@ -1234,7 +1249,8 @@ class StreamingHandler:
         chat_service: ChatService,
         chat_session,
         cache,
-        user_message
+        user_message,
+        bank_chart_data=None  # BA-P0-004: Optional bank analytics result
     ) -> AsyncGenerator[dict, None]:
         """
         Stream chat response from Saptiva API.
@@ -1439,6 +1455,17 @@ class StreamingHandler:
                             "model": context.model
                         })
                     })
+
+                    # BA-P0-004: Send bank_chart event if data exists
+                    if bank_chart_data:
+                        await event_queue.put({
+                            "event": "bank_chart",
+                            "data": json.dumps(bank_chart_data)
+                        })
+                        logger.info(
+                            "Sent bank_chart event to stream",
+                            metric=bank_chart_data.get("metric_name")
+                        )
 
                     # FIX-001: Use resolved system_prompt (not hardcoded system_message)
                     # Use model_params for temperature/max_tokens (registry overrides context)
