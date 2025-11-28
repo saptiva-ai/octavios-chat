@@ -113,24 +113,56 @@ async def query_bank_analytics(
                     if isinstance(first_content, dict) and "text" in first_content:
                         result = json.loads(first_content["text"])
 
-            # Check for tool-level errors (ambiguous query, validation failed)
-            if isinstance(result, dict) and result.get("error"):
-                error_type = result.get("error")
-                message = result.get("message", "Unknown error")
+            # Handle enhanced response format with metadata wrapper (v1.0.0+)
+            if isinstance(result, dict) and "success" in result and "data" in result:
+                # New format: {success: true, data: {...}, metadata: {...}}
+                if not result.get("success"):
+                    # Tool returned success=false
+                    error_msg = result.get("metadata", {}).get("error", "Unknown error")
+                    raise BankAdvisorQueryError(f"Tool execution failed: {error_msg}")
 
-                if error_type == "ambiguous_query":
-                    options = result.get("options", [])
-                    suggestion = result.get("suggestion", "")
-                    raise BankAdvisorQueryError(
-                        f"Ambiguous query: {message}. Options: {options}. {suggestion}"
-                    )
-                elif error_type == "validation_failed":
-                    raise BankAdvisorQueryError(f"Validation failed: {message}")
-                else:
+                # Extract the actual data payload
+                tool_data = result.get("data", {})
+                tool_metadata = result.get("metadata", {})
+
+                # Check for legacy error format within data
+                if isinstance(tool_data, dict) and tool_data.get("error"):
+                    error_type = tool_data.get("error")
+                    message = tool_data.get("message", "Unknown error")
                     raise BankAdvisorQueryError(f"{error_type}: {message}")
 
-            # Build BankChartData from successful result
-            chart_data = _build_chart_data(result, metric_or_query)
+                # Build BankChartData from the data payload
+                chart_data = _build_chart_data(tool_data, metric_or_query)
+
+                # Log metadata if available
+                if tool_metadata:
+                    logger.info(
+                        "bank_analytics.metadata",
+                        version=tool_metadata.get("version"),
+                        pipeline=tool_metadata.get("pipeline"),
+                        execution_time_ms=tool_metadata.get("execution_time_ms"),
+                        template=tool_metadata.get("template_used")
+                    )
+            else:
+                # Legacy format without metadata wrapper
+                # Check for tool-level errors (ambiguous query, validation failed)
+                if isinstance(result, dict) and result.get("error"):
+                    error_type = result.get("error")
+                    message = result.get("message", "Unknown error")
+
+                    if error_type == "ambiguous_query":
+                        options = result.get("options", [])
+                        suggestion = result.get("suggestion", "")
+                        raise BankAdvisorQueryError(
+                            f"Ambiguous query: {message}. Options: {options}. {suggestion}"
+                        )
+                    elif error_type == "validation_failed":
+                        raise BankAdvisorQueryError(f"Validation failed: {message}")
+                    else:
+                        raise BankAdvisorQueryError(f"{error_type}: {message}")
+
+                # Build BankChartData from successful result
+                chart_data = _build_chart_data(result, metric_or_query)
 
             logger.info(
                 "bank_analytics.success",

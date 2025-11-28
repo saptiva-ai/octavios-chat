@@ -123,6 +123,45 @@ export function ChatMessage({
       inv.result?.id,
   );
 
+  // State for artifact data (BA-P0-003: Load bank_chart artifacts)
+  const [artifactData, setArtifactData] = React.useState<Record<string, any>>(
+    {},
+  );
+
+  // Fetch artifact content for bank_chart types
+  React.useEffect(() => {
+    const fetchArtifacts = async () => {
+      for (const inv of artifactInvocations) {
+        const artifactId = inv.result?.id as string;
+        const artifactType = inv.result?.type as string;
+
+        // Only fetch if it's a bank_chart and we haven't loaded it yet
+        if (
+          artifactType === "bank_chart" &&
+          artifactId &&
+          !artifactData[artifactId]
+        ) {
+          try {
+            const response = await fetch(`/api/artifacts/${artifactId}`);
+            if (response.ok) {
+              const data = await response.json();
+              setArtifactData((prev) => ({
+                ...prev,
+                [artifactId]: data.content,
+              }));
+            }
+          } catch (error) {
+            console.error(`Failed to fetch artifact ${artifactId}:`, error);
+          }
+        }
+      }
+    };
+
+    if (artifactInvocations.length > 0) {
+      fetchArtifacts();
+    }
+  }, [artifactInvocations, artifactData]);
+
   React.useEffect(() => {
     if (isUser) {
       logDebug("[ChatMessage] Rendering user message", {
@@ -152,7 +191,8 @@ export function ChatMessage({
   }
 
   // Check for bank_chart kind (BA-P0-002)
-  const isBankChart = kind === "bank_chart" || (artifact as any)?.type === "bank_chart";
+  const isBankChart =
+    kind === "bank_chart" || (artifact as any)?.type === "bank_chart";
   const bankChartData: BankChartData | null = isBankChart
     ? (artifact as BankChartData) || (metadata?.artifact as BankChartData)
     : null;
@@ -392,14 +432,21 @@ export function ChatMessage({
               isUser ? "items-end" : "items-start",
             )}
           >
-            {artifactInvocations.map((inv) => (
-              <ArtifactCard
-                key={(inv.result?.id as string) || inv.tool_name}
-                id={(inv.result?.id as string) || ""}
-                title={(inv.result?.title as string) || "Artefacto"}
-                type={(inv.result?.type as any) || "markdown"}
-              />
-            ))}
+            {artifactInvocations.map((inv) => {
+              const artifactId = (inv.result?.id as string) || "";
+              const artifactType = (inv.result?.type as any) || "markdown";
+              const content = artifactData[artifactId];
+
+              return (
+                <ArtifactCard
+                  key={artifactId || inv.tool_name}
+                  id={artifactId}
+                  title={(inv.result?.title as string) || "Artefacto"}
+                  type={artifactType}
+                  content={content}
+                />
+              );
+            })}
           </div>
         )}
 

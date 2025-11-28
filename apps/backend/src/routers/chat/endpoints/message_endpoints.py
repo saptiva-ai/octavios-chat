@@ -228,6 +228,49 @@ async def send_chat_message(
                 request_id=context.request_id
             )
 
+            # NUEVO: Persist as artifact (BA-P0-003)
+            from ...models.artifact import Artifact, ArtifactType
+            from datetime import datetime
+
+            try:
+                # Create title from metric and banks
+                metric_name = bank_chart_data.get("metric_name", "Análisis Bancario")
+                bank_names = bank_chart_data.get("bank_names", [])
+                chart_title = bank_chart_data.get("title") or f"{metric_name} - {', '.join(bank_names)}"
+
+                artifact = Artifact(
+                    user_id=user_id,
+                    chat_session_id=chat_session.id,
+                    title=chart_title,
+                    type=ArtifactType.BANK_CHART,
+                    content=bank_chart_data,  # Full BankChartData object
+                    versions=[],
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                artifact.add_version(bank_chart_data)
+                await artifact.insert()
+
+                logger.info(
+                    "bank_chart.artifact_created",
+                    artifact_id=str(artifact.id),
+                    metric=metric_name,
+                    banks=bank_names,
+                    request_id=context.request_id
+                )
+
+                # Add artifact reference to tool_results for LLM context
+                tool_results["bank_analytics_artifact_id"] = str(artifact.id)
+
+            except Exception as e:
+                logger.error(
+                    "bank_chart.artifact_creation_failed",
+                    error=str(e),
+                    request_id=context.request_id,
+                    exc_info=True
+                )
+                # Don't fail the request if artifact creation fails
+
         if tool_results:
             # Update context with tool results for LLM injection
             context = ChatContext(

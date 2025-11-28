@@ -580,19 +580,72 @@ async def json_rpc_endpoint(request: Request):
             arguments = params.get("arguments", {})
 
             if tool_name == "bank_analytics":
-                # Invoke the bank_analytics implementation directly
-                result = await _bank_analytics_impl(
-                    metric_or_query=arguments.get("metric_or_query", ""),
-                    mode=arguments.get("mode", "dashboard")
-                )
+                # Track execution time
+                import time
+                start_time = time.time()
 
-                return JSONResponse({
-                    "jsonrpc": "2.0",
-                    "id": rpc_id,
-                    "result": {
-                        "content": [{"type": "text", "text": json.dumps(result)}]
+                try:
+                    # Invoke the bank_analytics implementation directly
+                    result = await _bank_analytics_impl(
+                        metric_or_query=arguments.get("metric_or_query", ""),
+                        mode=arguments.get("mode", "dashboard")
+                    )
+
+                    execution_time_ms = int((time.time() - start_time) * 1000)
+
+                    # MEJORA: Wrap result with enhanced metadata
+                    enhanced_result = {
+                        "success": True,
+                        "data": result,
+                        "metadata": {
+                            "version": "1.0.0",
+                            "pipeline": result.get("metadata", {}).get("pipeline", "nl2sql"),
+                            "template_used": result.get("metadata", {}).get("template_used"),
+                            "execution_time_ms": execution_time_ms,
+                            "requires_clarification": False,  # For future P0-3
+                            "clarification_options": None,
+                            "timestamp": datetime.utcnow().isoformat() + "Z"
+                        }
                     }
-                })
+
+                    logger.info(
+                        "rpc.tool_success",
+                        tool=tool_name,
+                        execution_time_ms=execution_time_ms,
+                        metric=result.get("metadata", {}).get("metric")
+                    )
+
+                    return JSONResponse({
+                        "jsonrpc": "2.0",
+                        "id": rpc_id,
+                        "result": {
+                            "content": [{"type": "text", "text": json.dumps(enhanced_result)}]
+                        }
+                    })
+
+                except Exception as e:
+                    execution_time_ms = int((time.time() - start_time) * 1000)
+                    logger.error(
+                        "rpc.tool_execution_failed",
+                        tool=tool_name,
+                        error=str(e),
+                        execution_time_ms=execution_time_ms,
+                        exc_info=True
+                    )
+                    return JSONResponse({
+                        "jsonrpc": "2.0",
+                        "id": rpc_id,
+                        "error": {
+                            "code": -32603,
+                            "message": "Tool execution failed",
+                            "data": {
+                                "tool": tool_name,
+                                "error": str(e),
+                                "error_type": type(e).__name__,
+                                "execution_time_ms": execution_time_ms
+                            }
+                        }
+                    }, status_code=500)
             else:
                 return JSONResponse({
                     "jsonrpc": "2.0",
