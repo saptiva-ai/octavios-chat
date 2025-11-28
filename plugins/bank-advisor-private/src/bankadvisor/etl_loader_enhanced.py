@@ -102,6 +102,9 @@ def load_tda_data(data_root: str) -> pd.DataFrame:
     # Parse fecha (format: MM/DD/YYYY)
     df_clean['fecha'] = pd.to_datetime(df_clean['fecha'], format='%m/%d/%Y', errors='coerce')
 
+    # Normalize to first day of month (fixes 2022 data that uses day 2)
+    df_clean['fecha'] = df_clean['fecha'].dt.to_period('M').dt.to_timestamp()
+
     # Select relevant columns
     df_result = df_clean[['fecha', 'cve_inst', 'tda_cartera_total']].copy()
 
@@ -159,6 +162,9 @@ def load_tasas_data(data_root: str) -> pd.DataFrame:
 
     # Parse fecha (format varies: M/D/YY or MM/DD/YYYY)
     df_clean['fecha'] = pd.to_datetime(df_clean['fecha'], errors='coerce')
+
+    # Normalize to first day of month (fixes end-of-month dates)
+    df_clean['fecha'] = df_clean['fecha'].dt.to_period('M').dt.to_timestamp()
 
     # Normalize currency type
     df_clean['currency_type'] = df_clean['currency_type'].str.strip()
