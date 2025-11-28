@@ -1,0 +1,424 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Hostile query catalog for NL2SQL Dirty Data testing (BA-QA-001)",
+  "version": "1.0.0",
+  "created_at": "2025-11-27",
+  "categories": {
+    "missing_fields": "Queries that omit required fields (metric, bank, date)",
+    "conflicting_instructions": "Queries with contradictory or impossible requirements",
+    "invalid_banks": "Non-existent bank names or typos",
+    "extreme_dates": "Dates outside valid range (pre-2017 or far future)",
+    "dirty_data_nulls": "Queries targeting nullable metrics (BA-NULL-001)",
+    "injection_like": "SQL injection patterns that should be rejected",
+    "fuzzy_metric_aliases": "Misspellings and non-standard metric names",
+    "mixed_language": "Queries mixing Spanish/English terms",
+    "multi_metric": "Queries requesting multiple metrics at once",
+    "nonsense": "Random text, gibberish, or completely unrelated queries"
+  },
+  "queries": [
+    {
+      "id": "MF-001",
+      "category": "missing_fields",
+      "query": "datos del banco",
+      "description": "No metric specified, only generic request",
+      "expected_behavior": "clarification_required",
+      "missing": ["metric"]
+    },
+    {
+      "id": "MF-002",
+      "category": "missing_fields",
+      "query": "ultimo mes",
+      "description": "Only time reference, no metric or bank",
+      "expected_behavior": "clarification_required",
+      "missing": ["metric", "bank"]
+    },
+    {
+      "id": "MF-003",
+      "category": "missing_fields",
+      "query": "comparar",
+      "description": "Comparison mode without subjects",
+      "expected_behavior": "clarification_required",
+      "missing": ["metric", "bank"]
+    },
+    {
+      "id": "MF-004",
+      "category": "missing_fields",
+      "query": "INVEX 2024",
+      "description": "Bank and year but no metric",
+      "expected_behavior": "clarification_required",
+      "missing": ["metric"]
+    },
+    {
+      "id": "MF-005",
+      "category": "missing_fields",
+      "query": "morosidad",
+      "description": "Metric alias only, no bank or time",
+      "expected_behavior": "success_with_defaults"
+    },
+    {
+      "id": "CI-001",
+      "category": "conflicting_instructions",
+      "query": "IMOR de INVEX en enero 2024 y diciembre 2025 al mismo tiempo",
+      "description": "Impossible simultaneous time range",
+      "expected_behavior": "handled_error"
+    },
+    {
+      "id": "CI-002",
+      "category": "conflicting_instructions",
+      "query": "cartera total sin incluir cartera total",
+      "description": "Self-contradicting exclusion",
+      "expected_behavior": "handled_error"
+    },
+    {
+      "id": "CI-003",
+      "category": "conflicting_instructions",
+      "query": "IMOR mayor a 100% y menor a 0%",
+      "description": "Impossible numeric constraint",
+      "expected_behavior": "handled_error"
+    },
+    {
+      "id": "CI-004",
+      "category": "conflicting_instructions",
+      "query": "compara INVEX vs INVEX",
+      "description": "Same entity comparison",
+      "expected_behavior": "handled_error"
+    },
+    {
+      "id": "CI-005",
+      "category": "conflicting_instructions",
+      "query": "todas las metricas excepto todas",
+      "description": "Universal inclusion with universal exclusion",
+      "expected_behavior": "handled_error"
+    },
+    {
+      "id": "IB-001",
+      "category": "invalid_banks",
+      "query": "IMOR de BancoFantasma ultimos 6 meses",
+      "description": "Non-existent bank name",
+      "expected_behavior": "handled_error"
+    },
+    {
+      "id": "IB-002",
+      "category": "invalid_banks",
+      "query": "cartera total de INVX",
+      "description": "Typo in INVEX",
+      "expected_behavior": "fuzzy_match_or_error"
+    },
+    {
+      "id": "IB-003",
+      "category": "invalid_banks",
+      "query": "ICOR de SISTMA",
+      "description": "Typo in SISTEMA",
+      "expected_behavior": "fuzzy_match_or_error"
+    },
+    {
+      "id": "IB-004",
+      "category": "invalid_banks",
+      "query": "reservas de Bank of America",
+      "description": "Valid bank but not in dataset",
+      "expected_behavior": "handled_error"
+    },
+    {
+      "id": "IB-005",
+      "category": "invalid_banks",
+      "query": "IMOR de 123456",
+      "description": "Numeric instead of bank name",
+      "expected_behavior": "handled_error"
+    },
+    {
+      "id": "ED-001",
+      "category": "extreme_dates",
+      "query": "cartera total de INVEX en 1990",
+      "description": "Year far before data availability (pre-2017)",
+      "expected_behavior": "empty_result_or_error"
+    },
+    {
+      "id": "ED-002",
+      "category": "extreme_dates",
+      "query": "IMOR del sistema en 2050",
+      "description": "Far future date",
+      "expected_behavior": "empty_result_or_error"
+    },
+    {
+      "id": "ED-003",
+      "category": "extreme_dates",
+      "query": "reservas de INVEX del 30 de febrero 2024",
+      "description": "Invalid calendar date",
+      "expected_behavior": "handled_error"
+    },
+    {
+      "id": "ED-004",
+      "category": "extreme_dates",
+      "query": "ICOR desde enero 2017 hasta diciembre 2099",
+      "description": "Extremely long time range",
+      "expected_behavior": "success_with_limit"
+    },
+    {
+      "id": "ED-005",
+      "category": "extreme_dates",
+      "query": "cartera comercial ultimos 9999 meses",
+      "description": "Absurd month count",
+      "expected_behavior": "handled_error"
+    },
+    {
+      "id": "DN-001",
+      "category": "dirty_data_nulls",
+      "query": "ICAP de INVEX 2017",
+      "description": "BA-NULL-001: ICAP may have NULL values for early dates",
+      "expected_behavior": "success_with_nulls_handled",
+      "ba_null_001": true
+    },
+    {
+      "id": "DN-002",
+      "category": "dirty_data_nulls",
+      "query": "TDA del sistema ultimos 12 meses",
+      "description": "BA-NULL-001: TDA_CARTERA_TOTAL often NULL",
+      "expected_behavior": "success_with_nulls_handled",
+      "ba_null_001": true
+    },
+    {
+      "id": "DN-003",
+      "category": "dirty_data_nulls",
+      "query": "tasa mn de INVEX enero 2018",
+      "description": "BA-NULL-001: TASA_MN has sparse data",
+      "expected_behavior": "success_with_nulls_handled",
+      "ba_null_001": true
+    },
+    {
+      "id": "DN-004",
+      "category": "dirty_data_nulls",
+      "query": "tasa me todo 2024",
+      "description": "BA-NULL-001: TASA_ME may return NULLs",
+      "expected_behavior": "success_with_nulls_handled",
+      "ba_null_001": true
+    },
+    {
+      "id": "DN-005",
+      "category": "dirty_data_nulls",
+      "query": "compara ICAP INVEX vs Sistema 2020",
+      "description": "BA-NULL-001: Comparison with potential NULL on both sides",
+      "expected_behavior": "success_with_nulls_handled",
+      "ba_null_001": true
+    },
+    {
+      "id": "DN-006",
+      "category": "dirty_data_nulls",
+      "query": "capitalización todos los bancos 2019",
+      "description": "BA-NULL-001: icap_total alias with NULL handling",
+      "expected_behavior": "success_with_nulls_handled",
+      "ba_null_001": true
+    },
+    {
+      "id": "DN-007",
+      "category": "dirty_data_nulls",
+      "query": "tasa deterioro de INVEX historico",
+      "description": "BA-NULL-001: TDA with full history (many NULLs)",
+      "expected_behavior": "success_with_nulls_handled",
+      "ba_null_001": true
+    },
+    {
+      "id": "INJ-001",
+      "category": "injection_like",
+      "query": "IMOR'; DROP TABLE monthly_kpis; --",
+      "description": "Classic SQL injection attempt",
+      "expected_behavior": "rejected_or_sanitized"
+    },
+    {
+      "id": "INJ-002",
+      "category": "injection_like",
+      "query": "cartera_total UNION SELECT * FROM users",
+      "description": "UNION injection attempt",
+      "expected_behavior": "rejected_or_sanitized"
+    },
+    {
+      "id": "INJ-003",
+      "category": "injection_like",
+      "query": "1=1; DELETE FROM monthly_kpis WHERE 1=1",
+      "description": "DELETE injection",
+      "expected_behavior": "rejected_or_sanitized"
+    },
+    {
+      "id": "INJ-004",
+      "category": "injection_like",
+      "query": "IMOR WHERE banco_nombre LIKE '%' OR '1'='1'",
+      "description": "Tautology injection",
+      "expected_behavior": "rejected_or_sanitized"
+    },
+    {
+      "id": "INJ-005",
+      "category": "injection_like",
+      "query": "../../etc/passwd",
+      "description": "Path traversal attempt",
+      "expected_behavior": "rejected_or_sanitized"
+    },
+    {
+      "id": "FM-001",
+      "category": "fuzzy_metric_aliases",
+      "query": "morozidad de INVEX",
+      "description": "Misspelled 'morosidad' (IMOR)",
+      "expected_behavior": "fuzzy_match_to_imor"
+    },
+    {
+      "id": "FM-002",
+      "category": "fuzzy_metric_aliases",
+      "query": "indice de capitalizacion bancaria",
+      "description": "Verbose alias for ICAP",
+      "expected_behavior": "fuzzy_match_to_icap"
+    },
+    {
+      "id": "FM-003",
+      "category": "fuzzy_metric_aliases",
+      "query": "portafolio crediticio total",
+      "description": "Non-standard alias for cartera_total",
+      "expected_behavior": "fuzzy_match_or_clarification"
+    },
+    {
+      "id": "FM-004",
+      "category": "fuzzy_metric_aliases",
+      "query": "NPL ratio de INVEX",
+      "description": "English term for IMOR (Non-Performing Loans)",
+      "expected_behavior": "fuzzy_match_or_clarification"
+    },
+    {
+      "id": "FM-005",
+      "category": "fuzzy_metric_aliases",
+      "query": "provisions de INVEX",
+      "description": "English term for reservas",
+      "expected_behavior": "fuzzy_match_or_clarification"
+    },
+    {
+      "id": "ML-001",
+      "category": "mixed_language",
+      "query": "show me the IMOR for INVEX last 3 months",
+      "description": "Full English query",
+      "expected_behavior": "success_or_clarification"
+    },
+    {
+      "id": "ML-002",
+      "category": "mixed_language",
+      "query": "cartera total of INVEX from 2023 to 2024",
+      "description": "Spanish metric with English prepositions",
+      "expected_behavior": "success_or_clarification"
+    },
+    {
+      "id": "ML-003",
+      "category": "mixed_language",
+      "query": "compare IMOR between INVEX and SISTEMA",
+      "description": "English instruction with Spanish entity names",
+      "expected_behavior": "success_or_clarification"
+    },
+    {
+      "id": "ML-004",
+      "category": "mixed_language",
+      "query": "dame el coverage ratio",
+      "description": "Spanish verb with English metric (ICOR)",
+      "expected_behavior": "fuzzy_match_or_clarification"
+    },
+    {
+      "id": "ML-005",
+      "category": "mixed_language",
+      "query": "What is the tasa de morosidad?",
+      "description": "English question with Spanish term",
+      "expected_behavior": "success_or_clarification"
+    },
+    {
+      "id": "MM-001",
+      "category": "multi_metric",
+      "query": "IMOR y ICOR de INVEX ultimos 6 meses",
+      "description": "Two metrics in same query",
+      "expected_behavior": "success_or_split"
+    },
+    {
+      "id": "MM-002",
+      "category": "multi_metric",
+      "query": "cartera total, comercial y consumo de INVEX",
+      "description": "Three cartera types",
+      "expected_behavior": "success_or_split"
+    },
+    {
+      "id": "MM-003",
+      "category": "multi_metric",
+      "query": "todas las metricas de INVEX en 2024",
+      "description": "Request all metrics at once",
+      "expected_behavior": "clarification_or_limited"
+    },
+    {
+      "id": "MM-004",
+      "category": "multi_metric",
+      "query": "IMOR, ICOR, reservas, cartera vencida de INVEX vs Sistema",
+      "description": "Four metrics with comparison",
+      "expected_behavior": "clarification_or_limited"
+    },
+    {
+      "id": "MM-005",
+      "category": "multi_metric",
+      "query": "resumen financiero completo de INVEX 2024",
+      "description": "Implicit multi-metric request",
+      "expected_behavior": "clarification_required"
+    },
+    {
+      "id": "NS-001",
+      "category": "nonsense",
+      "query": "asdfghjkl qwerty",
+      "description": "Random keyboard input",
+      "expected_behavior": "clarification_required"
+    },
+    {
+      "id": "NS-002",
+      "category": "nonsense",
+      "query": "el clima en Cancun manana",
+      "description": "Unrelated weather query",
+      "expected_behavior": "clarification_required"
+    },
+    {
+      "id": "NS-003",
+      "category": "nonsense",
+      "query": "",
+      "description": "Empty query",
+      "expected_behavior": "handled_error"
+    },
+    {
+      "id": "NS-004",
+      "category": "nonsense",
+      "query": "     ",
+      "description": "Whitespace only",
+      "expected_behavior": "handled_error"
+    },
+    {
+      "id": "NS-005",
+      "category": "nonsense",
+      "query": "12345 67890 !@#$%",
+      "description": "Numbers and special characters",
+      "expected_behavior": "handled_error"
+    },
+    {
+      "id": "NS-006",
+      "category": "nonsense",
+      "query": "hola buenos dias como estas",
+      "description": "Social greeting, not a data query",
+      "expected_behavior": "clarification_required"
+    }
+  ],
+  "expected_behaviors": {
+    "success_with_defaults": "Query succeeds with default bank/time values",
+    "success_with_nulls_handled": "Query succeeds, NULL values display as N/A",
+    "success_with_limit": "Query succeeds but results limited",
+    "success_or_split": "Query succeeds or split into multiple queries",
+    "success_or_clarification": "Query succeeds or asks for clarification",
+    "clarification_required": "Pipeline asks user to clarify missing info",
+    "clarification_or_limited": "Pipeline clarifies or limits scope",
+    "handled_error": "Pipeline returns graceful error message",
+    "empty_result_or_error": "Query returns empty dataset or error",
+    "fuzzy_match_or_error": "Fuzzy matching resolves or fails gracefully",
+    "fuzzy_match_to_imor": "Fuzzy matching should resolve to IMOR metric",
+    "fuzzy_match_to_icap": "Fuzzy matching should resolve to ICAP metric",
+    "fuzzy_match_or_clarification": "Fuzzy match or ask for clarification",
+    "rejected_or_sanitized": "SQL injection rejected or safely sanitized"
+  },
+  "test_metadata": {
+    "pytest_marker": "nl2sql_dirty",
+    "ba_null_001_queries": ["DN-001", "DN-002", "DN-003", "DN-004", "DN-005", "DN-006", "DN-007"],
+    "injection_queries": ["INJ-001", "INJ-002", "INJ-003", "INJ-004", "INJ-005"],
+    "total_queries": 53
+  }
+}

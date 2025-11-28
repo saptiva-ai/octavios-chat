@@ -1,0 +1,280 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Test cases for clarification flow - Ambiguous queries that require user input",
+  "version": "1.0.0",
+  "created_at": "2025-11-27",
+  "test_cases": [
+    {
+      "id": "AMB-MET-001",
+      "category": "metric_ambiguity",
+      "query": "cartera de INVEX",
+      "description": "Cartera sin especificar tipo",
+      "expected_behavior": "clarification_required",
+      "expected_clarification": {
+        "dimension": "metric",
+        "question": "¿A qué tipo de cartera te refieres?",
+        "options": [
+          {"value": "CARTERA_TOTAL", "label": "Cartera Total", "description": "Suma de todas las carteras"},
+          {"value": "CARTERA_COMERCIAL", "label": "Cartera Comercial", "description": "Créditos empresariales"},
+          {"value": "CARTERA_CONSUMO", "label": "Cartera de Consumo", "description": "Créditos personales"},
+          {"value": "CARTERA_VIVIENDA", "label": "Cartera de Vivienda", "description": "Créditos hipotecarios"},
+          {"value": "CARTERA_VENCIDA", "label": "Cartera Vencida", "description": "Créditos en mora"}
+        ]
+      }
+    },
+    {
+      "id": "AMB-MET-002",
+      "category": "metric_ambiguity",
+      "query": "indicadores de riesgo 2024",
+      "description": "Riesgo es genérico - varios indicadores aplican",
+      "expected_behavior": "clarification_required",
+      "expected_clarification": {
+        "dimension": "metric",
+        "question": "¿Qué indicador de riesgo te interesa?",
+        "options": [
+          {"value": "IMOR", "label": "IMOR (Morosidad)", "description": "Índice de Morosidad"},
+          {"value": "ICOR", "label": "ICOR (Cobertura)", "description": "Índice de Cobertura de Reservas"},
+          {"value": "TDA", "label": "TDA (Deterioro)", "description": "Tasa de Deterioro Ajustada"},
+          {"value": "RESERVAS", "label": "Reservas", "description": "Reservas preventivas totales"}
+        ]
+      }
+    },
+    {
+      "id": "AMB-MET-003",
+      "category": "metric_ambiguity",
+      "query": "métricas de capitalización",
+      "description": "Capitalización podría ser ICAP o relacionados",
+      "expected_behavior": "clarification_required",
+      "expected_clarification": {
+        "dimension": "metric",
+        "question": "¿Qué métrica de capitalización necesitas?",
+        "options": [
+          {"value": "ICAP", "label": "ICAP", "description": "Índice de Capitalización"},
+          {"value": "RESERVAS", "label": "Reservas", "description": "Reservas preventivas"}
+        ]
+      }
+    },
+    {
+      "id": "AMB-BANK-001",
+      "category": "bank_ambiguity",
+      "query": "IMOR actual",
+      "description": "Métrica clara pero sin banco especificado",
+      "expected_behavior": "clarification_required",
+      "expected_clarification": {
+        "dimension": "bank",
+        "question": "¿De qué entidad quieres ver el IMOR?",
+        "options": [
+          {"value": "INVEX", "label": "INVEX", "description": "Banco INVEX"},
+          {"value": "SISTEMA", "label": "Sistema Bancario", "description": "Promedio del sistema"}
+        ]
+      }
+    },
+    {
+      "id": "AMB-BANK-002",
+      "category": "unsupported_bank",
+      "query": "IMOR de Banorte últimos 3 meses",
+      "description": "Banco válido pero no disponible en dataset",
+      "expected_behavior": "clarification_with_alternatives",
+      "expected_clarification": {
+        "dimension": "bank",
+        "message": "Lo siento, Banorte no está disponible en la base de datos actual.",
+        "question": "¿Te gustaría ver los datos de alguna de estas entidades?",
+        "options": [
+          {"value": "INVEX", "label": "INVEX", "description": "Banco INVEX"},
+          {"value": "SISTEMA", "label": "Sistema Bancario", "description": "Promedio del sistema"}
+        ]
+      }
+    },
+    {
+      "id": "AMB-BANK-003",
+      "category": "unsupported_bank",
+      "query": "cartera total de BBVA vs Santander",
+      "description": "Comparación entre bancos no disponibles",
+      "expected_behavior": "clarification_with_alternatives",
+      "expected_clarification": {
+        "dimension": "bank",
+        "message": "BBVA y Santander no están disponibles. Solo tengo datos de INVEX y Sistema.",
+        "question": "¿Quieres comparar INVEX vs Sistema Bancario?",
+        "options": [
+          {"value": "INVEX_VS_SISTEMA", "label": "INVEX vs Sistema", "description": "Comparar INVEX contra promedio"},
+          {"value": "INVEX_ONLY", "label": "Solo INVEX", "description": "Ver solo datos de INVEX"},
+          {"value": "SISTEMA_ONLY", "label": "Solo Sistema", "description": "Ver solo promedio del sistema"}
+        ]
+      }
+    },
+    {
+      "id": "AMB-TIME-001",
+      "category": "time_ambiguity",
+      "query": "evolución del IMOR de INVEX",
+      "description": "Pide evolución pero sin período definido",
+      "expected_behavior": "clarification_required",
+      "expected_clarification": {
+        "dimension": "time_range",
+        "question": "¿Qué período de tiempo te interesa ver?",
+        "options": [
+          {"value": "last_3_months", "label": "Últimos 3 meses", "description": "Trimestre actual"},
+          {"value": "last_6_months", "label": "Últimos 6 meses", "description": "Semestre actual"},
+          {"value": "last_12_months", "label": "Último año", "description": "12 meses"},
+          {"value": "all", "label": "Histórico completo", "description": "Desde 2017"}
+        ]
+      }
+    },
+    {
+      "id": "AMB-TIME-002",
+      "category": "time_ambiguity",
+      "query": "IMOR reciente de INVEX",
+      "description": "'Reciente' es subjetivo",
+      "expected_behavior": "clarification_required",
+      "expected_clarification": {
+        "dimension": "time_range",
+        "question": "¿Cuántos meses consideras 'reciente'?",
+        "options": [
+          {"value": "last_1_month", "label": "Último mes", "description": "Solo el mes más reciente"},
+          {"value": "last_3_months", "label": "Últimos 3 meses", "description": "Trimestre actual"},
+          {"value": "last_6_months", "label": "Últimos 6 meses", "description": "Semestre actual"}
+        ]
+      }
+    },
+    {
+      "id": "AMB-TIME-003",
+      "category": "time_ambiguity",
+      "query": "ICOR del año pasado",
+      "description": "'Año pasado' depende de fecha actual",
+      "expected_behavior": "clarification_required",
+      "expected_clarification": {
+        "dimension": "time_range",
+        "question": "¿A qué año te refieres?",
+        "options": [
+          {"value": "2024", "label": "2024", "description": "Año 2024 completo"},
+          {"value": "2023", "label": "2023", "description": "Año 2023 completo"}
+        ]
+      }
+    },
+    {
+      "id": "AMB-INT-001",
+      "category": "intent_ambiguity",
+      "query": "IMOR de INVEX últimos 3 meses",
+      "description": "Consulta completa pero intención no clara",
+      "expected_behavior": "clarification_required",
+      "expected_clarification": {
+        "dimension": "intent",
+        "message": "Encontré el IMOR de INVEX de los últimos 3 meses.",
+        "question": "¿Qué te gustaría ver?",
+        "options": [
+          {"value": "current_value", "label": "Solo el valor actual", "description": "2.90% (último dato)"},
+          {"value": "evolution", "label": "Evolución mes a mes", "description": "Gráfica de línea temporal"},
+          {"value": "comparison", "label": "Comparación con Sistema", "description": "INVEX vs promedio"}
+        ]
+      }
+    },
+    {
+      "id": "AMB-INT-002",
+      "category": "visualization_ambiguity",
+      "query": "cartera comercial de INVEX 2024",
+      "description": "Tipo de visualización no especificado",
+      "expected_behavior": "clarification_required",
+      "expected_clarification": {
+        "dimension": "visualization",
+        "question": "¿Cómo quieres visualizar los datos?",
+        "options": [
+          {"value": "dashboard", "label": "Dashboard resumen", "description": "Valor actual con variación"},
+          {"value": "timeline", "label": "Gráfica de evolución", "description": "Tendencia a lo largo del año"},
+          {"value": "table", "label": "Tabla de datos", "description": "Valores mensuales detallados"}
+        ]
+      }
+    },
+    {
+      "id": "AMB-CMP-001",
+      "category": "comparison_ambiguity",
+      "query": "compara el IMOR",
+      "description": "Comparación sin especificar qué comparar",
+      "expected_behavior": "clarification_required",
+      "expected_clarification": {
+        "dimension": "comparison",
+        "question": "¿Qué tipo de comparación te interesa?",
+        "options": [
+          {"value": "bank_vs_bank", "label": "INVEX vs Sistema", "description": "Comparar contra promedio"},
+          {"value": "time_vs_time", "label": "Período vs período", "description": "Este año vs año anterior"},
+          {"value": "metric_vs_metric", "label": "IMOR vs otro indicador", "description": "Comparar con ICOR, etc."}
+        ]
+      }
+    },
+    {
+      "id": "AMB-CMP-002",
+      "category": "comparison_ambiguity",
+      "query": "INVEX vs la competencia",
+      "description": "'Competencia' es ambiguo - solo tenemos Sistema",
+      "expected_behavior": "clarification_with_alternatives",
+      "expected_clarification": {
+        "dimension": "comparison",
+        "message": "Solo puedo comparar INVEX contra el Sistema Bancario (promedio del mercado).",
+        "question": "¿Te gustaría ver esa comparación?",
+        "options": [
+          {"value": "yes_comparison", "label": "Sí, INVEX vs Sistema", "description": "Ver comparación"},
+          {"value": "invex_only", "label": "No, solo INVEX", "description": "Ver solo datos de INVEX"}
+        ]
+      }
+    },
+    {
+      "id": "AMB-MULTI-001",
+      "category": "multi_metric_ambiguity",
+      "query": "IMOR y ICOR de INVEX",
+      "description": "Dos métricas - cómo mostrarlas",
+      "expected_behavior": "clarification_required",
+      "expected_clarification": {
+        "dimension": "multi_metric",
+        "question": "Tienes dos métricas (IMOR e ICOR). ¿Cómo quieres verlas?",
+        "options": [
+          {"value": "combined_chart", "label": "Gráfica combinada", "description": "Ambas en el mismo gráfico"},
+          {"value": "separate_charts", "label": "Gráficas separadas", "description": "Una gráfica por métrica"},
+          {"value": "summary_table", "label": "Tabla resumen", "description": "Valores lado a lado"}
+        ]
+      }
+    },
+    {
+      "id": "AMB-MULTI-002",
+      "category": "multi_metric_ambiguity",
+      "query": "todas las métricas de INVEX",
+      "description": "Demasiado amplio - necesita limitar",
+      "expected_behavior": "clarification_required",
+      "expected_clarification": {
+        "dimension": "scope",
+        "message": "Tengo muchas métricas disponibles. Te sugiero seleccionar las más relevantes.",
+        "question": "¿Qué área te interesa más?",
+        "options": [
+          {"value": "quality", "label": "Calidad de Cartera", "description": "IMOR, ICOR, Cartera Vencida"},
+          {"value": "volume", "label": "Volumen de Cartera", "description": "Cartera Total, Comercial, Consumo"},
+          {"value": "capital", "label": "Capital y Reservas", "description": "ICAP, Reservas, TDA"},
+          {"value": "rates", "label": "Tasas", "description": "Tasa MN, Tasa ME"}
+        ]
+      }
+    },
+    {
+      "id": "AMB-CONTEXT-001",
+      "category": "context_ambiguity",
+      "query": "y el mes anterior?",
+      "description": "Referencia a contexto previo sin especificar",
+      "expected_behavior": "clarification_required",
+      "expected_clarification": {
+        "dimension": "context",
+        "message": "No tengo contexto de una consulta anterior.",
+        "question": "¿Qué métrica y banco te interesa para el mes anterior?",
+        "options": []
+      }
+    }
+  ],
+  "test_metadata": {
+    "total_cases": 16,
+    "categories": {
+      "metric_ambiguity": 3,
+      "bank_ambiguity": 1,
+      "unsupported_bank": 2,
+      "time_ambiguity": 3,
+      "intent_ambiguity": 1,
+      "visualization_ambiguity": 1,
+      "comparison_ambiguity": 2,
+      "multi_metric_ambiguity": 2,
+      "context_ambiguity": 1
+    }
+  }
+}
