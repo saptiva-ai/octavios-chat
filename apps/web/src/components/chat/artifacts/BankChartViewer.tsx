@@ -2,7 +2,6 @@
 
 import React from "react";
 import dynamic from "next/dynamic";
-import type { PlotParams } from "react-plotly.js";
 import { cn } from "@/lib/utils";
 
 // Dynamic import to avoid SSR issues with Plotly
@@ -108,7 +107,7 @@ export function BankChartViewer({ data, className }: BankChartViewerProps) {
     },
   };
 
-  const plotConfig: Partial<PlotParams["config"]> = {
+  const plotConfig = {
     responsive: true,
     displayModeBar: true,
     displaylogo: false,
