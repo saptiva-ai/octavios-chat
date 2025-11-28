@@ -21,13 +21,12 @@ export function assertProdNoMock() {
 
     const resolvedApiBase = fallbackApiBase;
 
-    // REMOVED: Cannot assign to process.env in Next.js after build-time replacement
-    // The proxy in next.config.js handles API routing when NEXT_PUBLIC_API_URL is empty
-    // if (!process.env.NEXT_PUBLIC_API_URL && resolvedApiBase) {
-    //   process.env.NEXT_PUBLIC_API_URL = resolvedApiBase
-    // }
+    // Allow empty NEXT_PUBLIC_API_URL when using Next.js proxy (Docker/local development)
+    // Empty string means: use Next.js rewrites to proxy /api/* to backend
+    const isUsingProxy = process.env.NEXT_PUBLIC_API_URL === "";
+    const hasApiAccess = resolvedApiBase || isUsingProxy;
 
-    if (!resolvedApiBase) {
+    if (!hasApiAccess) {
       throw new Error(
         "API base missing; refusing to fall back to mocks in production.",
       );

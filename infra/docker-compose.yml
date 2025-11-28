@@ -289,9 +289,9 @@ services:
       args:
         # API_BASE_URL for server-side proxy (internal Docker network)
         API_BASE_URL: ${API_BASE_URL:-http://backend:8000}
-        # For local development, use localhost:8000 (backend service port)
-        # For production, override with public domain
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        # NEXT_PUBLIC_API_URL: Empty by default to use Next.js proxy
+        # Override with public domain for production deployments without proxy
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
         NEXT_PUBLIC_MAX_FILE_SIZE_MB: ${NEXT_PUBLIC_MAX_FILE_SIZE_MB:-50}
         NODE_ENV: production
         UID: ${UID:-1000}

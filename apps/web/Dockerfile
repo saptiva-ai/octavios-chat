@@ -91,8 +91,11 @@ FROM base AS builder
 
 # Build-time environment variables (with production defaults)
 # IMPORTANT: Do NOT include /api suffix - routes already include it
+# API_BASE_URL: Internal Docker network URL for server-side proxy
 ARG API_BASE_URL=http://backend:8000
-ARG NEXT_PUBLIC_API_URL=https://414.saptiva.com
+# NEXT_PUBLIC_API_URL: Empty to use Next.js proxy (recommended for Docker)
+# Empty string = proxy /api/* to backend via rewrites
+ARG NEXT_PUBLIC_API_URL=
 ARG NEXT_PUBLIC_APP_NAME="Saptiva Copilot OS - Capital 414"
 ARG NEXT_PUBLIC_MAX_FILE_SIZE_MB=50
 ARG NEXT_PUBLIC_FEATURE_WEB_SEARCH=false
