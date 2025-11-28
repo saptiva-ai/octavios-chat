@@ -29,7 +29,7 @@ echo "🔍 Pre-flight Checks"
 echo "--------------------"
 
 echo -n "Checking backend health... "
-if curl -s -f "$BACKEND_URL/health" > /dev/null; then
+if curl -s -f "$BACKEND_URL/api/health" > /dev/null; then
     echo -e "${GREEN}✅ OK${NC}"
 else
     echo -e "${RED}❌ FAILED${NC}"
@@ -55,7 +55,7 @@ echo "-------------------------------------"
 
 LOGIN_RESPONSE=$(curl -s -X POST "$BACKEND_URL/api/auth/login" \
     -H "Content-Type: application/json" \
-    -d "{\"email\":\"$DEMO_EMAIL\",\"password\":\"$DEMO_PASSWORD\"}")
+    -d "{\"identifier\":\"$DEMO_EMAIL\",\"password\":\"$DEMO_PASSWORD\"}")
 
 TOKEN=$(echo "$LOGIN_RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin).get('access_token', ''))" 2>/dev/null || echo "")
 
@@ -69,7 +69,7 @@ if [ -z "$TOKEN" ]; then
     # Try login again
     LOGIN_RESPONSE=$(curl -s -X POST "$BACKEND_URL/api/auth/login" \
         -H "Content-Type: application/json" \
-        -d "{\"email\":\"$DEMO_EMAIL\",\"password\":\"$DEMO_PASSWORD\"}")
+        -d "{\"identifier\":\"$DEMO_EMAIL\",\"password\":\"$DEMO_PASSWORD\"}")
 
     TOKEN=$(echo "$LOGIN_RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin).get('access_token', ''))")
 fi
@@ -84,43 +84,23 @@ echo -e "${GREEN}✅ Authenticated successfully${NC}"
 echo "Token: ${TOKEN:0:20}..."
 echo ""
 
-# Step 2: Create chat session
-echo "💬 Step 2: Create chat session"
-echo "-------------------------------"
-
-SESSION_RESPONSE=$(curl -s -X POST "$BACKEND_URL/api/chat/sessions" \
-    -H "Authorization: Bearer $TOKEN" \
-    -H "Content-Type: application/json" \
-    -d '{"title":"E2E Test - BankAdvisor Integration"}')
-
-CHAT_ID=$(echo "$SESSION_RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin).get('id', ''))")
-
-if [ -z "$CHAT_ID" ]; then
-    echo -e "${RED}❌ Failed to create session${NC}"
-    echo "Response: $SESSION_RESPONSE"
-    exit 1
-fi
-
-echo -e "${GREEN}✅ Chat session created${NC}"
-echo "Chat ID: $CHAT_ID"
-echo ""
-
-# Step 3: Send banking query
-echo "📊 Step 3: Send banking query"
+# Step 2: Send banking query (session created automatically)
+echo "💬 Step 2: Send banking query"
 echo "------------------------------"
 echo "Query: 'IMOR de INVEX en 2024'"
 
 START_TIME=$(date +%s)
 
-MESSAGE_RESPONSE=$(curl -s -X POST "$BACKEND_URL/api/chat/sessions/$CHAT_ID/messages" \
+MESSAGE_RESPONSE=$(curl -s -X POST "$BACKEND_URL/api/chat" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
-    -d '{"content":"IMOR de INVEX en 2024"}')
+    -d '{"message":"IMOR de INVEX en 2024","stream":false}')
 
 END_TIME=$(date +%s)
 ELAPSED=$((END_TIME - START_TIME))
 
-MESSAGE_ID=$(echo "$MESSAGE_RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin).get('id', ''))")
+MESSAGE_ID=$(echo "$MESSAGE_RESPONSE" | python3 -c "import sys, json; data = json.load(sys.stdin); print(data.get('message_id', data.get('id', '')))")
+CHAT_ID=$(echo "$MESSAGE_RESPONSE" | python3 -c "import sys, json; data = json.load(sys.stdin); print(data.get('chat_session_id', data.get('session_id', '')))")
 
 if [ -z "$MESSAGE_ID" ]; then
     echo -e "${RED}❌ Failed to send message${NC}"
@@ -130,6 +110,7 @@ fi
 
 echo -e "${GREEN}✅ Message sent and response received${NC}"
 echo "Message ID: $MESSAGE_ID"
+echo "Chat ID: $CHAT_ID"
 echo "Response time: ${ELAPSED}s"
 
 if [ $ELAPSED -lt 3 ]; then
