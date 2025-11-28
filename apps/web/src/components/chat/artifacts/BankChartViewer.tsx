@@ -56,6 +56,10 @@ interface BankChartData {
   data_as_of: string;
   source: string;
   title?: string;
+  metadata?: {
+    sql_generated?: string;
+    [key: string]: any;
+  };
 }
 
 interface BankChartViewerProps {
@@ -71,7 +75,11 @@ export function BankChartViewer({ data, className }: BankChartViewerProps) {
     bank_names,
     time_range,
     data_as_of,
+    metadata,
   } = data;
+
+  const [showSql, setShowSql] = React.useState(false);
+  const sqlQuery = metadata?.sql_generated;
 
   // Default layout enhancements for dark theme
   const enhancedLayout: Partial<PlotlyLayout> = {
@@ -153,6 +161,29 @@ export function BankChartViewer({ data, className }: BankChartViewerProps) {
           </span>
         </div>
       </div>
+
+      {/* SQL Query Section */}
+      {sqlQuery && (
+        <div className="border-b border-white/10">
+          <button
+            onClick={() => setShowSql(!showSql)}
+            className="w-full px-4 py-2 flex items-center justify-between text-xs text-white/70 hover:text-white/90 hover:bg-white/5 transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <span>🔍</span>
+              <span className="font-medium">SQL Query Generada</span>
+            </span>
+            <span className="text-white/50">{showSql ? "▼" : "▶"}</span>
+          </button>
+          {showSql && (
+            <div className="px-4 pb-3">
+              <pre className="text-xs text-white/80 bg-black/30 p-3 rounded overflow-x-auto border border-white/5">
+                <code>{sqlQuery}</code>
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Plotly Chart */}
       <div className="p-4">
