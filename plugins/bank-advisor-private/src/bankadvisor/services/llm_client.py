@@ -245,7 +245,7 @@ class SaptivaLlmClient:
         prompt_parts.append("2. Usa la tabla: `monthly_kpis`")
         prompt_parts.append("3. SIEMPRE incluye: `LIMIT 1000`")
         prompt_parts.append("4. Para series de tiempo, ordena por `fecha ASC`")
-        prompt_parts.append("5. Para filtrar bancos, usa la columna `banco_nombre`")
+        prompt_parts.append("5. Para filtrar bancos, usa la columna `banco_norm`")
         prompt_parts.append("6. No incluyas explicaciones, solo el SQL")
         prompt_parts.append("7. Usa comillas simples para strings ('INVEX', 'SISTEMA')")
         prompt_parts.append("8. Para intervalos de tiempo, usa sintaxis PostgreSQL (INTERVAL '3 months')")

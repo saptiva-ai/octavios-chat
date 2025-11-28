@@ -269,7 +269,7 @@ class SqlGenerationService:
         Pattern:
             SELECT fecha, {metric}
             FROM monthly_kpis
-            WHERE banco_nombre = 'INVEX'
+            WHERE banco_norm = 'INVEX'
               AND fecha >= {start_date}
             ORDER BY fecha ASC
             LIMIT 1000
@@ -281,8 +281,8 @@ class SqlGenerationService:
         Returns:
             SqlGenerationResult with generated SQL
         """
-        # Build SELECT clause (include banco_nombre for proper data transformation)
-        select_clause = f"banco_nombre, fecha, {metric_column}"
+        # Build SELECT clause (include banco_norm for proper data transformation)
+        select_clause = f"banco_norm, fecha, {metric_column}"
 
         # Build WHERE clauses
         where_clauses = []
@@ -290,10 +290,10 @@ class SqlGenerationService:
         # Bank filter
         if spec.bank_names:
             if len(spec.bank_names) == 1:
-                where_clauses.append(f"banco_nombre = '{spec.bank_names[0]}'")
+                where_clauses.append(f"banco_norm = '{spec.bank_names[0]}'")
             else:
                 banks_str = "', '".join(spec.bank_names)
-                where_clauses.append(f"banco_nombre IN ('{banks_str}')")
+                where_clauses.append(f"banco_norm IN ('{banks_str}')")
 
         # Time range filter
         time_clause = self._build_time_filter(spec.time_range)
@@ -348,11 +348,11 @@ LIMIT {self.MAX_LIMIT}
         Generate SQL for comparison queries (INVEX vs SISTEMA).
 
         Pattern:
-            SELECT fecha, banco_nombre, {metric}
+            SELECT fecha, banco_norm, {metric}
             FROM monthly_kpis
-            WHERE banco_nombre IN ('INVEX', 'SISTEMA')
+            WHERE banco_norm IN ('INVEX', 'SISTEMA')
               AND fecha >= {start_date}
-            ORDER BY fecha ASC, banco_nombre
+            ORDER BY fecha ASC, banco_norm
             LIMIT 1000
 
         Args:
@@ -362,15 +362,15 @@ LIMIT {self.MAX_LIMIT}
         Returns:
             SqlGenerationResult with generated SQL
         """
-        # Build SELECT clause (include banco_nombre for comparison)
-        select_clause = f"fecha, banco_nombre, {metric_column}"
+        # Build SELECT clause (include banco_norm for comparison)
+        select_clause = f"fecha, banco_norm, {metric_column}"
 
         # Build WHERE clauses
         where_clauses = []
 
         # Bank filter (required for comparison)
         banks_str = "', '".join(spec.bank_names)
-        where_clauses.append(f"banco_nombre IN ('{banks_str}')")
+        where_clauses.append(f"banco_norm IN ('{banks_str}')")
 
         # Time range filter
         time_clause = self._build_time_filter(spec.time_range)
@@ -384,7 +384,7 @@ LIMIT {self.MAX_LIMIT}
 SELECT {select_clause}
 FROM monthly_kpis
 WHERE {where_sql}
-ORDER BY fecha ASC, banco_nombre
+ORDER BY fecha ASC, banco_norm
 LIMIT {self.MAX_LIMIT}
         """.strip()
 
@@ -421,7 +421,7 @@ LIMIT {self.MAX_LIMIT}
         Pattern:
             SELECT AVG({metric}) as promedio
             FROM monthly_kpis
-            WHERE banco_nombre = 'INVEX'
+            WHERE banco_norm = 'INVEX'
 
         Args:
             spec: QuerySpec
@@ -435,10 +435,10 @@ LIMIT {self.MAX_LIMIT}
 
         if spec.bank_names:
             if len(spec.bank_names) == 1:
-                where_clauses.append(f"banco_nombre = '{spec.bank_names[0]}'")
+                where_clauses.append(f"banco_norm = '{spec.bank_names[0]}'")
             else:
                 banks_str = "', '".join(spec.bank_names)
-                where_clauses.append(f"banco_nombre IN ('{banks_str}')")
+                where_clauses.append(f"banco_norm IN ('{banks_str}')")
 
         where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
 
@@ -511,10 +511,10 @@ WHERE {where_sql}
         Generate SQL for TOP N ranking queries.
 
         Pattern:
-            SELECT banco_nombre, AVG({metric}) as promedio
+            SELECT banco_norm, AVG({metric}) as promedio
             FROM monthly_kpis
             WHERE fecha >= {start_date}
-            GROUP BY banco_nombre
+            GROUP BY banco_norm
             ORDER BY promedio DESC
             LIMIT {top_n}
 
@@ -541,14 +541,14 @@ WHERE {where_sql}
 
         # Build SQL
         sql = f"""
-SELECT banco_nombre,
+SELECT banco_norm,
        AVG({metric_column}) as promedio,
        MAX({metric_column}) as maximo,
        MIN({metric_column}) as minimo,
        COUNT(*) as meses
 FROM monthly_kpis
 WHERE {where_sql}
-GROUP BY banco_nombre
+GROUP BY banco_norm
 ORDER BY promedio DESC
 LIMIT {min(top_n, self.MAX_LIMIT)}
         """.strip()

@@ -356,3 +356,4 @@ debug_tool.py
 
 # Large data files (>100MB)
 plugins/bank-advisor-private/data/raw/
+/plugins/data

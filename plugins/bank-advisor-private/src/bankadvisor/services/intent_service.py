@@ -47,6 +47,14 @@ class IntentService:
         "tda_cartera_total": "tda_cuadro",
         "deterioro": "tda_cuadro",
         "tasa deterioro": "tda_cuadro",
+        # BA-P0-004: Common banking metrics (CNBV)
+        "imor": "imor_cuadro",
+        "icor": "icor_cuadro",
+        "roe": "roe_cuadro",
+        "roa": "roa_cuadro",
+        "morosidad": "imor_cuadro",  # morosidad -> IMOR
+        "índice de morosidad": "imor_cuadro",
+        "indice de morosidad": "imor_cuadro",
     }
 
     @classmethod
@@ -80,8 +88,14 @@ class IntentService:
         query_lower = query.lower().strip()
 
         # 0. Check explicit aliases FIRST (highest priority)
+        # BA-P0-004: Check both full query and individual words for aliases
         if query_lower in cls._explicit_aliases:
             return AmbiguityResult(is_ambiguous=False, options=[], resolved_id=cls._explicit_aliases[query_lower])
+
+        # Also check if query contains any explicit alias as a word
+        for alias, section_id in cls._explicit_aliases.items():
+            if alias in query_lower.split():
+                return AmbiguityResult(is_ambiguous=False, options=[], resolved_id=section_id)
 
         # 1. Búsqueda Exacta por ID
         if query_lower in cls._sections:

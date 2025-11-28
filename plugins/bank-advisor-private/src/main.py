@@ -444,7 +444,7 @@ async def _try_nl2sql_pipeline(user_query: str, mode: str) -> Optional[Dict[str,
     for row in rows:
         row_dict = dict(row._mapping)
         fecha = row_dict.get('fecha')
-        banco = row_dict.get('banco_nombre', 'Sistema')
+        banco = row_dict.get('banco_norm', 'Sistema')
         value = row_dict.get(metric_col)
 
         if fecha:
