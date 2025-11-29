@@ -25,8 +25,12 @@ from sqlalchemy import text
 # Import bankadvisor modules
 from bankadvisor.db import AsyncSessionLocal, init_db
 from bankadvisor.services.analytics_service import AnalyticsService
-from bankadvisor.services.intent_service import IntentService
+from bankadvisor.services.intent_service import IntentService, NlpIntentService, Intent
 from bankadvisor.services.visualization_service import VisualizationService
+
+# HU3: NLP Query Interpretation imports
+from bankadvisor.config_service import get_config
+from bankadvisor.entity_service import EntityService
 
 logger = structlog.get_logger(__name__)
 
@@ -193,6 +197,297 @@ mcp = FastMCP("BankAdvisor Enterprise")
 
 
 # ============================================================================
+# HU3: NLP QUERY INTERPRETATION PIPELINE
+# ============================================================================
+
+# Confidence threshold for automatic execution
+CONFIDENCE_THRESHOLD = 0.7
+
+
+async def _try_hu3_nlp_pipeline(
+    user_query: str,
+    mode: str = "dashboard"
+) -> Optional[Dict[str, Any]]:
+    """
+    HU3 NLP Query Interpretation Pipeline.
+
+    Pipeline:
+        1. Extract entities (banks, dates, metrics)
+        2. Classify intent (evolution, comparison, ranking, point_value)
+        3. If confidence < threshold, return clarification
+        4. Execute query with filters
+
+    Args:
+        user_query: Natural language query
+        mode: Visualization mode
+
+    Returns:
+        Result dict or None if pipeline should fallback
+    """
+    logger.info("hu3_nlp.pipeline_start", query=user_query)
+
+    async with AsyncSessionLocal() as session:
+        try:
+            # Step 1: Extract entities
+            entities = await EntityService.extract(user_query, session)
+            config = get_config()
+
+            # Step 1.5: Check for ambiguous terms BEFORE metric resolution
+            # This catches cases like "cartera de INVEX" where "cartera" is ambiguous
+            ambiguity = config.check_ambiguous_term(user_query)
+            if ambiguity:
+                logger.info(
+                    "hu3_nlp.ambiguous_term_detected",
+                    query=user_query,
+                    term=ambiguity["term"],
+                    action="clarification"
+                )
+                return {
+                    "type": "clarification",
+                    "message": ambiguity["message"],
+                    "options": ambiguity["options"],
+                    "context": {
+                        "ambiguous_term": ambiguity["term"],
+                        "banks": entities.banks,
+                        "date_start": str(entities.date_start) if entities.date_start else None,
+                        "date_end": str(entities.date_end) if entities.date_end else None,
+                        "original_query": user_query
+                    }
+                }
+
+            # =========================================================================
+            # HU3.4: ADDITIONAL CLARIFICATION CHECKS
+            # =========================================================================
+
+            # HU3.4-A: Multi-metric clarification
+            # Check if user is asking for multiple metrics (e.g., "IMOR y ICOR")
+            multiple_metrics = await EntityService.extract_multiple_metrics(user_query, session)
+            if len(multiple_metrics) > 1:
+                metrics_names = ", ".join([m[1] for m in multiple_metrics])
+                logger.info(
+                    "hu3_nlp.multi_metric_detected",
+                    query=user_query,
+                    metrics=multiple_metrics,
+                    action="clarification"
+                )
+                return {
+                    "type": "clarification",
+                    "message": f"Detecté varias métricas: {metrics_names}. ¿Cómo quieres visualizarlas?",
+                    "options": [
+                        {"id": "combined", "label": "Gráfica combinada", "description": "Todas las métricas en un solo gráfico"},
+                        {"id": "separate", "label": "Gráficas separadas", "description": "Un gráfico por cada métrica"},
+                        {"id": "table", "label": "Tabla comparativa", "description": "Resumen en formato tabla"},
+                        {"id": "first_only", "label": f"Solo {multiple_metrics[0][1]}", "description": "Mostrar solo la primera métrica"}
+                    ],
+                    "context": {
+                        "metrics": [m[0] for m in multiple_metrics],
+                        "metrics_display": [m[1] for m in multiple_metrics],
+                        "banks": entities.banks,
+                        "original_query": user_query
+                    }
+                }
+
+            # HU3.4-B: Comparison clarification
+            # Check if user wants to compare but targets are unclear
+            is_comparison = EntityService.is_comparison_query(user_query)
+            if is_comparison and entities.has_metric():
+                # Check if comparison targets are specified
+                has_multiple_banks = len(entities.banks) > 1
+                has_vs_pattern = " vs " in user_query.lower() or " versus " in user_query.lower()
+
+                if not has_multiple_banks and not has_vs_pattern:
+                    logger.info(
+                        "hu3_nlp.comparison_unclear",
+                        query=user_query,
+                        metric=entities.metric_id,
+                        action="clarification"
+                    )
+                    return {
+                        "type": "clarification",
+                        "message": f"¿Qué tipo de comparación de {entities.metric_display} te interesa?",
+                        "options": [
+                            {"id": "invex_vs_sistema", "label": "INVEX vs Sistema", "description": "Comparar INVEX contra el promedio del sistema"},
+                            {"id": "time_periods", "label": "Diferentes períodos", "description": "Comparar año actual vs anterior"},
+                            {"id": "vs_other_metric", "label": "Contra otra métrica", "description": "Comparar con otro indicador"}
+                        ],
+                        "context": {
+                            "metric": entities.metric_id,
+                            "metric_display": entities.metric_display,
+                            "banks": entities.banks,
+                            "original_query": user_query
+                        }
+                    }
+
+            # HU3.4-C: Time period clarification
+            # Check for vague time references without explicit date range
+            vague_time = EntityService.has_vague_time_reference(user_query)
+            has_explicit_date = EntityService.has_explicit_date_range(user_query)
+
+            if vague_time and not has_explicit_date and entities.has_metric():
+                logger.info(
+                    "hu3_nlp.vague_time_detected",
+                    query=user_query,
+                    vague_term=vague_time,
+                    action="clarification"
+                )
+                return {
+                    "type": "clarification",
+                    "message": f"¿Qué período de tiempo te interesa para {entities.metric_display}?",
+                    "options": [
+                        {"id": "3m", "label": "Últimos 3 meses", "description": "Datos más recientes"},
+                        {"id": "6m", "label": "Últimos 6 meses", "description": "Medio año"},
+                        {"id": "12m", "label": "Último año", "description": "12 meses completos"},
+                        {"id": "ytd", "label": "Este año (YTD)", "description": "Desde enero 2025"},
+                        {"id": "all", "label": "Histórico completo", "description": "Todos los datos desde 2017"}
+                    ],
+                    "context": {
+                        "vague_term": vague_time,
+                        "metric": entities.metric_id,
+                        "metric_display": entities.metric_display,
+                        "banks": entities.banks,
+                        "original_query": user_query
+                    }
+                }
+
+            # HU3.4-D: Bank clarification
+            # If metric found but no bank specified, ask which bank
+            if entities.has_metric() and not entities.has_banks():
+                # Only ask if query seems to want specific bank data
+                # Skip if it's a general system-wide query
+                general_terms = ["sistema", "promedio", "todos", "general", "total"]
+                is_general_query = any(term in user_query.lower() for term in general_terms)
+
+                if not is_general_query:
+                    logger.info(
+                        "hu3_nlp.bank_not_specified",
+                        query=user_query,
+                        metric=entities.metric_id,
+                        action="clarification"
+                    )
+                    return {
+                        "type": "clarification",
+                        "message": f"¿De qué entidad quieres ver {entities.metric_display}?",
+                        "options": [
+                            {"id": "INVEX", "label": "INVEX", "description": "Solo datos de INVEX"},
+                            {"id": "Sistema", "label": "Sistema Bancario", "description": "Promedio del sistema financiero"},
+                            {"id": "ambos", "label": "Ambos (comparar)", "description": "Comparar INVEX vs Sistema"}
+                        ],
+                        "context": {
+                            "metric": entities.metric_id,
+                            "metric_display": entities.metric_display,
+                            "date_start": str(entities.date_start) if entities.date_start else None,
+                            "date_end": str(entities.date_end) if entities.date_end else None,
+                            "original_query": user_query
+                        }
+                    }
+
+            # =========================================================================
+            # END HU3.4 CLARIFICATION CHECKS
+            # =========================================================================
+
+            # Step 2: If no metric found, ask for clarification
+            if not entities.has_metric():
+                logger.info(
+                    "hu3_nlp.metric_not_found",
+                    query=user_query,
+                    action="clarification"
+                )
+                return {
+                    "type": "clarification",
+                    "message": "No pude identificar la métrica. ¿A cuál te refieres?",
+                    "options": config.get_all_metric_options()[:6],
+                    "context": {
+                        "banks": entities.banks,
+                        "date_start": str(entities.date_start) if entities.date_start else None,
+                        "date_end": str(entities.date_end) if entities.date_end else None,
+                        "original_query": user_query
+                    }
+                }
+
+            # Step 3: Classify intent
+            intent_result = await NlpIntentService.classify(user_query, entities)
+
+            logger.info(
+                "hu3_nlp.intent_classified",
+                query=user_query,
+                intent=intent_result.intent.value,
+                confidence=intent_result.confidence,
+                explanation=intent_result.explanation
+            )
+
+            # Step 4: If low confidence, ask for clarification
+            if intent_result.confidence < CONFIDENCE_THRESHOLD or intent_result.intent == Intent.UNKNOWN:
+                return {
+                    "type": "clarification",
+                    "message": f"Encontré {entities.metric_display}. ¿Qué te gustaría ver?",
+                    "options": [
+                        {"id": "point_value", "label": "Valor actual"},
+                        {"id": "evolution", "label": "Evolución en el tiempo"},
+                        {"id": "comparison", "label": "Comparación entre bancos"},
+                        {"id": "ranking", "label": "Ranking de bancos"}
+                    ],
+                    "context": {
+                        "metric": entities.metric_id,
+                        "metric_display": entities.metric_display,
+                        "banks": entities.banks,
+                        "date_start": str(entities.date_start) if entities.date_start else None,
+                        "date_end": str(entities.date_end) if entities.date_end else None,
+                        "detected_intent": intent_result.intent.value,
+                        "confidence": intent_result.confidence
+                    }
+                }
+
+            # Step 5: Execute query with high confidence
+            data = await AnalyticsService.get_filtered_data(
+                session,
+                metric_id=entities.metric_id,
+                banks=entities.banks if entities.banks else None,
+                date_start=entities.date_start,
+                date_end=entities.date_end,
+                intent=intent_result.intent.value
+            )
+
+            # Check for errors from analytics service
+            if data.get("type") == "error":
+                logger.warning(
+                    "hu3_nlp.analytics_error",
+                    query=user_query,
+                    error=data.get("message")
+                )
+                return data
+
+            # Add metadata
+            data["query_info"] = {
+                "original_query": user_query,
+                "detected_metric": entities.metric_display,
+                "detected_banks": entities.banks,
+                "detected_intent": intent_result.intent.value,
+                "confidence": intent_result.confidence,
+                "pipeline": "hu3_nlp"
+            }
+
+            logger.info(
+                "hu3_nlp.success",
+                query=user_query,
+                metric=entities.metric_id,
+                intent=intent_result.intent.value,
+                banks_count=len(entities.banks) if entities.banks else 0
+            )
+
+            return data
+
+        except Exception as e:
+            logger.error(
+                "hu3_nlp.error",
+                query=user_query,
+                error=str(e),
+                exc_info=True
+            )
+            # Return None to trigger fallback to legacy pipeline
+            return None
+
+
+# ============================================================================
 # CORE BANK ANALYTICS LOGIC (callable directly)
 # ============================================================================
 async def _bank_analytics_impl(
@@ -245,7 +540,31 @@ async def _bank_analytics_impl(
     )
 
     # =========================================================================
-    # PHASE 2-3: TRY NL2SQL PIPELINE FIRST
+    # HU3: TRY NLP QUERY INTERPRETATION PIPELINE FIRST
+    # =========================================================================
+    try:
+        hu3_result = await _try_hu3_nlp_pipeline(metric_or_query, mode)
+        if hu3_result is not None:
+            # HU3 pipeline succeeded or returned clarification
+            if hu3_result.get("type") in ["data", "clarification", "error", "empty"]:
+                logger.info(
+                    "tool.bank_analytics.hu3_success",
+                    query=metric_or_query,
+                    result_type=hu3_result.get("type"),
+                    pipeline="hu3_nlp"
+                )
+                return hu3_result
+    except Exception as e:
+        logger.warning(
+            "tool.bank_analytics.hu3_failed",
+            query=metric_or_query,
+            error=str(e),
+            fallback="nl2sql_or_legacy"
+        )
+        # Continue to NL2SQL or legacy fallback
+
+    # =========================================================================
+    # PHASE 2-3: TRY NL2SQL PIPELINE SECOND
     # =========================================================================
     if NL2SQL_AVAILABLE and _query_parser and _context_service and _sql_generator:
         try:

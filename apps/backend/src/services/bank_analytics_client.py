@@ -22,7 +22,7 @@ from typing import Any, Dict, Optional
 import httpx
 import structlog
 
-from ..schemas.bank_chart import BankChartData, BankAnalyticsResponse
+from ..schemas.bank_chart import BankChartData, BankAnalyticsResponse, BankClarificationData, ClarificationOption
 
 logger = structlog.get_logger(__name__)
 
@@ -131,6 +131,36 @@ async def query_bank_analytics(
                     message = tool_data.get("message", "Unknown error")
                     raise BankAdvisorQueryError(f"{error_type}: {message}")
 
+                # HU3.1: Check for clarification response
+                if isinstance(tool_data, dict) and tool_data.get("type") == "clarification":
+                    logger.info(
+                        "bank_analytics.clarification_detected",
+                        message=tool_data.get("message"),
+                        options_count=len(tool_data.get("options", [])),
+                    )
+
+                    # Build ClarificationOption list from raw options
+                    options = []
+                    for opt in tool_data.get("options", []):
+                        if isinstance(opt, dict):
+                            options.append(ClarificationOption(
+                                id=opt.get("id", ""),
+                                label=opt.get("label", opt.get("id", "")),
+                                description=opt.get("description")
+                            ))
+
+                    clarification_data = BankClarificationData(
+                        type="clarification",
+                        message=tool_data.get("message", "Por favor, especifica tu consulta."),
+                        options=options,
+                        context=tool_data.get("context")
+                    )
+
+                    return BankAnalyticsResponse(
+                        success=True,
+                        clarification=clarification_data,
+                    )
+
                 # Build BankChartData from the data payload
                 chart_data = _build_chart_data(tool_data, metric_or_query)
 
@@ -160,6 +190,36 @@ async def query_bank_analytics(
                         raise BankAdvisorQueryError(f"Validation failed: {message}")
                     else:
                         raise BankAdvisorQueryError(f"{error_type}: {message}")
+
+                # HU3.1: Check for clarification response (legacy format)
+                if isinstance(result, dict) and result.get("type") == "clarification":
+                    logger.info(
+                        "bank_analytics.clarification_detected_legacy",
+                        message=result.get("message"),
+                        options_count=len(result.get("options", [])),
+                    )
+
+                    # Build ClarificationOption list from raw options
+                    options = []
+                    for opt in result.get("options", []):
+                        if isinstance(opt, dict):
+                            options.append(ClarificationOption(
+                                id=opt.get("id", ""),
+                                label=opt.get("label", opt.get("id", "")),
+                                description=opt.get("description")
+                            ))
+
+                    clarification_data = BankClarificationData(
+                        type="clarification",
+                        message=result.get("message", "Por favor, especifica tu consulta."),
+                        options=options,
+                        context=result.get("context")
+                    )
+
+                    return BankAnalyticsResponse(
+                        success=True,
+                        clarification=clarification_data,
+                    )
 
                 # Build BankChartData from successful result
                 chart_data = _build_chart_data(result, metric_or_query)

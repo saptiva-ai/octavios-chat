@@ -1426,20 +1426,56 @@ class StreamingHandler:
             if document_context:
                 system_prompt += f"\n\n**Documentos adjuntos por el usuario:**\n{document_context}"
 
-            # BA-P0-004: Add bank analytics context if available
+            # BA-P0-004 + HU3.1: Add bank analytics context if available
             if bank_chart_data:
-                metric_name = bank_chart_data.get("metric_name", "N/A")
-                bank_names = ", ".join(bank_chart_data.get("bank_names", []))
-                time_range = bank_chart_data.get("time_range", {})
-                data_as_of = bank_chart_data.get("data_as_of", "N/A")
+                # HU3.1: Check if this is a clarification response
+                if isinstance(bank_chart_data, dict) and bank_chart_data.get("type") == "clarification":
+                    # Build clarification context for LLM
+                    clarification_message = bank_chart_data.get("message", "")
+                    clarification_options = bank_chart_data.get("options", [])
+                    clarification_context_data = bank_chart_data.get("context", {})
 
-                # Extract SQL if available (from metadata or direct field)
-                sql_query = None
-                if isinstance(bank_chart_data, dict):
-                    metadata = bank_chart_data.get("metadata", {})
-                    sql_query = metadata.get("sql_generated") or bank_chart_data.get("sql_generated")
+                    options_text = "\n".join([
+                        f"  - **{opt.get('label', opt.get('id', ''))}**: {opt.get('description', '')}"
+                        for opt in clarification_options
+                    ])
 
-                bank_context = f"""
+                    bank_context = f"""
+
+**ACLARACIÓN REQUERIDA - Se está mostrando un selector de opciones al usuario:**
+
+Mensaje mostrado: "{clarification_message}"
+
+Opciones disponibles:
+{options_text}
+
+Contexto detectado:
+- Bancos mencionados: {', '.join(clarification_context_data.get('banks', [])) or 'No especificados'}
+- Consulta original: {clarification_context_data.get('original_query', 'N/A')}
+
+**IMPORTANTE**: El usuario está viendo un selector con las opciones de arriba.
+Genera una respuesta BREVE que:
+1. Confirme que necesitas más información para responder su consulta
+2. Mencione brevemente las opciones disponibles (sin repetir la lista completa)
+3. Invite al usuario a seleccionar una opción del selector mostrado
+
+NO intentes adivinar qué opción quiere el usuario. Espera a que seleccione una."""
+
+                    system_prompt += bank_context
+                else:
+                    # Regular chart data context
+                    metric_name = bank_chart_data.get("metric_name", "N/A")
+                    bank_names = ", ".join(bank_chart_data.get("bank_names", []))
+                    time_range = bank_chart_data.get("time_range", {})
+                    data_as_of = bank_chart_data.get("data_as_of", "N/A")
+
+                    # Extract SQL if available (from metadata or direct field)
+                    sql_query = None
+                    if isinstance(bank_chart_data, dict):
+                        metadata = bank_chart_data.get("metadata", {})
+                        sql_query = metadata.get("sql_generated") or bank_chart_data.get("sql_generated")
+
+                    bank_context = f"""
 
 **Análisis bancario disponible:**
 - Métrica consultada: {metric_name}
@@ -1447,15 +1483,15 @@ class StreamingHandler:
 - Período: {time_range.get('start', 'N/A')} a {time_range.get('end', 'N/A')}
 - Datos actualizados al: {data_as_of}"""
 
-                # Add SQL query if available
-                if sql_query:
-                    bank_context += f"""
+                    # Add SQL query if available
+                    if sql_query:
+                        bank_context += f"""
 - Consulta SQL generada:
 ```sql
 {sql_query}
 ```"""
 
-                bank_context += f"""
+                    bank_context += f"""
 
 **IMPORTANTE**: Los datos del gráfico de {metric_name} ya están siendo enviados al usuario.
 Genera una respuesta que:
@@ -1463,26 +1499,33 @@ Genera una respuesta que:
 2. Mencione el banco y período consultado
 3. Indique que el gráfico interactivo está disponible"""
 
-                if sql_query:
-                    bank_context += f"""
+                    if sql_query:
+                        bank_context += f"""
 4. Incluya un bloque de código SQL mostrando la consulta generada (usa markdown ```sql)
 5. Proporcione un breve análisis o contexto sobre la métrica {metric_name}"""
-                else:
-                    bank_context += f"""
+                    else:
+                        bank_context += f"""
 4. Proporcione un breve análisis o contexto sobre la métrica {metric_name}"""
 
-                bank_context += """
+                    bank_context += """
 
 NO digas que no tienes información - los datos YA ESTÁN disponibles en el gráfico."""
 
-                system_prompt += bank_context
+                    system_prompt += bank_context
+
+            # Determine if bank_chart_data is a clarification or chart
+            is_bank_clarification = (
+                isinstance(bank_chart_data, dict) and
+                bank_chart_data.get("type") == "clarification"
+            ) if bank_chart_data else False
 
             logger.info(
                 "Resolved system prompt for streaming",
                 model=context.model,
                 prompt_hash=model_params.get("_metadata", {}).get("system_hash"),
                 has_documents=bool(document_context),
-                has_bank_chart=bool(bank_chart_data)
+                has_bank_chart=bool(bank_chart_data) and not is_bank_clarification,
+                has_bank_clarification=is_bank_clarification
             )
 
             # ISSUE-004: Implement backpressure with producer-consumer pattern
@@ -1518,18 +1561,31 @@ NO digas que no tienes información - los datos YA ESTÁN disponibles en el grá
                         })
                     })
 
-                    # BA-P0-004: Send bank_chart event if data exists
+                    # BA-P0-004 + HU3.1: Send bank_chart or bank_clarification event
                     if bank_chart_data:
                         # Serialize as dict, preserving all fields including nested xaxis
                         chart_data_dict = bank_chart_data if isinstance(bank_chart_data, dict) else bank_chart_data.model_dump(mode='json')
-                        await event_queue.put({
-                            "event": "bank_chart",
-                            "data": json.dumps(chart_data_dict)
-                        })
-                        logger.info(
-                            "Sent bank_chart event to stream",
-                            metric=chart_data_dict.get("metric_name")
-                        )
+
+                        # HU3.1: Check if this is a clarification response
+                        if chart_data_dict.get("type") == "clarification":
+                            await event_queue.put({
+                                "event": "bank_clarification",
+                                "data": json.dumps(chart_data_dict)
+                            })
+                            logger.info(
+                                "Sent bank_clarification event to stream",
+                                message=chart_data_dict.get("message"),
+                                options_count=len(chart_data_dict.get("options", []))
+                            )
+                        else:
+                            await event_queue.put({
+                                "event": "bank_chart",
+                                "data": json.dumps(chart_data_dict)
+                            })
+                            logger.info(
+                                "Sent bank_chart event to stream",
+                                metric=chart_data_dict.get("metric_name")
+                            )
 
                     # FIX-001: Use resolved system_prompt (not hardcoded system_message)
                     # Use model_params for temperature/max_tokens (registry overrides context)

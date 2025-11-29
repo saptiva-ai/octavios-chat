@@ -130,10 +130,33 @@ class BankAnalyticsRequest(BaseModel):
     )
 
 
+class ClarificationOption(BaseModel):
+    """Single option in a clarification response."""
+
+    id: str = Field(..., description="Option identifier (e.g., 'imor', 'cartera_total')")
+    label: str = Field(..., description="Human-readable label")
+    description: Optional[str] = Field(None, description="Additional description")
+
+
+class BankClarificationData(BaseModel):
+    """
+    Bank clarification artifact payload.
+
+    This is returned when the query is ambiguous and requires user clarification.
+    Sent as SSE event 'bank_clarification' for the UI to show an option picker.
+    """
+
+    type: str = Field(default="clarification", description="Response type identifier")
+    message: str = Field(..., description="Clarification message to show user")
+    options: List[ClarificationOption] = Field(..., description="Available options to choose from")
+    context: Optional[Dict[str, Any]] = Field(None, description="Preserved context (banks, dates, original_query)")
+
+
 class BankAnalyticsResponse(BaseModel):
     """Response from bank analytics MCP tool."""
 
     success: bool = True
     data: Optional[BankChartData] = None
+    clarification: Optional[BankClarificationData] = None
     error: Optional[str] = None
     message: Optional[str] = None

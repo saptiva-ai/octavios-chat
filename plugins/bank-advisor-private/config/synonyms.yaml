@@ -1,0 +1,213 @@
+# HU3 - NLP Query Interpretation Configuration
+# Metric synonyms and intent patterns for natural language processing
+# This file is loaded at startup by ConfigService
+
+metrics:
+  imor:
+    display_name: "Índice de Morosidad"
+    column: "imor"
+    type: "ratio"
+    aliases:
+      - "índice de morosidad"
+      - "indice de morosidad"
+      - "morosidad"
+      - "cartera vencida ratio"
+      - "mora"
+      - "índice mora"
+      - "indice mora"
+
+  icor:
+    display_name: "Índice de Cobertura"
+    column: "icor"
+    type: "ratio"
+    aliases:
+      - "índice de cobertura"
+      - "indice de cobertura"
+      - "cobertura"
+      - "provisiones"
+      - "reservas cobertura"
+
+  icap_total:
+    display_name: "Índice de Capitalización"
+    column: "icap_total"
+    type: "ratio"
+    aliases:
+      - "icap"
+      - "índice de capitalización"
+      - "indice de capitalizacion"
+      - "capitalización"
+      - "capitalizacion"
+      - "capital"
+
+  cartera_total:
+    display_name: "Cartera Total"
+    column: "cartera_total"
+    type: "currency"
+    aliases:
+      - "cartera total"
+      # NOTE: "cartera" alone is ambiguous - moved to ambiguous_terms section
+      - "préstamos totales"
+      - "prestamos totales"
+      - "créditos totales"
+      - "creditos totales"
+      - "total cartera"
+      - "cartera de credito total"
+
+  cartera_comercial_total:
+    display_name: "Cartera Comercial"
+    column: "cartera_comercial_total"
+    type: "currency"
+    aliases:
+      - "cartera comercial"
+      - "comercial"
+      - "crédito comercial"
+      - "credito comercial"
+
+  cartera_consumo_total:
+    display_name: "Cartera Consumo"
+    column: "cartera_consumo_total"
+    type: "currency"
+    aliases:
+      - "cartera consumo"
+      - "consumo"
+      - "crédito al consumo"
+      - "credito al consumo"
+
+  cartera_vivienda_total:
+    display_name: "Cartera Vivienda"
+    column: "cartera_vivienda_total"
+    type: "currency"
+    aliases:
+      - "cartera vivienda"
+      - "vivienda"
+      - "hipotecario"
+      - "hipoteca"
+      - "crédito hipotecario"
+      - "credito hipotecario"
+
+  cartera_vencida:
+    display_name: "Cartera Vencida"
+    column: "cartera_vencida"
+    type: "currency"
+    aliases:
+      - "cartera vencida"
+      - "vencida"
+      - "cartera mala"
+      - "cartera en mora"
+
+  entidades_gubernamentales_total:
+    display_name: "Entidades Gubernamentales"
+    column: "entidades_gubernamentales_total"
+    type: "currency"
+    aliases:
+      - "entidades gubernamentales"
+      - "gobierno"
+      - "cartera gobierno"
+      - "sector público"
+      - "sector publico"
+
+  entidades_financieras_total:
+    display_name: "Entidades Financieras"
+    column: "entidades_financieras_total"
+    type: "currency"
+    aliases:
+      - "entidades financieras"
+      - "financieras"
+      - "interbancario"
+
+  empresarial_total:
+    display_name: "Empresarial"
+    column: "empresarial_total"
+    type: "currency"
+    aliases:
+      - "empresarial"
+      - "empresas"
+      - "corporativo"
+
+  reservas_etapa_todas:
+    display_name: "Reservas"
+    column: "reservas_etapa_todas"
+    type: "currency"
+    aliases:
+      - "reservas"
+      - "reservas totales"
+      - "provisiones"
+      - "estimaciones"
+
+  tda_cartera_total:
+    display_name: "Tasa de Deterioro"
+    column: "tda_cartera_total"
+    type: "ratio"
+    aliases:
+      - "tda"
+      - "tasa de deterioro"
+      - "deterioro"
+      - "tasa deterioro"
+
+  tasa_mn:
+    display_name: "Tasa Moneda Nacional"
+    column: "tasa_mn"
+    type: "ratio"
+    aliases:
+      - "tasa mn"
+      - "tasa pesos"
+      - "tasa moneda nacional"
+      - "interés pesos"
+      - "interes pesos"
+
+  tasa_me:
+    display_name: "Tasa Moneda Extranjera"
+    column: "tasa_me"
+    type: "ratio"
+    aliases:
+      - "tasa me"
+      - "tasa dólares"
+      - "tasa dolares"
+      - "tasa moneda extranjera"
+      - "interés dólares"
+      - "interes dolares"
+
+# Ambiguous terms that require clarification before processing
+# These terms match multiple possible metrics and should trigger user choice
+ambiguous_terms:
+  cartera:
+    message: "Hay varios tipos de cartera disponibles. ¿A cuál te refieres?"
+    options:
+      - id: "cartera_total"
+        label: "Cartera Total"
+        description: "Total de créditos otorgados"
+      - id: "cartera_comercial_total"
+        label: "Cartera Comercial"
+        description: "Créditos a empresas"
+      - id: "cartera_consumo_total"
+        label: "Cartera Consumo"
+        description: "Créditos personales y al consumo"
+      - id: "cartera_vivienda_total"
+        label: "Cartera Vivienda"
+        description: "Créditos hipotecarios"
+      - id: "cartera_vencida"
+        label: "Cartera Vencida"
+        description: "Créditos en mora"
+
+  riesgo:
+    message: "¿Qué indicador de riesgo te interesa?"
+    options:
+      - id: "imor"
+        label: "IMOR (Morosidad)"
+        description: "Índice de morosidad de la cartera"
+      - id: "icor"
+        label: "ICOR (Cobertura)"
+        description: "Índice de cobertura de reservas"
+      - id: "tda_cartera_total"
+        label: "TDA (Deterioro)"
+        description: "Tasa de deterioro de activos"
+
+  tasa:
+    message: "¿Qué tipo de tasa te interesa?"
+    options:
+      - id: "tasa_mn"
+        label: "Tasa Moneda Nacional"
+        description: "Tasa de interés en pesos"
+      - id: "tasa_me"
+        label: "Tasa Moneda Extranjera"
+        description: "Tasa de interés en dólares"

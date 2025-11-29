@@ -26,10 +26,12 @@ RUN uv pip install --system --no-cache -r requirements.txt
 COPY plugins/bank-advisor-private/src/ ./src/
 COPY plugins/bank-advisor-private/data/ ./data/
 COPY plugins/bank-advisor-private/migrations/ ./migrations/
+COPY plugins/bank-advisor-private/config/ ./config/
 
 # Copy and setup entrypoint script for automatic ETL initialization
+# Use sed to fix Windows line endings (CRLF -> LF)
 COPY plugins/bank-advisor-private/docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh && chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Set PYTHONPATH to include src directory
 ENV PYTHONPATH=/app/src

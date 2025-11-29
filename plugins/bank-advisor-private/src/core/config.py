@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     postgres_password: str = "secure_postgres_password"
     postgres_db: str = "bankadvisor"
 
+    # HU3: NLP Configuration
+    nlp_confidence_threshold: float = 0.7  # Threshold for automatic execution
+    # Note: SAPTIVA_API_KEY and SAPTIVA_BASE_URL are loaded via os.getenv()
+    # in llm_client.py and intent_service.py for consistency
+
     @property
     def database_url(self) -> str:
         """Construct async PostgreSQL URL for SQLAlchemy."""

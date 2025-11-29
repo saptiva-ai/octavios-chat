@@ -377,3 +377,280 @@ class AnalyticsService:
                     "El equipo técnico ha sido notificado."
                 )
             )
+
+    # =========================================================================
+    # HU3: NLP QUERY FILTERING AND FORMATTING
+    # =========================================================================
+
+    @staticmethod
+    async def get_filtered_data(
+        session: AsyncSession,
+        metric_id: str,
+        banks: List[str] = None,
+        date_start=None,
+        date_end=None,
+        intent: str = "evolution"
+    ) -> Dict[str, Any]:
+        """
+        Get metric data with filters for HU3 NLP pipeline.
+        Production-grade: parameterized queries, proper error handling.
+
+        Args:
+            session: AsyncSession for database queries
+            metric_id: Metric identifier (e.g., 'imor', 'cartera_total')
+            banks: List of bank names to filter (or None for all)
+            date_start: Start date for filtering
+            date_end: End date for filtering
+            intent: Query intent for response formatting
+
+        Returns:
+            Dict with data, visualization config, and metadata
+        """
+        from bankadvisor.config_service import get_config
+        config = get_config()
+
+        column_name = config.get_metric_column(metric_id)
+
+        if not column_name:
+            return {
+                "type": "error",
+                "message": f"Métrica desconocida: {metric_id}",
+                "available_metrics": [m["label"] for m in config.get_all_metric_options()[:5]]
+            }
+
+        # Validate column exists in whitelist
+        if column_name not in AnalyticsService.SAFE_METRIC_COLUMNS:
+            logger.warning(
+                "analytics.filtered_data.invalid_column",
+                metric_id=metric_id,
+                column_name=column_name
+            )
+            return {
+                "type": "error",
+                "message": f"Métrica '{metric_id}' no está autorizada"
+            }
+
+        metric_column = AnalyticsService.SAFE_METRIC_COLUMNS[column_name]
+
+        try:
+            # Build query
+            query = select(
+                MonthlyKPI.fecha,
+                MonthlyKPI.banco_norm,
+                metric_column.label('value')
+            )
+
+            # Apply filters
+            if banks and len(banks) > 0:
+                query = query.where(MonthlyKPI.banco_norm.in_(banks))
+
+            if date_start:
+                query = query.where(MonthlyKPI.fecha >= date_start)
+
+            if date_end:
+                query = query.where(MonthlyKPI.fecha <= date_end)
+
+            # Order by date
+            query = query.order_by(MonthlyKPI.fecha.asc())
+
+            # Execute
+            result = await session.execute(query)
+            rows = result.fetchall()
+
+            if not rows:
+                return {
+                    "type": "empty",
+                    "message": f"No hay datos para {config.get_metric_display_name(metric_id)}",
+                    "filters": {
+                        "banks": banks,
+                        "date_start": str(date_start) if date_start else None,
+                        "date_end": str(date_end) if date_end else None
+                    }
+                }
+
+            # Format based on intent
+            metric_type = config.get_metric_type(metric_id)
+
+            if intent == "evolution":
+                return AnalyticsService._format_evolution(rows, metric_id, config, metric_type)
+            elif intent == "comparison":
+                return AnalyticsService._format_comparison(rows, metric_id, config, metric_type)
+            elif intent == "ranking":
+                return AnalyticsService._format_ranking(rows, metric_id, config, metric_type)
+            else:  # point_value or unknown
+                return AnalyticsService._format_point_value(rows, metric_id, config, metric_type)
+
+        except SQLAlchemyError as e:
+            logger.error(
+                "analytics.filtered_data.db_error",
+                metric_id=metric_id,
+                error=str(e)
+            )
+            return {
+                "type": "error",
+                "message": "Error de base de datos. Por favor intente nuevamente."
+            }
+
+    @staticmethod
+    def _format_evolution(rows, metric_id: str, config, metric_type: str) -> Dict[str, Any]:
+        """Format data for evolution/trend view with Plotly config."""
+        import pandas as pd
+
+        df = pd.DataFrame(rows, columns=['fecha', 'banco', 'value'])
+
+        # Convert ratio metrics to percentage
+        if metric_type == "ratio":
+            df['value'] = df['value'] * 100
+
+        # Group by bank for multi-line chart
+        traces = []
+        for banco in df['banco'].unique():
+            bank_data = df[df['banco'] == banco].sort_values('fecha')
+            traces.append({
+                "x": bank_data['fecha'].astype(str).tolist(),
+                "y": bank_data['value'].tolist(),
+                "type": "scatter",
+                "mode": "lines+markers",
+                "name": banco
+            })
+
+        display_name = config.get_metric_display_name(metric_id)
+
+        return {
+            "type": "data",
+            "visualization": "line_chart",
+            "metric_name": display_name,
+            "plotly_config": {
+                "data": traces,
+                "layout": {
+                    "title": f"Evolución de {display_name}",
+                    "xaxis": {"title": "Fecha"},
+                    "yaxis": {
+                        "title": display_name,
+                        "ticksuffix": "%" if metric_type == "ratio" else ""
+                    }
+                }
+            },
+            "summary": f"Mostrando evolución de {display_name}"
+        }
+
+    @staticmethod
+    def _format_comparison(rows, metric_id: str, config, metric_type: str) -> Dict[str, Any]:
+        """Format data for bank comparison with Plotly config."""
+        import pandas as pd
+
+        df = pd.DataFrame(rows, columns=['fecha', 'banco', 'value'])
+
+        # Convert ratio metrics to percentage
+        if metric_type == "ratio":
+            df['value'] = df['value'] * 100
+
+        # Get latest value per bank
+        latest = df.sort_values('fecha').groupby('banco').last().reset_index()
+
+        display_name = config.get_metric_display_name(metric_id)
+
+        return {
+            "type": "data",
+            "visualization": "bar_chart",
+            "metric_name": display_name,
+            "plotly_config": {
+                "data": [{
+                    "x": latest['banco'].tolist(),
+                    "y": latest['value'].tolist(),
+                    "type": "bar",
+                    "marker": {"color": "#4F46E5"}
+                }],
+                "layout": {
+                    "title": f"Comparación de {display_name}",
+                    "xaxis": {"title": "Banco"},
+                    "yaxis": {
+                        "title": display_name,
+                        "ticksuffix": "%" if metric_type == "ratio" else ""
+                    }
+                }
+            },
+            "summary": f"Comparando {display_name} entre bancos"
+        }
+
+    @staticmethod
+    def _format_ranking(rows, metric_id: str, config, metric_type: str) -> Dict[str, Any]:
+        """Format data for ranking view."""
+        import pandas as pd
+
+        df = pd.DataFrame(rows, columns=['fecha', 'banco', 'value'])
+
+        # Convert ratio metrics to percentage
+        if metric_type == "ratio":
+            df['value'] = df['value'] * 100
+
+        # Get latest value per bank, sorted
+        latest = df.sort_values('fecha').groupby('banco').last().reset_index()
+        latest = latest.sort_values('value', ascending=False)
+
+        display_name = config.get_metric_display_name(metric_id)
+
+        return {
+            "type": "data",
+            "visualization": "ranking",
+            "metric_name": display_name,
+            "ranking": [
+                {
+                    "position": i + 1,
+                    "banco": row['banco'],
+                    "value": round(row['value'], 2),
+                    "unit": "%" if metric_type == "ratio" else ""
+                }
+                for i, (_, row) in enumerate(latest.iterrows())
+            ],
+            "plotly_config": {
+                "data": [{
+                    "x": latest['banco'].tolist(),
+                    "y": latest['value'].tolist(),
+                    "type": "bar",
+                    "orientation": "h",
+                    "marker": {"color": "#10B981"}
+                }],
+                "layout": {
+                    "title": f"Ranking de {display_name}",
+                    "xaxis": {
+                        "title": display_name,
+                        "ticksuffix": "%" if metric_type == "ratio" else ""
+                    },
+                    "yaxis": {"title": "Banco", "autorange": "reversed"}
+                }
+            },
+            "summary": f"Ranking de {display_name}"
+        }
+
+    @staticmethod
+    def _format_point_value(rows, metric_id: str, config, metric_type: str) -> Dict[str, Any]:
+        """Format data for single point value."""
+        import pandas as pd
+
+        df = pd.DataFrame(rows, columns=['fecha', 'banco', 'value'])
+
+        # Convert ratio metrics to percentage
+        if metric_type == "ratio":
+            df['value'] = df['value'] * 100
+
+        # Get latest values
+        latest = df.sort_values('fecha').groupby('banco').last().reset_index()
+
+        display_name = config.get_metric_display_name(metric_id)
+
+        return {
+            "type": "data",
+            "visualization": "value",
+            "metric_name": display_name,
+            "values": [
+                {
+                    "banco": row['banco'],
+                    "value": round(row['value'], 2),
+                    "fecha": str(row['fecha']),
+                    "unit": "%" if metric_type == "ratio" else ""
+                }
+                for _, row in latest.iterrows()
+            ],
+            "summary": f"Valor actual de {display_name}"
+        }

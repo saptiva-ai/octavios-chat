@@ -393,6 +393,22 @@ class ToolExecutionService:
                 mode=mode
             )
 
+            # HU3.1: Handle clarification response
+            if response.success and response.clarification:
+                clarification_result = {
+                    "type": "clarification",
+                    **response.clarification.model_dump()
+                }
+
+                logger.info(
+                    "bank_analytics.clarification_returned",
+                    message=response.clarification.message,
+                    options_count=len(response.clarification.options)
+                )
+
+                # Don't cache clarification responses (they're context-specific)
+                return clarification_result
+
             if response.success and response.data:
                 result = response.data.model_dump()
 
