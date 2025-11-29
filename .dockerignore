@@ -32,6 +32,7 @@ envs/.env.production
 # ============================================================================
 # Node.js
 node_modules/
+**/node_modules/
 .npm/
 .pnpm-store/
 .pnpm/
