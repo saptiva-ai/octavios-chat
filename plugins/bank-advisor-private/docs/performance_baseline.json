@@ -1,0 +1,142 @@
+{
+  "timestamp": "2025-11-30T06:17:19.266622",
+  "server": "http://localhost:8002",
+  "stats": {
+    "total_queries": 10,
+    "successful": 10,
+    "failed": 0,
+    "durations": {
+      "p50_ms": 206.46,
+      "p95_ms": 1696.33,
+      "p99_ms": 1696.33,
+      "max_ms": 1696.33,
+      "min_ms": 13.87,
+      "avg_ms": 688.34
+    },
+    "by_category": {
+      "simple": {
+        "count": 3,
+        "avg_ms": 1630.43,
+        "median_ms": 1659.24,
+        "max_ms": 1687.0
+      },
+      "calculated": {
+        "count": 1,
+        "avg_ms": 1696.33,
+        "median_ms": 1696.33,
+        "max_ms": 1696.33
+      },
+      "timeline": {
+        "count": 2,
+        "avg_ms": 111.83,
+        "median_ms": 111.83,
+        "max_ms": 206.46
+      },
+      "ratio_timeline": {
+        "count": 2,
+        "avg_ms": 20.16,
+        "median_ms": 20.16,
+        "max_ms": 26.45
+      },
+      "ratio_comparison": {
+        "count": 2,
+        "avg_ms": 15.89,
+        "median_ms": 15.89,
+        "max_ms": 17.44
+      }
+    },
+    "failed_queries": []
+  },
+  "results": [
+    {
+      "query_id": "query_1_cartera_comercial",
+      "query": "cartera comercial",
+      "category": "simple",
+      "success": true,
+      "duration_ms": 1687.0,
+      "rows_returned": 0,
+      "timestamp": "2025-11-30T06:17:09.060687"
+    },
+    {
+      "query_id": "query_2_cartera_sin_gob",
+      "query": "cartera comercial sin gobierno",
+      "category": "calculated",
+      "success": true,
+      "duration_ms": 1696.33,
+      "rows_returned": 0,
+      "timestamp": "2025-11-30T06:17:11.257755"
+    },
+    {
+      "query_id": "query_3_perdida_esperada",
+      "query": "p\u00e9rdida esperada total \u00faltimos 12 meses",
+      "category": "timeline",
+      "success": true,
+      "duration_ms": 206.46,
+      "rows_returned": 0,
+      "timestamp": "2025-11-30T06:17:11.964949"
+    },
+    {
+      "query_id": "query_4_reservas_totales",
+      "query": "reservas totales",
+      "category": "simple",
+      "success": true,
+      "duration_ms": 1659.24,
+      "rows_returned": 0,
+      "timestamp": "2025-11-30T06:17:14.124948"
+    },
+    {
+      "query_id": "query_6_imor_timeline",
+      "query": "IMOR de INVEX en los \u00faltimos 3 meses",
+      "category": "ratio_timeline",
+      "success": true,
+      "duration_ms": 13.87,
+      "rows_returned": 0,
+      "timestamp": "2025-11-30T06:17:14.639506"
+    },
+    {
+      "query_id": "query_6b_imor_comparison",
+      "query": "IMOR de INVEX vs sistema",
+      "category": "ratio_comparison",
+      "success": true,
+      "duration_ms": 17.44,
+      "rows_returned": 0,
+      "timestamp": "2025-11-30T06:17:15.157634"
+    },
+    {
+      "query_id": "query_7_cartera_vencida",
+      "query": "cartera vencida \u00faltimos 12 meses",
+      "category": "timeline",
+      "success": true,
+      "duration_ms": 17.19,
+      "rows_returned": 0,
+      "timestamp": "2025-11-30T06:17:15.675545"
+    },
+    {
+      "query_id": "query_8_icor",
+      "query": "ICOR de INVEX 2024",
+      "category": "ratio_timeline",
+      "success": true,
+      "duration_ms": 26.45,
+      "rows_returned": 0,
+      "timestamp": "2025-11-30T06:17:16.202752"
+    },
+    {
+      "query_id": "query_9_icap",
+      "query": "ICAP de INVEX contra sistema en 2024",
+      "category": "ratio_comparison",
+      "success": true,
+      "duration_ms": 14.33,
+      "rows_returned": 0,
+      "timestamp": "2025-11-30T06:17:16.717838"
+    },
+    {
+      "query_id": "query_extra_1",
+      "query": "cartera total INVEX \u00faltimo mes",
+      "category": "simple",
+      "success": true,
+      "duration_ms": 1545.05,
+      "rows_returned": 0,
+      "timestamp": "2025-11-30T06:17:18.763658"
+    }
+  ]
+}

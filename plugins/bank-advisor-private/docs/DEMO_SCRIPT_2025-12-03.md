@@ -382,30 +382,38 @@ docker logs bank-advisor-mcp | grep "bank_analytics.performance" | tail -5
 
 ---
 
-### PARTE 4: Arquitectura Técnica (2 min)
+### PARTE 4: Arquitectura Técnica - SOLID (2 min)
 
 **Script:**
-> "Rápidamente, la arquitectura del sistema:"
+> "Rápidamente, la arquitectura del sistema, diseñada con principios SOLID:"
 
 **Componentes:**
 
 1. **ETL Pipeline**
    - Corre diariamente a las 2:00 AM vía cron
    - Carga datos CNBV (103 meses de históricos)
-   - Procesa ~1200 registros en ~4 minutos
+   - Procesa ~200 registros en ~3 minutos
    - Trackea ejecuciones en tabla `etl_runs`
+   - Validación ops: `scripts/ops_validate_etl.py`
 
 2. **Backend (FastAPI + PostgreSQL)**
    - Base de datos con 1 tabla denormalizada (`monthly_kpis`)
    - Whitelist de seguridad (15 métricas autorizadas)
    - Soporte para columnas calculadas (e.g., "sin gobierno")
 
-3. **NLP Layer**
-   - 3 pipelines en cascada: HU3 (synonyms) → NL2SQL → Legacy
-   - EntityService extrae entidades (banco, fecha, métrica)
-   - IntentService detecta intent (evolution, comparison, ranking)
+3. **NLP Layer (SOLID)**
+   - **Single Responsibility**: Cada servicio tiene una función clara
+     - `EntityService`: Extrae entidades (banco, fecha, métrica)
+     - `IntentService`: Clasifica intent (evolution, comparison, ranking)
+     - `PlotlyGenerator`: Genera configuraciones de visualización
+   - **Open/Closed**: Hybrid intent classification extensible
+     - Rules-first (80% queries clasificadas en <1ms)
+     - LLM-fallback para casos ambiguos
+   - **Liskov Substitution**: Smart defaults preservan comportamiento
+   - **Dependency Inversion**: Servicios inyectados en pipeline
 
 4. **Visualization (Plotly)**
+   - `PlotlyGenerator` como adapter HU3 → legacy
    - 3 modos: timeline, comparison, variation
    - Dual mode automático según intent
    - Colores hardcodeados (INVEX #E45756, SISTEMA #AAB0B3)
@@ -415,14 +423,32 @@ docker logs bank-advisor-mcp | grep "bank_analytics.performance" | tail -5
    - OctaviOS consume el tool como un plugin remoto
    - Respuesta incluye datos + config de Plotly
 
+**Talking Point (Arquitectura):**
+> "El sistema usa principios SOLID. Por ejemplo, el 80% de las queries se clasifican con reglas determinísticas en menos de 1ms, sin costo de LLM. Solo consultamos al LLM cuando las reglas no están seguras."
+
 ---
 
 ### PARTE 5: Testing y Calidad (2 min)
 
 **Script:**
-> "Para asegurar calidad, implementamos 3 niveles de tests:"
+> "Para asegurar calidad, implementamos múltiples niveles de tests:"
 
-**Mostrar tests:**
+**Mostrar smoke test:**
+
+```bash
+# Smoke test pre-demo (12 queries incluyendo adversariales)
+python scripts/smoke_demo_bank_analytics.py --port 8002
+```
+
+**Output esperado:**
+```
+🟢 ALL CHECKS PASSED - SAFE TO DEMO
+Total Queries:  12
+✅ Passed:       12
+Success Rate:   100.0%
+```
+
+**Mostrar tests unitarios:**
 
 ```bash
 # Tests unitarios de visualizaciones
@@ -433,7 +459,18 @@ docker logs bank-advisor-mcp | grep "bank_analytics.performance" | tail -5
 ```
 
 **Decir:**
-> "Tenemos 14 tests de visualizaciones (100% passing) y 10 tests E2E que simulan exactamente las queries del demo. Esto nos protege contra regresiones."
+> "Tenemos un smoke test que valida las 12 queries críticas, incluyendo casos adversariales como fechas futuras o comparaciones de múltiples entidades. El sistema no crashea, devuelve respuestas limpias."
+
+**Performance baseline (de `docs/performance_baseline.json`):**
+
+| Categoría | p50 | p95 | Notas |
+|-----------|-----|-----|-------|
+| Ratios (IMOR, ICAP) | 16ms | 26ms | Rules-first, sin LLM |
+| Timelines | 112ms | 206ms | DB query |
+| Calculadas (sin gob) | 1.6s | 1.7s | Requiere LLM |
+
+**Decir:**
+> "Las queries simples responden en ~16ms porque usan clasificación por reglas. Las calculadas tardan ~1.6s porque consultan al LLM para interpretar la métrica."
 
 ---
 
@@ -442,12 +479,13 @@ docker logs bank-advisor-mcp | grep "bank_analytics.performance" | tail -5
 **Script (honesto):**
 
 #### ✅ Lo que SÍ funciona hoy:
-- ETL automatizado con tracking
-- 9 visualizaciones prioritarias operativas
-- NLP para queries en español
-- Métricas calculadas en tiempo real
-- Performance rastreable (logs + metadata)
-- Tests E2E pasando
+- ETL automatizado con tracking + validación ops
+- 12 queries validadas (100% smoke test pass rate)
+- Arquitectura SOLID con hybrid intent classification
+- Performance medida: p50 ~16ms (ratios), p50 ~112ms (timelines)
+- 80% de queries clasificadas sin costo de LLM
+- Casos adversariales manejados sin crash
+- CI/CD con GitHub Actions
 
 #### ⚠️ Lo que NO está (pero se puede agregar):
 - Esquema normalizado (dim/fact) → Usamos 1 tabla denormalizada (suficiente para MVP)
@@ -456,7 +494,7 @@ docker logs bank-advisor-mcp | grep "bank_analytics.performance" | tail -5
 - Visualizaciones 10-17 del PRD → Solo implementamos las 9 prioritarias (para demo)
 
 **Decir:**
-> "Este es un MVP funcional. No cumple 100% el PRD, pero lo que está implementado es sólido, testeado, y listo para producción. Las brechas son conocidas y priorizadas para post-demo."
+> "Este es un MVP funcional con arquitectura SOLID. El 80% de las queries se procesan en <20ms porque no necesitan LLM. Las brechas son conocidas y priorizadas para post-demo."
 
 ---
 

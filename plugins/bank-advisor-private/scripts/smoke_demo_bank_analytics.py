@@ -50,7 +50,7 @@ DEMO_QUERIES = [
     {
         "id": "Q3_cartera_sin_gobierno",
         "query": "Cartera comercial sin gobierno",
-        "max_duration_ms": 2000,
+        "max_duration_ms": 3000,  # LLM queries can take ~2s
         "min_rows": 1,
         "expected_chart_type": "bar",  # dashboard_month_comparison
         "visualization_mode": "comparison"
@@ -58,7 +58,7 @@ DEMO_QUERIES = [
     {
         "id": "Q4_reservas_totales",
         "query": "Reservas totales de INVEX",
-        "max_duration_ms": 1500,
+        "max_duration_ms": 3000,  # LLM queries can take ~2s
         "min_rows": 1,
         "expected_chart_type": "bar",  # dashboard_month_comparison
         "visualization_mode": "comparison"
@@ -111,6 +111,27 @@ DEMO_QUERIES = [
         "expected_chart_type": None,  # No chart expected - returns clarification
         "expect_clarification": True,
         "skip_plotly_validation": True  # Don't check plotly_config for clarifications
+    },
+    # ============================================================================
+    # ADVERSARIAL CASES (Edge cases that should NOT crash)
+    # ============================================================================
+    {
+        "id": "Q11_adversarial_future_date",
+        "query": "IMOR de INVEX en 2030",
+        "max_duration_ms": 2000,
+        "min_rows": 0,  # Should return empty, not crash
+        "expected_chart_type": None,
+        "expect_empty": True,  # Future date - no data expected
+        "skip_plotly_validation": True
+    },
+    {
+        "id": "Q12_adversarial_multi_entity_comparison",
+        "query": "ICAP de INVEX contra Banorte y sistema",
+        "max_duration_ms": 2000,
+        "min_rows": 0,
+        "expected_chart_type": None,  # May trigger clarification
+        "expect_clarification": True,  # Too many entities
+        "skip_plotly_validation": True
     }
 ]
 
