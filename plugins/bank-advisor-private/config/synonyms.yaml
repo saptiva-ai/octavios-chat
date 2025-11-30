@@ -62,6 +62,21 @@ metrics:
       - "comercial"
       - "crédito comercial"
       - "credito comercial"
+      - "cartera comercial cc"
+      - "cc comercial"
+
+  cartera_comercial_sin_gob:
+    display_name: "Cartera Comercial Sin Gobierno"
+    column: "cartera_comercial_total"
+    type: "currency"
+    calculation: "subtract:entidades_gubernamentales_total"
+    aliases:
+      - "cartera comercial sin gobierno"
+      - "comercial sin gob"
+      - "cartera comercial privada"
+      - "comercial privado"
+      - "cartera comercial sin gubernamentales"
+      - "cartera sin gobierno"
 
   cartera_consumo_total:
     display_name: "Cartera Consumo"
@@ -125,7 +140,7 @@ metrics:
       - "corporativo"
 
   reservas_etapa_todas:
-    display_name: "Reservas"
+    display_name: "Reservas Totales"
     column: "reservas_etapa_todas"
     type: "currency"
     aliases:
@@ -133,6 +148,11 @@ metrics:
       - "reservas totales"
       - "provisiones"
       - "estimaciones"
+      - "pérdida esperada"
+      - "perdida esperada"
+      - "pérdida esperada total"
+      - "perdida esperada total"
+      - "reservas preventivas"
 
   tda_cartera_total:
     display_name: "Tasa de Deterioro"

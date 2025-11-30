@@ -12,12 +12,12 @@ class VisualizationService:
     
     @staticmethod
     def build_plotly_config(
-        data: List[Dict[str, Any]], 
+        data: List[Dict[str, Any]],
         section_config: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Convierte datos planos a configuración de Plotly.js.
-        
+
         Args:
             data: Lista de diccionarios [{'month_label': '...', 'data': [{'category': 'INVEX', 'value': 100}, ...]}, ...]
             section_config: Configuración de la sección desde YAML.
@@ -26,13 +26,55 @@ class VisualizationService:
         title = section_config.get("title", "Gráfico")
         unit = section_config.get("unit", "")
         is_ratio = section_config.get("type") == "ratio"
-        
-        if mode == "dashboard_month_comparison":
+
+        if mode == "variation_chart":
+            return VisualizationService._build_variation_chart(data, title, unit)
+        elif mode == "dashboard_month_comparison":
             return VisualizationService._build_comparison_chart(data, title, unit, is_ratio)
         elif mode == "timeline_with_summary":
             return VisualizationService._build_timeline_chart(data, title, unit, is_ratio)
-        
+
         # Default fallback
+        return VisualizationService._build_timeline_chart(data, title, unit, is_ratio)
+
+    @staticmethod
+    def build_plotly_config_enhanced(
+        data: List[Dict[str, Any]],
+        section_config: Dict[str, Any],
+        intent: str = "evolution"
+    ) -> Dict[str, Any]:
+        """
+        Versión mejorada que soporta selección dinámica según intent del usuario.
+
+        Args:
+            data: Datos formateados
+            section_config: Config desde YAML
+            intent: Intent detectado por NlpIntentService (evolution, comparison, ranking, point_value)
+
+        Returns:
+            Plotly config adaptado al intent
+        """
+        mode = section_config.get("mode", "dashboard_month_comparison")
+        title = section_config.get("title", "Gráfico")
+        unit = section_config.get("unit", "")
+        is_ratio = section_config.get("type") == "ratio"
+
+        # Para métricas "dual_mode", seleccionar según intent
+        if mode == "dual_mode":
+            if intent in ["evolution", "point_value"]:
+                mode = "timeline_with_summary"
+            else:  # comparison, ranking
+                mode = "dashboard_month_comparison"
+
+        # Dispatch a función específica
+        if mode == "variation_chart":
+            return VisualizationService._build_variation_chart(data, title, unit)
+        elif mode == "dashboard_month_comparison":
+            return VisualizationService._build_comparison_chart(data, title, unit, is_ratio)
+        elif mode == "timeline_with_summary":
+            return VisualizationService._build_timeline_chart(data, title, unit, is_ratio)
+
+        # Fallback
         return VisualizationService._build_timeline_chart(data, title, unit, is_ratio)
 
     @staticmethod
@@ -134,6 +176,112 @@ class VisualizationService:
                 },
                 "legend": {"orientation": "h", "y": -0.2},
                 "margin": {"l": 50, "r": 50, "t": 50, "b": 50},
+                "autosize": True
+            }
+        }
+
+    @staticmethod
+    def _build_variation_chart(data: List[Dict], title: str, unit: str) -> Dict[str, Any]:
+        """
+        Gráfico de variación porcentual mes a mes.
+        Calcula (mes_actual - mes_anterior) / mes_anterior * 100
+
+        Args:
+            data: Lista de meses con datos INVEX/SISTEMA
+            title: Título de la gráfica
+            unit: Unidad (debe ser "%")
+
+        Returns:
+            Plotly config con barras agrupadas mostrando variación %
+        """
+        if len(data) < 2:
+            # Necesitamos al menos 2 meses para calcular variación
+            return {
+                "data": [],
+                "layout": {
+                    "title": f"{title} - Datos insuficientes",
+                    "annotations": [{
+                        "text": "Se requieren al menos 2 meses de datos para calcular variación",
+                        "xref": "paper",
+                        "yref": "paper",
+                        "showarrow": False,
+                        "font": {"size": 14}
+                    }]
+                }
+            }
+
+        months = [d["month_label"] for d in data]
+        variations_invex = []
+        variations_sistema = []
+
+        # Calcular variaciones mes a mes
+        for i in range(1, len(data)):
+            prev_month = data[i-1]
+            curr_month = data[i]
+
+            # Variación INVEX
+            prev_invex = next((item["value"] for item in prev_month["data"] if "INVEX" in item["category"].upper()), None)
+            curr_invex = next((item["value"] for item in curr_month["data"] if "INVEX" in item["category"].upper()), None)
+
+            if prev_invex and curr_invex and prev_invex != 0:
+                var_invex = ((curr_invex - prev_invex) / prev_invex) * 100
+                variations_invex.append(var_invex)
+            else:
+                variations_invex.append(None)
+
+            # Variación SISTEMA
+            prev_sistema = next((item["value"] for item in prev_month["data"] if "SISTEMA" in item["category"].upper()), None)
+            curr_sistema = next((item["value"] for item in curr_month["data"] if "SISTEMA" in item["category"].upper()), None)
+
+            if prev_sistema and curr_sistema and prev_sistema != 0:
+                var_sistema = ((curr_sistema - prev_sistema) / prev_sistema) * 100
+                variations_sistema.append(var_sistema)
+            else:
+                variations_sistema.append(None)
+
+        # Los labels empiezan desde el segundo mes (ya que es variación vs anterior)
+        variation_months = months[1:]
+
+        # Colores dinámicos: verde si positivo, rojo si negativo
+        colors_invex = [COLOR_INVEX if v and v >= 0 else "#8B0000" for v in variations_invex]
+        colors_sistema = [COLOR_SISTEMA if v and v >= 0 else "#696969" for v in variations_sistema]
+
+        return {
+            "data": [
+                {
+                    "type": "bar",
+                    "name": "INVEX",
+                    "x": variation_months,
+                    "y": variations_invex,
+                    "marker": {"color": colors_invex},
+                    "text": [f"{v:.2f}%" if v is not None else "N/A" for v in variations_invex],
+                    "textposition": "outside"
+                },
+                {
+                    "type": "bar",
+                    "name": "Sistema",
+                    "x": variation_months,
+                    "y": variations_sistema,
+                    "marker": {"color": colors_sistema},
+                    "text": [f"{v:.2f}%" if v is not None else "N/A" for v in variations_sistema],
+                    "textposition": "outside"
+                }
+            ],
+            "layout": {
+                "title": title,
+                "barmode": "group",
+                "yaxis": {
+                    "title": "Variación %",
+                    "tickformat": ".1f",
+                    "zeroline": True,
+                    "zerolinewidth": 2,
+                    "zerolinecolor": "black"
+                },
+                "xaxis": {
+                    "title": "Período"
+                },
+                "legend": {"orientation": "h", "y": -0.2},
+                "margin": {"l": 50, "r": 50, "t": 50, "b": 80},
                 "autosize": True
             }
         }

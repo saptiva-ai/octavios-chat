@@ -261,8 +261,10 @@ async def _try_hu3_nlp_pipeline(
 
             # HU3.4-A: Multi-metric clarification
             # Check if user is asking for multiple metrics (e.g., "IMOR y ICOR")
+            # IMPORTANT: Skip this check if we already have a single specific metric detected
+            # (e.g., "cartera comercial sin gobierno" is ONE metric, not two)
             multiple_metrics = await EntityService.extract_multiple_metrics(user_query, session)
-            if len(multiple_metrics) > 1:
+            if len(multiple_metrics) > 1 and not entities.metric_id:
                 metrics_names = ", ".join([m[1] for m in multiple_metrics])
                 logger.info(
                     "hu3_nlp.multi_metric_detected",
@@ -456,6 +458,21 @@ async def _try_hu3_nlp_pipeline(
                 )
                 return data
 
+            # Generate Plotly visualization if data is available
+            # SOLID Principle: Delegate to specialized PlotlyGenerator service
+            if data.get("type") == "data" and "values" in data:
+                from bankadvisor.services.plotly_generator import PlotlyGenerator
+
+                plotly_config = PlotlyGenerator.generate(
+                    metric_id=entities.metric_id,
+                    data=data,
+                    intent=intent_result.intent.value,
+                    metric_display=entities.metric_display
+                )
+
+                if plotly_config:
+                    data["plotly_config"] = plotly_config
+
             # Add metadata
             data["query_info"] = {
                 "original_query": user_query,
@@ -532,6 +549,11 @@ async def _bank_analytics_impl(
         - SQL validation via SqlValidator (blacklist/whitelist)
         - LIMIT injection (max 1000 rows)
     """
+    # =========================================================================
+    # PERFORMANCE TRACKING: Start timer
+    # =========================================================================
+    start_time = datetime.utcnow()
+
     logger.info(
         "tool.bank_analytics.invoked",
         metric_or_query=metric_or_query,
@@ -547,12 +569,26 @@ async def _bank_analytics_impl(
         if hu3_result is not None:
             # HU3 pipeline succeeded or returned clarification
             if hu3_result.get("type") in ["data", "clarification", "error", "empty"]:
+                # Performance tracking
+                end_time = datetime.utcnow()
+                duration_ms = (end_time - start_time).total_seconds() * 1000
+
                 logger.info(
                     "tool.bank_analytics.hu3_success",
                     query=metric_or_query,
                     result_type=hu3_result.get("type"),
-                    pipeline="hu3_nlp"
+                    pipeline="hu3_nlp",
+                    duration_ms=round(duration_ms, 2)
                 )
+
+                logger.info(
+                    "bank_analytics.performance",
+                    query=metric_or_query,
+                    total_ms=round(duration_ms, 2),
+                    pipeline="hu3_nlp",
+                    result_type=hu3_result.get("type")
+                )
+
                 return hu3_result
     except Exception as e:
         logger.warning(
@@ -570,11 +606,24 @@ async def _bank_analytics_impl(
         try:
             nl2sql_result = await _try_nl2sql_pipeline(metric_or_query, mode)
             if nl2sql_result and nl2sql_result.get("success"):
+                # Performance tracking
+                end_time = datetime.utcnow()
+                duration_ms = (end_time - start_time).total_seconds() * 1000
+
                 logger.info(
                     "tool.bank_analytics.nl2sql_success",
                     query=metric_or_query,
+                    pipeline="nl2sql",
+                    duration_ms=round(duration_ms, 2)
+                )
+
+                logger.info(
+                    "bank_analytics.performance",
+                    query=metric_or_query,
+                    total_ms=round(duration_ms, 2),
                     pipeline="nl2sql"
                 )
+
                 return nl2sql_result
 
             # NL2SQL returned error or low confidence - try legacy fallback
@@ -636,11 +685,30 @@ async def _bank_analytics_impl(
         # Extract data_as_of from payload (structure varies)
         data_as_of = payload.get("data_as_of", payload.get("metadata", {}).get("data_as_of", "N/A"))
 
+        # =====================================================================
+        # PERFORMANCE TRACKING: Calculate duration
+        # =====================================================================
+        end_time = datetime.utcnow()
+        duration_ms = (end_time - start_time).total_seconds() * 1000
+        n_rows = len(payload["data"]["months"])
+
         logger.info(
             "tool.bank_analytics.success",
             metric=config["field"],
-            months_returned=len(payload["data"]["months"]),
+            months_returned=n_rows,
             data_as_of=data_as_of,
+            pipeline="legacy",
+            duration_ms=round(duration_ms, 2)
+        )
+
+        # Log performance metrics separately for easier querying
+        logger.info(
+            "bank_analytics.performance",
+            query=metric_or_query,
+            metric_id=config["field"],
+            intent=mode,
+            total_ms=round(duration_ms, 2),
+            n_rows=n_rows,
             pipeline="legacy"
         )
 
@@ -650,6 +718,10 @@ async def _bank_analytics_impl(
                 "metric": config["field"],
                 "data_as_of": data_as_of,
                 "title": payload.get("title", config.get("title", "Análisis Bancario")),
+                "performance": {
+                    "duration_ms": round(duration_ms, 2),
+                    "rows_returned": n_rows
+                }
             },
             "plotly_config": plotly_config,
             "title": config.get("title", payload.get("title", "Análisis Bancario")),
@@ -864,17 +936,54 @@ async def bank_analytics(
 # ============================================================================
 @app.get("/health")
 async def health_check():
-    """Health check endpoint for Docker healthcheck"""
+    """
+    Health check endpoint for Docker healthcheck.
+
+    Returns service status plus last ETL run information.
+    """
     try:
         # Check database connectivity
         async with AsyncSessionLocal() as session:
             await session.execute(text("SELECT 1"))
 
-        return {
+            # Get last ETL run info
+            last_etl = await session.execute(text("""
+                SELECT
+                    id,
+                    started_at,
+                    completed_at,
+                    status,
+                    duration_seconds,
+                    rows_processed_base
+                FROM etl_runs
+                ORDER BY started_at DESC
+                LIMIT 1
+            """))
+            etl_row = last_etl.fetchone()
+
+        response = {
             "status": "healthy",
             "service": "bank-advisor-mcp",
             "version": "1.0.0"
         }
+
+        # Add ETL info if available
+        if etl_row:
+            response["etl"] = {
+                "last_run_id": etl_row[0],
+                "last_run_started": etl_row[1].isoformat() if etl_row[1] else None,
+                "last_run_completed": etl_row[2].isoformat() if etl_row[2] else None,
+                "last_run_status": etl_row[3],
+                "last_run_duration_seconds": etl_row[4],
+                "last_run_rows": etl_row[5]
+            }
+        else:
+            response["etl"] = {
+                "last_run_status": "never_run",
+                "message": "ETL has not been executed yet. Run: python -m bankadvisor.etl_runner"
+            }
+
+        return response
     except Exception as e:
         logger.error("health_check.failed", error=str(e))
         return {

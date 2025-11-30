@@ -1,0 +1,105 @@
+# =============================================================================
+# VISUALIZATIONS CONFIGURATION - 9 PRIORITY CHARTS
+# =============================================================================
+# Defines how each metric should be visualized
+# Used by VisualizationService to generate Plotly configs
+#
+# Modes:
+#   - dashboard_month_comparison: Bar chart comparing INVEX vs SISTEMA (latest month)
+#   - timeline_with_summary: Line chart showing evolution over time
+#   - variation_chart: Bar chart showing month-over-month % change
+#   - dual_mode: Automatically selects comparison or timeline based on user intent
+#
+# Types:
+#   - currency: Values in millions MXN (format: 1,500,000 → "1.5M")
+#   - ratio: Percentage values (format: 0.025 → "2.5%")
+
+visualizations:
+  # 1. Cartera Comercial CC
+  cartera_comercial:
+    metric: "cartera_comercial_total"
+    title: "Cartera Comercial CC"
+    mode: "dashboard_month_comparison"
+    chart_type: "bar"
+    unit: "Millones MXN"
+    description: "Cartera de crédito comercial total"
+
+  # 2. Cartera Comercial Sin Gobierno
+  cartera_comercial_sin_gob:
+    metric: "cartera_comercial_sin_gob"
+    title: "Cartera Comercial Sin Gobierno"
+    mode: "dashboard_month_comparison"
+    chart_type: "bar"
+    unit: "Millones MXN"
+    calculation: "subtract:entidades_gubernamentales_total"
+    description: "Cartera comercial excluyendo entidades gubernamentales"
+
+  # 3. Pérdida Esperada Total (Proxy: Reservas)
+  perdida_esperada:
+    metric: "reservas_etapa_todas"
+    title: "Pérdida Esperada Total"
+    mode: "timeline_with_summary"
+    chart_type: "line"
+    unit: "Millones MXN"
+    description: "Estimación de pérdidas esperadas (reservas preventivas)"
+
+  # 4. Reservas Totales
+  reservas_totales:
+    metric: "reservas_etapa_todas"
+    title: "Reservas Totales"
+    mode: "dashboard_month_comparison"
+    chart_type: "bar"
+    unit: "Millones MXN"
+    description: "Reservas preventivas para riesgos crediticios"
+
+  # 5. Reservas Totales (Variación)
+  reservas_variacion:
+    metric: "reservas_etapa_todas"
+    title: "Reservas Totales (Variación %)"
+    mode: "variation_chart"
+    chart_type: "bar"
+    unit: "%"
+    calculation: "month_over_month_percent"
+    description: "Cambio porcentual mensual en reservas"
+
+  # 6. IMOR - Índice de Morosidad
+  imor:
+    metric: "imor"
+    title: "Índice de Morosidad (IMOR)"
+    mode: "dual_mode"
+    chart_type: "line"
+    unit: "%"
+    description: "Ratio de cartera vencida / cartera total"
+
+  # 7. Cartera Vencida
+  cartera_vencida:
+    metric: "cartera_vencida"
+    title: "Cartera Vencida"
+    mode: "dual_mode"
+    chart_type: "line"
+    unit: "Millones MXN"
+    description: "Cartera con pagos vencidos mayor a 90 días"
+
+  # 8. ICOR - Índice de Cobertura
+  icor:
+    metric: "icor"
+    title: "Índice de Cobertura (ICOR)"
+    mode: "dual_mode"
+    chart_type: "line"
+    unit: "%"
+    description: "Ratio de reservas / cartera vencida"
+
+  # 9. ICAP - Índice de Capitalización
+  icap:
+    metric: "icap_total"
+    title: "Índice de Capitalización (ICAP)"
+    mode: "dual_mode"
+    chart_type: "line"
+    unit: "%"
+    description: "Capital de la institución / activos ponderados por riesgo"
+
+# Default configuration for charts not explicitly defined
+default:
+  mode: "timeline_with_summary"
+  chart_type: "line"
+  unit: ""

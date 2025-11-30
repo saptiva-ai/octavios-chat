@@ -32,6 +32,7 @@ class AnalyticsService:
         # Carteras
         "cartera_total": MonthlyKPI.cartera_total,
         "cartera_comercial_total": MonthlyKPI.cartera_comercial_total,
+        "cartera_comercial_sin_gob": "CALCULATED",  # Special: calculated field
         "cartera_consumo_total": MonthlyKPI.cartera_consumo_total,
         "cartera_vivienda_total": MonthlyKPI.cartera_vivienda_total,
         "entidades_gubernamentales_total": MonthlyKPI.entidades_gubernamentales_total,
@@ -65,6 +66,10 @@ class AnalyticsService:
 
         "cartera comercial": "cartera_comercial_total",
         "comercial": "cartera_comercial_total",
+
+        "cartera comercial sin gobierno": "cartera_comercial_sin_gob",
+        "comercial sin gob": "cartera_comercial_sin_gob",
+        "cartera comercial privada": "cartera_comercial_sin_gob",
 
         "cartera gobierno": "entidades_gubernamentales_total",
         "gobierno": "entidades_gubernamentales_total",
@@ -433,12 +438,25 @@ class AnalyticsService:
         metric_column = AnalyticsService.SAFE_METRIC_COLUMNS[column_name]
 
         try:
-            # Build query
-            query = select(
-                MonthlyKPI.fecha,
-                MonthlyKPI.banco_norm,
-                metric_column.label('value')
-            )
+            # Build query - handle calculated fields
+            if column_name == "cartera_comercial_sin_gob":
+                # Special case: Cartera Comercial - Entidades Gubernamentales
+                calculated_value = (
+                    MonthlyKPI.cartera_comercial_total -
+                    func.coalesce(MonthlyKPI.entidades_gubernamentales_total, 0)
+                ).label('value')
+                query = select(
+                    MonthlyKPI.fecha,
+                    MonthlyKPI.banco_norm,
+                    calculated_value
+                )
+            else:
+                # Standard column query
+                query = select(
+                    MonthlyKPI.fecha,
+                    MonthlyKPI.banco_norm,
+                    metric_column.label('value')
+                )
 
             # Apply filters
             if banks and len(banks) > 0:
@@ -478,7 +496,19 @@ class AnalyticsService:
             elif intent == "ranking":
                 return AnalyticsService._format_ranking(rows, metric_id, config, metric_type)
             else:  # point_value or unknown
-                return AnalyticsService._format_point_value(rows, metric_id, config, metric_type)
+                # SMART DEFAULT: If we have multiple data points, show as evolution
+                # This ensures visualizations are always generated
+                if len(rows) > 3:
+                    logger.debug(
+                        "analytics.auto_evolution",
+                        metric=metric_id,
+                        original_intent=intent,
+                        rows=len(rows),
+                        reason="Multiple data points available - showing as evolution"
+                    )
+                    return AnalyticsService._format_evolution(rows, metric_id, config, metric_type)
+                else:
+                    return AnalyticsService._format_point_value(rows, metric_id, config, metric_type)
 
         except SQLAlchemyError as e:
             logger.error(

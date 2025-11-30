@@ -161,7 +161,10 @@ class EntityService:
             result.metric_display = config.get_metric_display_name(result.metric_id)
             result.metric_column = config.get_metric_column(result.metric_id)
 
-        # 4. Clean up query
+        # 4. Apply smart bank defaults (UX improvement)
+        result = cls._apply_bank_default(result, query)
+
+        # 5. Clean up query
         result.clean_query = re.sub(r'\s+', ' ', clean).strip()
 
         logger.debug(
@@ -174,6 +177,47 @@ class EntityService:
         )
 
         return result
+
+    @classmethod
+    def _apply_bank_default(cls, entities: ExtractedEntities, original_query: str) -> ExtractedEntities:
+        """
+        Apply smart bank defaults to avoid unnecessary clarification prompts.
+
+        Philosophy: Don't torture the user for irrelevant information.
+        If metric + date are clear and query doesn't look like a comparison,
+        default to INVEX (primary bank).
+
+        Args:
+            entities: Extracted entities
+            original_query: Original query text
+
+        Returns:
+            Updated entities with default bank applied if appropriate
+        """
+        DEFAULT_BANK = "INVEX"
+
+        has_metric = entities.has_metric()
+        has_date = entities.has_date_range()
+        has_bank = entities.has_banks()
+
+        # Don't apply defaults if:
+        # 1. No metric found (user needs to clarify what they want)
+        # 2. Bank is already specified
+        # 3. Query looks like a comparison (needs explicit banks)
+        if not has_metric or has_bank or cls.is_comparison_query(original_query):
+            return entities
+
+        # If we have metric + date but no bank, and it's not a comparison,
+        # default to INVEX to avoid asking obvious questions
+        if has_date:
+            entities.banks = [DEFAULT_BANK]
+            logger.info(
+                "entity_service.bank_default_applied",
+                default_bank=DEFAULT_BANK,
+                reason="metric and date present, no comparison intent"
+            )
+
+        return entities
 
     @classmethod
     def _extract_dates(cls, text: str) -> Tuple[Optional[date], Optional[date], str]:

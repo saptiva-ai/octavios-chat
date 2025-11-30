@@ -8,6 +8,7 @@ HU3 - NLP Query Interpretation:
 
 import yaml
 import json
+import difflib
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
@@ -73,8 +74,18 @@ Responde SOLO con JSON válido:
         settings: Any = None  # Settings with saptiva config
     ) -> ParsedIntent:
         """
-        Classify intent using Saptiva LLM.
-        If LLM unavailable or fails, returns UNKNOWN with low confidence to trigger clarification.
+        Classify intent using HYBRID strategy: Rules-first, LLM-fallback.
+
+        Strategy (SOLID - Open/Closed Principle):
+        1. Try rule-based classification FIRST
+        2. If rules are confident (>= 0.9), use them
+        3. If rules uncertain (< 0.9), consult LLM for second opinion
+        4. If LLM unavailable/fails, use rule result anyway
+
+        This ensures:
+        - Fast, deterministic classification for clear cases
+        - LLM only for ambiguous cases (cost & latency optimization)
+        - Graceful degradation if LLM fails
 
         Args:
             query: User query
@@ -86,29 +97,53 @@ Responde SOLO con JSON válido:
         """
         import os
 
-        # Check if LLM is configured
+        # Step 1: ALWAYS try rules first (fast, deterministic)
+        rule_result = cls._classify_with_rules(query, entities)
+
+        # Step 2: If rules are confident, trust them
+        if rule_result.confidence >= 0.9:
+            logger.debug(
+                "nlp_intent.rules_confident",
+                intent=rule_result.intent.value,
+                confidence=rule_result.confidence,
+                explanation=rule_result.explanation
+            )
+            return rule_result
+
+        # Step 3: Rules uncertain -> consult LLM for second opinion
         saptiva_key = os.getenv("SAPTIVA_API_KEY", "")
         if not saptiva_key:
-            logger.warning("nlp_intent.llm_not_configured", action="return_unknown")
-            return ParsedIntent(
-                intent=Intent.UNKNOWN,
-                confidence=0.0,
-                explanation="LLM not configured - SAPTIVA_API_KEY not set"
+            logger.info(
+                "nlp_intent.llm_not_configured",
+                action="using_rule_result",
+                rule_confidence=rule_result.confidence
             )
+            return rule_result
 
         try:
-            return await cls._classify_with_llm(query, entities, settings)
+            llm_result = await cls._classify_with_llm(query, entities, settings)
+
+            # If LLM is more confident than rules, use LLM
+            if llm_result.confidence > rule_result.confidence:
+                logger.debug(
+                    "nlp_intent.llm_override",
+                    rule_intent=rule_result.intent.value,
+                    rule_confidence=rule_result.confidence,
+                    llm_intent=llm_result.intent.value,
+                    llm_confidence=llm_result.confidence
+                )
+                return llm_result
+
+            # Otherwise stick with rules
+            return rule_result
+
         except Exception as e:
-            logger.error(
+            logger.warning(
                 "nlp_intent.llm_failed",
                 error=str(e),
-                action="return_unknown"
+                action="using_rule_result"
             )
-            return ParsedIntent(
-                intent=Intent.UNKNOWN,
-                confidence=0.0,
-                explanation=f"LLM classification failed: {str(e)}"
-            )
+            return rule_result
 
     @classmethod
     async def _classify_with_llm(
@@ -183,6 +218,82 @@ Responde SOLO con JSON válido:
                 confidence=float(parsed.get("confidence", 0.5)),
                 explanation=parsed.get("explanation")
             )
+
+    @classmethod
+    def _classify_with_rules(cls, query: str, entities: Any) -> ParsedIntent:
+        """
+        Rule-based intent classification (fallback when LLM unavailable).
+
+        Rules (in priority order):
+        1. Has "vs"/"contra"/"compara" → comparison (highest priority)
+        2. Has "top"/"mejores"/"peores" → ranking
+        3. Has date range (year/months) + metric → evolution (IMPORTANT)
+        4. Has evolution keywords → evolution
+        5. Default → point_value (with medium confidence)
+
+        Args:
+            query: User query
+            entities: ExtractedEntities
+
+        Returns:
+            ParsedIntent with classified intent
+        """
+        query_lower = query.lower()
+
+        # Rule 1: Comparison keywords (highest priority)
+        comparison_keywords = ["vs", "contra", "compara", "comparar", "comparación", "comparacion", "versus"]
+        if any(kw in query_lower for kw in comparison_keywords):
+            return ParsedIntent(
+                intent=Intent.COMPARISON,
+                confidence=0.95,
+                explanation="Detected comparison keywords (vs/contra/compara)"
+            )
+
+        # Rule 2: Ranking keywords
+        ranking_keywords = ["top", "mejores", "peores", "ranking", "ordenar", "clasificación"]
+        if any(kw in query_lower for kw in ranking_keywords):
+            return ParsedIntent(
+                intent=Intent.RANKING,
+                confidence=0.95,
+                explanation="Detected ranking keywords"
+            )
+
+        # Rule 3: Evolution indicators - Date range (CRITICAL)
+        # If query has a date range (year, date range, months), it's asking for evolution
+        has_date_range = False
+        if hasattr(entities, 'date_start') and hasattr(entities, 'date_end'):
+            if entities.date_start and entities.date_end:
+                # Has both start and end dates -> evolution over time
+                has_date_range = True
+            elif entities.date_start:
+                # Has start date only -> evolution from that point
+                has_date_range = True
+
+        if has_date_range:
+            return ParsedIntent(
+                intent=Intent.EVOLUTION,
+                confidence=0.95,
+                explanation="Detected date range - implies evolution over time"
+            )
+
+        # Rule 4: Evolution keywords
+        evolution_keywords = ["evolución", "evolucion", "tendencia", "histórico", "historico", "cambio", "variación", "variacion"]
+        has_evolution_keyword = any(kw in query_lower for kw in evolution_keywords)
+
+        if has_evolution_keyword:
+            return ParsedIntent(
+                intent=Intent.EVOLUTION,
+                confidence=0.9,
+                explanation="Detected evolution keywords"
+            )
+
+        # Rule 5: Default to point_value with medium confidence
+        # This allows clarification to trigger if confidence threshold is high
+        return ParsedIntent(
+            intent=Intent.POINT_VALUE,
+            confidence=0.6,
+            explanation="No strong indicators - defaulting to point value"
+        )
 
 
 # ==============================================================================

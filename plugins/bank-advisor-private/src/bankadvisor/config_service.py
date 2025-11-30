@@ -85,6 +85,10 @@ class ConfigService:
         Find metric ID from text using aliases.
         Returns metric key (e.g., 'imor') or None.
 
+        Strategy: Prefer longer/more specific matches over shorter ones.
+        This ensures "cartera comercial sin gobierno" matches cartera_comercial_sin_gob
+        instead of cartera_comercial_total.
+
         Args:
             text: User query text
 
@@ -92,18 +96,25 @@ class ConfigService:
             Metric ID or None if not found
         """
         text_lower = text.lower()
+        best_match = None
+        best_match_length = 0
 
         for metric_id, config in self.metrics.items():
             # Check exact match with metric_id
             if metric_id in text_lower:
-                return metric_id
+                if len(metric_id) > best_match_length:
+                    best_match = metric_id
+                    best_match_length = len(metric_id)
 
-            # Check aliases
+            # Check aliases - prioritize longer aliases
             for alias in config.get("aliases", []):
-                if alias.lower() in text_lower:
-                    return metric_id
+                alias_lower = alias.lower()
+                if alias_lower in text_lower:
+                    if len(alias_lower) > best_match_length:
+                        best_match = metric_id
+                        best_match_length = len(alias_lower)
 
-        return None
+        return best_match
 
     def get_metric_column(self, metric_id: str) -> Optional[str]:
         """Get database column name for a metric."""
