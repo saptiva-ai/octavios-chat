@@ -2,7 +2,14 @@
 # This file contains settings that can be changed without code modifications.
 
 # =============================================================================
-# Bank Configuration
+# Profile Selection
+# =============================================================================
+# Active profile to use (loads from config/profiles/<active_profile>.yaml)
+# Override with environment variable: BANKADVISOR_PROFILE
+active_profile: "invex"
+
+# =============================================================================
+# Bank Configuration (can be overridden by profile)
 # =============================================================================
 banks:
   # Primary bank - used as default when bank not specified in query

@@ -1,0 +1,92 @@
+# BankAdvisor Profile Template
+# Copy this file to create a new client profile
+# Usage: config/profiles/<client_name>.yaml
+
+profile:
+  name: "<CLIENT_NAME>"
+  version: "1.0.0"
+  description: "Configuration for <CLIENT_NAME> banking analytics"
+
+# =============================================================================
+# Bank Configuration
+# =============================================================================
+banks:
+  # Primary bank - used as default when bank not specified
+  primary: "<PRIMARY_BANK>"
+
+  # Aggregate identifiers (system-wide metrics)
+  aggregates:
+    - "SISTEMA"
+    - "SECTOR"
+
+  # Phrases that map to aggregate banks
+  aggregate_aliases:
+    "sistema": "SISTEMA"
+    "sector": "SISTEMA"
+    "sistema bancario": "SISTEMA"
+    "promedio del sector": "SISTEMA"
+
+# =============================================================================
+# Metrics Configuration
+# =============================================================================
+metrics:
+  # Override display names for this client
+  # Example: imor: "Índice de Mora"
+  display_overrides: {}
+
+  # Client-specific aliases (merged with global aliases from synonyms.yaml)
+  # Example:
+  # custom_aliases:
+  #   imor:
+  #     - "mora del banco"
+  #     - "cartera morosa"
+  custom_aliases: {}
+
+# =============================================================================
+# Visualization Configuration
+# =============================================================================
+visualization:
+  colors:
+    primary: "#E45756"      # Client primary color
+    secondary: "#AAB0B3"    # System/comparison color
+    accent: "#4C78A8"       # Accent color
+
+  branding:
+    title_prefix: "<CLIENT_NAME>"
+    logo_url: null  # Optional: URL to client logo
+
+# =============================================================================
+# Intent Classification
+# =============================================================================
+intent:
+  # Minimum confidence to trust rules without LLM
+  rules_confidence_threshold: 0.9
+
+  # Enable LLM fallback for ambiguous queries
+  llm_fallback_enabled: true
+
+  # Timeout for LLM API calls (seconds)
+  llm_timeout_seconds: 10
+
+# =============================================================================
+# Performance Settings
+# =============================================================================
+performance:
+  # Cache TTL for bank list (seconds)
+  bank_cache_ttl: 3600
+
+  # Maximum rows per query
+  max_rows: 1000
+
+# =============================================================================
+# Defaults
+# =============================================================================
+defaults:
+  # Default time range when not specified
+  default_months: 12
+
+  # Auto-apply primary bank when metric+date but no bank
+  apply_bank_default: true
+
+  # Auto-format as evolution when >3 data points
+  apply_evolution_default: true

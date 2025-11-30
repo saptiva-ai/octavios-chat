@@ -993,6 +993,114 @@ async def health_check():
 
 
 # ============================================================================
+# METRICS ENDPOINT FOR OBSERVABILITY
+# ============================================================================
+@app.get("/metrics")
+async def metrics_endpoint():
+    """
+    Metrics endpoint for observability.
+
+    Returns service metrics including:
+    - ETL status and timing
+    - Query counts by type (if tracked)
+    - Performance indicators
+
+    This endpoint can be scraped by monitoring tools.
+    """
+    from datetime import timezone
+
+    try:
+        async with AsyncSessionLocal() as session:
+            # ETL metrics
+            etl_result = await session.execute(text("""
+                SELECT
+                    COUNT(*) as total_runs,
+                    COUNT(*) FILTER (WHERE status = 'success') as successful_runs,
+                    COUNT(*) FILTER (WHERE status = 'failure') as failed_runs,
+                    MAX(completed_at) as last_run,
+                    AVG(duration_seconds) FILTER (WHERE status = 'success') as avg_duration
+                FROM etl_runs
+                WHERE started_at > NOW() - INTERVAL '7 days'
+            """))
+            etl_row = etl_result.fetchone()
+
+            # Data metrics
+            data_result = await session.execute(text("""
+                SELECT
+                    COUNT(*) as total_rows,
+                    COUNT(DISTINCT banco_norm) as bank_count,
+                    MIN(fecha) as data_start,
+                    MAX(fecha) as data_end
+                FROM monthly_kpis
+            """))
+            data_row = data_result.fetchone()
+
+            # Calculate data age
+            last_run_age_minutes = None
+            if etl_row and etl_row[3]:
+                from datetime import datetime
+                now = datetime.now(timezone.utc)
+                last_run = etl_row[3]
+                if last_run.tzinfo is None:
+                    last_run = last_run.replace(tzinfo=timezone.utc)
+                last_run_age_minutes = (now - last_run).total_seconds() / 60
+
+        return {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "service": "bank-advisor-mcp",
+            "version": "1.0.0",
+
+            "etl": {
+                "total_runs_7d": etl_row[0] if etl_row else 0,
+                "successful_runs_7d": etl_row[1] if etl_row else 0,
+                "failed_runs_7d": etl_row[2] if etl_row else 0,
+                "last_run": etl_row[3].isoformat() if etl_row and etl_row[3] else None,
+                "last_run_age_minutes": round(last_run_age_minutes, 1) if last_run_age_minutes else None,
+                "avg_duration_seconds": round(etl_row[4], 1) if etl_row and etl_row[4] else None,
+            },
+
+            "data": {
+                "total_rows": data_row[0] if data_row else 0,
+                "bank_count": data_row[1] if data_row else 0,
+                "date_range": {
+                    "start": data_row[2].isoformat() if data_row and data_row[2] else None,
+                    "end": data_row[3].isoformat() if data_row and data_row[3] else None,
+                }
+            },
+
+            # Placeholder for query metrics (can be populated with tracking)
+            "queries": {
+                "note": "Query tracking not yet implemented",
+                "total_today": None,
+                "by_intent": {
+                    "evolution": None,
+                    "comparison": None,
+                    "ranking": None,
+                    "clarification": None,
+                }
+            },
+
+            # Performance baseline from benchmark
+            "performance": {
+                "baseline": {
+                    "ratios_p50_ms": 16,
+                    "ratios_p95_ms": 26,
+                    "timelines_p50_ms": 112,
+                    "timelines_p95_ms": 206,
+                    "calculated_p50_ms": 1600,
+                },
+                "source": "docs/performance_baseline.json"
+            }
+        }
+    except Exception as e:
+        logger.error("metrics_endpoint.failed", error=str(e))
+        return {
+            "timestamp": datetime.now(timezone.utc).isoformat() if 'timezone' in dir() else None,
+            "error": str(e)
+        }
+
+
+# ============================================================================
 # JSON-RPC 2.0 ENDPOINT FOR BACKEND COMPATIBILITY
 # ============================================================================
 @app.post("/rpc")

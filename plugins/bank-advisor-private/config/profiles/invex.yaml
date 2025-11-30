@@ -1,0 +1,74 @@
+# BankAdvisor Profile: INVEX
+# This profile is used for INVEX deployments
+
+profile:
+  name: "INVEX"
+  version: "1.0.0"
+  description: "Configuration for INVEX banking analytics"
+
+# =============================================================================
+# Bank Configuration
+# =============================================================================
+banks:
+  primary: "INVEX"
+
+  aggregates:
+    - "SISTEMA"
+    - "SECTOR"
+
+  aggregate_aliases:
+    "sistema": "SISTEMA"
+    "sector": "SISTEMA"
+    "sistema bancario": "SISTEMA"
+    "promedio del sector": "SISTEMA"
+    "promedio del mercado": "SISTEMA"
+
+# =============================================================================
+# Metrics Configuration
+# =============================================================================
+metrics:
+  # Override display names if needed for this client
+  display_overrides: {}
+
+  # Client-specific aliases (merged with global aliases)
+  custom_aliases:
+    imor:
+      - "morosidad invex"
+    icap:
+      - "capitalización invex"
+
+# =============================================================================
+# Visualization Configuration
+# =============================================================================
+visualization:
+  colors:
+    primary: "#E45756"      # INVEX red
+    secondary: "#AAB0B3"    # System gray
+    accent: "#4C78A8"       # Accent blue
+
+  branding:
+    title_prefix: "INVEX"
+    logo_url: null  # Optional logo URL
+
+# =============================================================================
+# Intent Classification
+# =============================================================================
+intent:
+  rules_confidence_threshold: 0.9
+  llm_fallback_enabled: true
+  llm_timeout_seconds: 10
+
+# =============================================================================
+# Performance Settings
+# =============================================================================
+performance:
+  bank_cache_ttl: 3600
+  max_rows: 1000
+
+# =============================================================================
+# Defaults
+# =============================================================================
+defaults:
+  default_months: 12
+  apply_bank_default: true
+  apply_evolution_default: true
