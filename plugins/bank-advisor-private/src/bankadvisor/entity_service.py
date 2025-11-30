@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bankadvisor.models.kpi import MonthlyKPI
 from bankadvisor.config_service import get_config
+from bankadvisor.runtime_config import get_runtime_config
 
 import structlog
 
@@ -185,7 +186,7 @@ class EntityService:
 
         Philosophy: Don't torture the user for irrelevant information.
         If metric + date are clear and query doesn't look like a comparison,
-        default to INVEX (primary bank).
+        default to primary bank from config.
 
         Args:
             entities: Extracted entities
@@ -194,7 +195,13 @@ class EntityService:
         Returns:
             Updated entities with default bank applied if appropriate
         """
-        DEFAULT_BANK = "INVEX"
+        runtime_config = get_runtime_config()
+
+        # Check if bank defaults are enabled
+        if not runtime_config.apply_bank_default:
+            return entities
+
+        default_bank = runtime_config.primary_bank
 
         has_metric = entities.has_metric()
         has_date = entities.has_date_range()
@@ -208,12 +215,12 @@ class EntityService:
             return entities
 
         # If we have metric + date but no bank, and it's not a comparison,
-        # default to INVEX to avoid asking obvious questions
+        # default to primary bank to avoid asking obvious questions
         if has_date:
-            entities.banks = [DEFAULT_BANK]
+            entities.banks = [default_bank]
             logger.info(
                 "entity_service.bank_default_applied",
-                default_bank=DEFAULT_BANK,
+                default_bank=default_bank,
                 reason="metric and date present, no comparison intent"
             )
 

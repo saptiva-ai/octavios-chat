@@ -6,6 +6,7 @@ HU3 - NLP Query Interpretation:
 - IntentService: Legacy dashboard section disambiguation (unchanged)
 """
 
+import os
 import yaml
 import json
 import difflib
@@ -16,6 +17,8 @@ from enum import Enum
 
 import httpx
 import structlog
+
+from bankadvisor.runtime_config import get_runtime_config
 
 logger = structlog.get_logger(__name__)
 
@@ -95,22 +98,33 @@ Responde SOLO con JSON válido:
         Returns:
             ParsedIntent with intent type and confidence
         """
-        import os
+        runtime_config = get_runtime_config()
 
         # Step 1: ALWAYS try rules first (fast, deterministic)
         rule_result = cls._classify_with_rules(query, entities)
 
         # Step 2: If rules are confident, trust them
-        if rule_result.confidence >= 0.9:
+        confidence_threshold = runtime_config.rules_confidence_threshold
+        if rule_result.confidence >= confidence_threshold:
             logger.debug(
                 "nlp_intent.rules_confident",
                 intent=rule_result.intent.value,
                 confidence=rule_result.confidence,
+                threshold=confidence_threshold,
                 explanation=rule_result.explanation
             )
             return rule_result
 
-        # Step 3: Rules uncertain -> consult LLM for second opinion
+        # Step 3: Check if LLM fallback is enabled
+        if not runtime_config.llm_fallback_enabled:
+            logger.info(
+                "nlp_intent.llm_fallback_disabled",
+                action="using_rule_result",
+                rule_confidence=rule_result.confidence
+            )
+            return rule_result
+
+        # Step 4: Rules uncertain -> consult LLM for second opinion
         saptiva_key = os.getenv("SAPTIVA_API_KEY", "")
         if not saptiva_key:
             logger.info(

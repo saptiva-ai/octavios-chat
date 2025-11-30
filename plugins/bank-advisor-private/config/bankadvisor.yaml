@@ -1,0 +1,60 @@
+# BankAdvisor Runtime Configuration
+# This file contains settings that can be changed without code modifications.
+
+# =============================================================================
+# Bank Configuration
+# =============================================================================
+banks:
+  # Primary bank - used as default when bank not specified in query
+  # Change this when deploying for a different client
+  primary: "INVEX"
+
+  # Aggregate identifiers - treated as system-wide aggregates, not individual banks
+  aggregates:
+    - "SISTEMA"
+    - "SECTOR"
+    - "MERCADO"
+
+  # Aggregate aliases - phrases that map to aggregate banks
+  aggregate_aliases:
+    "sistema": "SISTEMA"
+    "sector": "SISTEMA"
+    "mercado": "SISTEMA"
+    "sector bancario": "SISTEMA"
+    "sistema bancario": "SISTEMA"
+    "promedio del sector": "SISTEMA"
+    "promedio del mercado": "SISTEMA"
+
+# =============================================================================
+# Intent Classification
+# =============================================================================
+intent:
+  # Minimum confidence to trust rules without LLM fallback
+  rules_confidence_threshold: 0.9
+
+  # Enable/disable LLM fallback (set false to run rules-only)
+  llm_fallback_enabled: true
+
+  # LLM timeout in seconds
+  llm_timeout_seconds: 10
+
+# =============================================================================
+# Performance
+# =============================================================================
+performance:
+  # Cache TTL for bank list from DB (seconds)
+  bank_cache_ttl: 3600
+
+  # Max rows to return in a single query
+  max_rows: 1000
+
+# =============================================================================
+# Defaults
+# =============================================================================
+defaults:
+  # When no date range specified, use last N months
+  default_months: 12
+
+  # Smart defaults behavior
+  apply_bank_default: true  # Auto-add primary bank when metric+date but no bank
+  apply_evolution_default: true  # Auto-format as evolution when >3 data points
