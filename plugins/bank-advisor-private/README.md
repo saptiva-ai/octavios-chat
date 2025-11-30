@@ -1,289 +1,246 @@
-# BankAdvisor MCP Server - Enterprise Banking Analytics
+# BankAdvisor MCP Server
 
-**Status:** ✅ Production Ready (Migrated from Monolith)
 **Version:** 1.0.0
-**Protocol:** MCP (Model Context Protocol) via SSE
-**Type:** Private Enterprise Plugin
+**Status:** Production Ready
+**Protocol:** MCP (Model Context Protocol) via JSON-RPC 2.0
 
 ---
 
-## 📋 Overview
+## Overview
 
-BankAdvisor es un microservicio independiente que expone analytics bancarios vía MCP (Model Context Protocol). Este servicio fue desacoplado del monolito `octavios-core` para mantener la arquitectura limpia y permitir deploy independiente.
-
-### Arquitectura
+BankAdvisor is a natural language banking analytics service. Ask questions in Spanish about CNBV metrics and get interactive visualizations.
 
 ```
-┌─────────────────┐          MCP/SSE          ┌─────────────────┐
-│  octavios-core  │ ◄──────────────────────► │  bank-advisor   │
-│  (Cliente MCP)  │  http://bank-advisor:8000 │  (Servidor MCP) │
-└─────────────────┘                           └────────┬────────┘
-                                                       │
-                                                       ▼
-                                              ┌──────────────┐
-                                              │  PostgreSQL  │
-                                              │  (INVEX DB)  │
-                                              └──────────────┘
+User: "IMOR de INVEX en 2024"
+→ Returns: Line chart showing IMOR evolution for INVEX in 2024
 ```
 
-**Flujo de datos:**
-1. Usuario hace query en OctaviOS
-2. Core detecta intent bancario → llama tool `bank_analytics` via MCP
-3. BankAdvisor ejecuta SQL con security hardening
-4. Retorna Plotly config + datos
-5. Frontend renderiza dashboard
+### Key Features
+
+- **Natural Language Queries**: Spanish banking terminology
+- **9 Priority Visualizations**: IMOR, ICAP, ICOR, Cartera, Reservas, etc.
+- **Hybrid Intent Classification**: Rules-first (80% queries in <20ms) + LLM fallback
+- **Automated ETL**: Daily data refresh from CNBV sources
+- **SOLID Architecture**: Clean separation of concerns
 
 ---
 
-## 🔒 Security Hardening
+## Quick Start
 
-Este servicio incluye **3 CVEs corregidos** (ver commit `f9dcb9e`):
-
-- **CVE-001**: Whitelist `SAFE_METRIC_COLUMNS` (previene attribute injection)
-- **CVE-002**: Fuzzy matching hardened (cutoff 0.8)
-- **CVE-003**: 3-tier error handling (400/503/500)
-
-**Test de Penetración:** 8/8 vectores de ataque bloqueados.
-
----
-
-## 🚀 Quick Start
-
-### Requisitos
+### Prerequisites
 - Docker & Docker Compose
-- PostgreSQL 15 (auto-configurado en docker-compose)
-- Python 3.11+ (si desarrollo local)
+- PostgreSQL 15
 
-### Levantar el Servicio
+### Run the Service
 
 ```bash
-# Desde la raíz del proyecto
-docker compose -f infra/docker-compose.yml up -d postgres bank-advisor
+# From project root
+docker compose up -d bank-advisor
 
-# Verificar health
+# Verify health
 curl http://localhost:8002/health
-# {"status":"healthy","service":"bank-advisor-mcp","version":"1.0.0"}
+
+# Run smoke test (12 queries)
+cd plugins/bank-advisor-private
+python scripts/smoke_demo_bank_analytics.py --port 8002
 ```
 
-### Conectar desde OctaviOS Core
+### Expected Output
 
-El core ya está configurado automáticamente con:
+```
+🟢 ALL CHECKS PASSED - SAFE TO DEMO
+Total Queries:  12
+✅ Passed:       12
+Success Rate:   100.0%
+```
+
+---
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Service health + ETL status |
+| `/metrics` | GET | Observability metrics |
+| `/rpc` | POST | JSON-RPC 2.0 tool invocation |
+
+### JSON-RPC Example
+
+```bash
+curl -X POST http://localhost:8002/rpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "bank_analytics",
+      "arguments": {"metric_or_query": "IMOR de INVEX en 2024"}
+    },
+    "id": 1
+  }'
+```
+
+---
+
+## Performance
+
+| Query Type | p50 | p95 | Notes |
+|------------|-----|-----|-------|
+| Ratios (IMOR, ICAP) | 16ms | 26ms | Rules-first |
+| Timelines | 112ms | 206ms | DB query |
+| Calculated metrics | 1.6s | 1.7s | LLM required |
+
+See `docs/performance_baseline.json` for full benchmark.
+
+---
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DATABASE_URL` | PostgreSQL connection | Required |
+| `PRIMARY_BANK` | Default bank | `INVEX` |
+| `SAPTIVA_API_KEY` | LLM API key | Optional |
+| `LLM_FALLBACK_ENABLED` | Enable LLM | `true` |
+
+### Multi-Client Profiles
 
 ```yaml
-# infra/docker-compose.yml (servicio API)
-environment:
-  - MCP_SERVERS_URLS=["http://bank-advisor:8000/sse"]
+# config/bankadvisor.yaml
+active_profile: "invex"  # Loads config/profiles/invex.yaml
 ```
+
+To add a new client, copy `config/profiles/template.yaml` to `config/profiles/<client>.yaml`.
 
 ---
 
-## 🛠️ API Reference
+## Documentation
 
-### MCP Tool: `bank_analytics`
-
-**Endpoint:** `http://bank-advisor:8000/sse` (SSE Stream)
-
-**Tool Name:** `bank_analytics`
-
-**Parameters:**
-```python
-{
-  "metric_or_query": str,  # "cartera comercial", "IMOR", etc.
-  "mode": str              # "dashboard" | "timeline" (default: dashboard)
-}
-```
-
-**Response:**
-```json
-{
-  "data": {
-    "months": [...],  // 103 meses de datos
-    "metadata": {...}
-  },
-  "plotly_config": {...},  // Config para Plotly.js
-  "title": "Cartera Comercial Total",
-  "data_as_of": "01/07/2025"
-}
-```
-
-**Error Handling:**
-- `400` - Invalid metric (no está en whitelist)
-- `503` - Database unavailable
-- `500` - Internal server error
+| Document | Purpose |
+|----------|---------|
+| `docs/ARCHITECTURE.md` | System design, SOLID principles |
+| `docs/DEVELOPER_GUIDE.md` | How to extend (add metrics, intents) |
+| `docs/LIMITATIONS.md` | Known constraints |
+| `docs/DEMO_SCRIPT_2025-12-03.md` | Demo runbook |
+| `docs/DATA_MODEL_EVOLUTION.md` | Future schema plans |
 
 ---
 
-## 📊 Data Sources
-
-### Raw Data Files (`data/raw/`)
-- `CNBV_Cartera_Bancos_V2.xlsx` - Carteras por banco (CNBV)
-- `CorporateLoan_CNBVDB.csv` - Préstamos corporativos (228MB)
-- `ICAP_Bancos.xlsx` - Índice de Capitalización
-- `TDA.xlsx` - Tasa de Descuento Anualizada
-- `TE_Invex_Sistema.xlsx` - Tasas de Interés
-- `Instituciones.xlsx` - Catálogo de instituciones
-- `CASTIGOS.xlsx` - Castigos y recuperaciones
-
-### Database Schema
-
-**Table:** `monthly_kpis`
-
-**Columns (15 métricas):**
-- `cartera_total`, `cartera_comercial_total`, `cartera_consumo_total`
-- `cartera_vivienda_total`, `entidades_gubernamentales_total`
-- `entidades_financieras_total`, `empresarial_total`
-- `cartera_vencida`, `imor`, `icor`
-- `reservas_etapa_todas`, `tasa_mn`, `tasa_me`
-- `icap_total`, `tda_cartera_total`
-
-**Period:** 2017-01 → 2025-07 (103 meses)
-
----
-
-## 🧪 Testing
-
-### E2E Test (Local)
+## Testing
 
 ```bash
-cd plugins/bank-advisor-private
+# Smoke test (pre-demo validation)
+python scripts/smoke_demo_bank_analytics.py --port 8002
 
-# Asegurarse de que PostgreSQL esté corriendo
-docker compose -f ../../infra/docker-compose.yml up -d postgres
+# ETL health check
+python scripts/ops_validate_etl.py --port 8002
 
-# Ejecutar tests E2E (usa el script del monolito original)
-# Los tests están en: apps/api/scripts/test_bankadvisor_e2e.py
-# Necesitan ser adaptados para apuntar al servicio MCP
-```
+# Performance benchmark
+python scripts/benchmark_performance_http.py --port 8002
 
-### Security Penetration Test
-
-```bash
-# Test que valida que los 8 vectores de ataque son bloqueados
-python -c "
-import asyncio
-import httpx
-
-async def test():
-    malicious_inputs = [
-        '__class__', 'metadata', '__dict__',
-        'DROP TABLE monthly_kpis', '../../../etc/passwd'
-    ]
-
-    async with httpx.AsyncClient() as client:
-        for inp in malicious_inputs:
-            resp = await client.post(
-                'http://localhost:8002/tools/bank_analytics',
-                json={'metric_or_query': inp, 'mode': 'dashboard'}
-            )
-            print(f'{inp}: {resp.status_code} - {resp.json().get(\"error\")}')
-
-asyncio.run(test())
-"
+# Unit tests
+pytest tests/ -v
 ```
 
 ---
 
-## 🔧 Development
+## Project Structure
 
-### Local Development (sin Docker)
-
-```bash
-cd plugins/bank-advisor-private
-
-# Crear virtualenv
-python3.11 -m venv venv
-source venv/bin/activate
-
-# Instalar dependencias
-pip install -r requirements.txt
-
-# Configurar env vars
-export DATABASE_URL="postgresql+asyncpg://octavios:password@localhost:5432/bankadvisor"
-export LOG_LEVEL=DEBUG
-
-# Ejecutar servidor
-python -m src.main
 ```
-
-### Hot Reload (Development)
-
-```bash
-# Modificar Dockerfile para habilitar reload
-uvicorn.run(
-    "src.main:mcp",
-    host="0.0.0.0",
-    port=8000,
-    reload=True  # Cambiar a True
-)
+plugins/bank-advisor-private/
+├── src/
+│   └── bankadvisor/
+│       ├── services/           # Core services (intent, analytics, plotly)
+│       ├── entity_service.py   # NL entity extraction
+│       ├── config_service.py   # Metric/visualization config
+│       └── runtime_config.py   # Runtime settings
+├── config/
+│   ├── bankadvisor.yaml        # Main config
+│   ├── profiles/               # Client profiles
+│   └── synonyms.yaml           # Metric aliases
+├── scripts/
+│   ├── smoke_demo_bank_analytics.py
+│   ├── ops_validate_etl.py
+│   └── benchmark_performance_http.py
+├── tests/
+│   ├── test_nl_variants.py     # 32 NL phrase variants
+│   ├── test_llm_fallback.py    # LLM resilience tests
+│   └── test_9_priority_visualizations.py
+├── docs/                       # All documentation
+├── CHANGELOG.md
+└── README.md
 ```
 
 ---
 
-## 📝 Maintenance
+## Supported Queries
 
-### ETL Re-Execution
-
-El servicio ejecuta ETL automáticamente si la base de datos está vacía (ver `src/main.py:ensure_data_populated()`).
-
-Para forzar re-ejecución:
-
-```bash
-docker exec octavios-chat-bajaware_invex-postgres psql \
-  -U octavios -d bankadvisor \
-  -c "TRUNCATE TABLE monthly_kpis;"
-
-docker restart octavios-chat-bajaware_invex-bank-advisor
+### Evolution (Timeline)
+```
+"IMOR de INVEX en 2024"
+"Cartera vencida últimos 12 meses"
+"Evolución del ICAP de INVEX"
 ```
 
-### Logs
+### Comparison
+```
+"IMOR de INVEX vs sistema"
+"Compara cartera comercial INVEX contra sistema"
+```
 
-```bash
-# Ver logs del servicio
-docker logs -f octavios-chat-bajaware_invex-bank-advisor
-
-# Ver logs de PostgreSQL
-docker logs -f octavios-chat-bajaware_invex-postgres
+### Calculated Metrics
+```
+"Cartera comercial sin gobierno"
+"Reservas totales de INVEX"
 ```
 
 ---
 
-## 🚨 Troubleshooting
+## ETL Operations
 
-### Error: "Connection refused"
-**Causa:** PostgreSQL no está saludable.
-**Fix:**
+ETL runs daily at 2:00 AM via cron.
+
 ```bash
-docker compose -f infra/docker-compose.yml restart postgres
+# Check ETL status
+curl http://localhost:8002/health | jq .etl
+
+# Manual ETL execution
+docker exec bank-advisor-mcp python -m bankadvisor.etl_runner
+
+# Validate ETL health
+python scripts/ops_validate_etl.py --port 8002
 ```
 
-### Error: "No data found"
-**Causa:** ETL no se ejecutó.
-**Fix:**
-```bash
-docker exec octavios-chat-bajaware_invex-bank-advisor python -m src.bankadvisor.etl_loader
-```
+---
 
-### Error: "Métrica no autorizada"
-**Causa:** Query usa métrica fuera del whitelist.
-**Fix:** Verificar que la métrica esté en `SAFE_METRIC_COLUMNS` (src/bankadvisor/services/analytics_service.py:31-54)
+## Troubleshooting
+
+### "No data returned"
+1. Check ETL ran: `curl http://localhost:8002/health | jq .etl`
+2. Check date range has data in DB
+
+### "Metric not found"
+1. Verify alias in `config/synonyms.yaml`
+2. Check whitelist in `config_service.py`
+
+### "LLM timeout"
+- System falls back to rules-based classification
+- Check `SAPTIVA_API_KEY` if LLM required
 
 ---
 
-## 📚 Documentation
+## Version History
 
-- **Security Audit Report:** `../../docs/bankadvisor/DEPLOYMENT.md`
-- **Architecture Decision:** ADR-001 (este README)
-- **MCP Protocol Spec:** https://spec.modelcontextprotocol.io/
+See `CHANGELOG.md` for full release notes.
 
----
-
-## 👥 Contributors
-
-- **Security Hardening:** Commit `f9dcb9e` (24 Nov 2025)
-- **Microservice Migration:** Commit `<current>` (25 Nov 2025)
+| Version | Date | Highlights |
+|---------|------|------------|
+| 1.0.0 | 2025-11-30 | Initial release, INVEX MVP |
 
 ---
 
-## 📄 License
+## License
 
-**Private Enterprise Plugin** - Confidencial INVEX
+Private Enterprise Plugin - Confidential INVEX
