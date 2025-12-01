@@ -97,6 +97,14 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
       return;
     }
 
+    // 🆕 If showing bank chart, don't fetch artifact (data already in activeBankChart)
+    if (activeBankChart) {
+      setArtifact(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     if (!activeArtifactId) {
       setArtifact(null);
       setError(null);
@@ -138,7 +146,7 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [activeArtifactId, reportPdfUrl]);
+  }, [activeArtifactId, reportPdfUrl, activeBankChart]);
 
   const renderContent = () => {
     // 🆕 Priority 1: activeBankChart (bank chart visualizations)

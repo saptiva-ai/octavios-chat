@@ -88,7 +88,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
     set({
       activeBankChart: chartData,
-      activeArtifactId: artifactId,
+      // Don't set activeArtifactId for temp artifacts or when we have chartData
+      // This prevents canvas-panel from trying to fetch the artifact
+      activeArtifactId: artifactId !== "temp" ? artifactId : null,
       activeMessageId: messageId,
       isSidebarOpen: true,
       activeArtifactData: null, // Clear audit data if present
