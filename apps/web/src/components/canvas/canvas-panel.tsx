@@ -272,7 +272,7 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
         data-testid="canvas-panel"
         data-canvas-panel
         className={cn(
-          "h-full bg-[#0F172A] border-l border-slate-800 text-white transition-all duration-200 relative",
+          "h-full bg-[#0a0512] border-l border-violet-900/50 text-white transition-all duration-200 relative",
           // Responsive width: 40% of viewport on all screens
           "flex-shrink-0",
           isSidebarOpen
@@ -294,18 +294,18 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
           isSidebarOpen={isSidebarOpen}
         />
 
-        {/* Keyboard shortcuts hint - Minimal */}
+        {/* Keyboard shortcuts hint - Deep Purple */}
         {isSidebarOpen && (
-          <div className="px-8 py-3 border-b border-slate-800">
-            <div className="flex items-center gap-4 text-xs text-slate-500">
+          <div className="px-8 py-3 border-b border-violet-900/50">
+            <div className="flex items-center gap-4 text-xs text-violet-200">
               <span className="flex items-center gap-1.5">
-                <kbd className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 font-mono text-[10px]">
+                <kbd className="px-1.5 py-0.5 rounded bg-violet-950 text-violet-300 font-mono text-[10px]">
                   ⌘K
                 </kbd>
                 <span>Toggle</span>
               </span>
               <span className="flex items-center gap-1.5">
-                <kbd className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 font-mono text-[10px]">
+                <kbd className="px-1.5 py-0.5 rounded bg-violet-950 text-violet-300 font-mono text-[10px]">
                   Esc
                 </kbd>
                 <span>Close</span>

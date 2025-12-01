@@ -181,7 +181,7 @@ export function BankChartCanvasView({
     }
   };
 
-  // Saptiva Minimal: Clean chart configuration
+  // Deep Purple Universe: Violet chart configuration
   const plotlyLayout = {
     ...data.plotly_config.layout,
     autosize: true,
@@ -189,23 +189,23 @@ export function BankChartCanvasView({
     margin: { l: 60, r: 20, t: 20, b: 60 },
     paper_bgcolor: "rgba(0,0,0,0)", // Transparent
     plot_bgcolor: "rgba(0,0,0,0)", // Transparent
-    font: { color: "rgba(148, 163, 184, 1)", size: 11 }, // slate-400
+    font: { color: "rgba(233, 213, 255, 1)", size: 11 }, // violet-200
     xaxis: {
       ...data.plotly_config.layout.xaxis,
       showgrid: false, // No vertical grid
-      linecolor: "rgba(30, 41, 59, 1)", // slate-800
-      tickfont: { color: "rgba(148, 163, 184, 1)" },
+      linecolor: "rgba(76, 29, 149, 0.5)", // violet-900/50
+      tickfont: { color: "rgba(233, 213, 255, 1)" }, // violet-200
     },
     yaxis: {
       ...data.plotly_config.layout.yaxis,
-      gridcolor: "rgba(30, 41, 59, 0.3)", // Very subtle horizontal grid
-      linecolor: "rgba(30, 41, 59, 1)",
-      tickfont: { color: "rgba(148, 163, 184, 1)" },
+      gridcolor: "rgba(76, 29, 149, 0.2)", // Very subtle violet grid
+      linecolor: "rgba(76, 29, 149, 0.5)", // violet-900/50
+      tickfont: { color: "rgba(233, 213, 255, 1)" }, // violet-200
     },
     legend: {
       ...data.plotly_config.layout.legend,
       bgcolor: "rgba(0,0,0,0)",
-      font: { color: "rgba(148, 163, 184, 1)" },
+      font: { color: "rgba(233, 213, 255, 1)" }, // violet-200
     },
   };
 
@@ -221,8 +221,8 @@ export function BankChartCanvasView({
 
   return (
     <div className={cn("flex h-full flex-col space-y-4", className)}>
-      {/* Metadata Header - Minimal */}
-      <div className="space-y-3 pb-6 mb-6 border-b border-slate-800">
+      {/* Metadata Header - Deep Purple */}
+      <div className="space-y-3 pb-6 mb-6 border-b border-violet-900/50">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold text-white">
             {data.metric_name.toUpperCase()}
@@ -232,7 +232,7 @@ export function BankChartCanvasView({
           <div className="flex items-center gap-2">
             <button
               onClick={handleDownloadPNG}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-md transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-violet-300 hover:text-white bg-violet-950 hover:bg-violet-900 rounded-md transition-colors"
               title="Descargar como PNG"
             >
               <ArrowDownTrayIcon className="h-4 w-4" />
@@ -240,7 +240,7 @@ export function BankChartCanvasView({
             </button>
             <button
               onClick={handleExportCSV}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-md transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-violet-300 hover:text-white bg-violet-950 hover:bg-violet-900 rounded-md transition-colors"
               title="Exportar a CSV"
             >
               <TableCellsIcon className="h-4 w-4" />
@@ -250,19 +250,19 @@ export function BankChartCanvasView({
         </div>
 
         <div className="grid grid-cols-2 gap-3 text-xs">
-          <div className="flex items-center gap-2 text-slate-400">
-            <BuildingOffice2Icon className="h-4 w-4 text-teal-500" />
+          <div className="flex items-center gap-2 text-violet-200">
+            <BuildingOffice2Icon className="h-4 w-4 text-violet-400" />
             <span>{data.bank_names.join(", ")}</span>
           </div>
-          <div className="flex items-center gap-2 text-slate-400">
-            <CalendarDaysIcon className="h-4 w-4 text-teal-500" />
+          <div className="flex items-center gap-2 text-violet-200">
+            <CalendarDaysIcon className="h-4 w-4 text-violet-400" />
             <span>
               {new Date(data.time_range.start).toLocaleDateString()} -{" "}
               {new Date(data.time_range.end).toLocaleDateString()}
             </span>
           </div>
-          <div className="flex items-center gap-2 text-slate-400">
-            <CircleStackIcon className="h-4 w-4 text-teal-500" />
+          <div className="flex items-center gap-2 text-violet-200">
+            <CircleStackIcon className="h-4 w-4 text-violet-400" />
             <span>
               Actualizado: {new Date(data.data_as_of).toLocaleString()}
             </span>
@@ -270,15 +270,15 @@ export function BankChartCanvasView({
         </div>
       </div>
 
-      {/* Saptiva Minimal: Underline Tabs */}
-      <div className="flex space-x-8 border-b border-slate-800 mb-8">
+      {/* Deep Purple: Underline Tabs */}
+      <div className="flex space-x-8 border-b border-violet-900/50 mb-8">
         <button
           onClick={() => setActiveTab("visualization")}
           className={cn(
             "pb-3 text-sm font-medium transition-colors border-b-2",
             activeTab === "visualization"
-              ? "border-teal-400 text-teal-400"
-              : "border-transparent text-slate-500 hover:text-slate-300",
+              ? "border-violet-400 text-violet-400"
+              : "border-transparent text-violet-400/50 hover:text-violet-300",
           )}
         >
           Visualización
@@ -288,8 +288,8 @@ export function BankChartCanvasView({
           className={cn(
             "pb-3 text-sm font-medium transition-colors border-b-2",
             activeTab === "data"
-              ? "border-teal-400 text-teal-400"
-              : "border-transparent text-slate-500 hover:text-slate-300",
+              ? "border-violet-400 text-violet-400"
+              : "border-transparent text-violet-400/50 hover:text-violet-300",
           )}
         >
           Datos
@@ -300,8 +300,8 @@ export function BankChartCanvasView({
             className={cn(
               "pb-3 text-sm font-medium transition-colors border-b-2",
               activeTab === "query"
-                ? "border-teal-400 text-teal-400"
-                : "border-transparent text-slate-500 hover:text-slate-300",
+                ? "border-violet-400 text-violet-400"
+                : "border-transparent text-violet-400/50 hover:text-violet-300",
             )}
           >
             Query Inspector
@@ -313,21 +313,21 @@ export function BankChartCanvasView({
       <div className="flex-1 overflow-y-auto space-y-4">
         {activeTab === "visualization" && (
           <>
-            {/* KPIs Flotantes (Sin Cajas) */}
+            {/* KPIs Flotantes Violeta */}
             <div className="grid grid-cols-3 gap-8 mb-10">
               <div className="pl-0">
-                <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">
+                <p className="text-violet-400 text-xs font-semibold uppercase tracking-wider mb-1">
                   Bancos
                 </p>
                 <p className="text-3xl text-white font-medium">
                   {data.bank_names.length}
                 </p>
-                <p className="text-sm text-slate-400 mt-1">
+                <p className="text-sm text-violet-200 mt-1">
                   {data.bank_names.join(", ")}
                 </p>
               </div>
-              <div className="border-l border-slate-800 pl-8">
-                <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">
+              <div className="border-l border-violet-900/50 pl-8">
+                <p className="text-violet-400 text-xs font-semibold uppercase tracking-wider mb-1">
                   Periodo
                 </p>
                 <p className="text-3xl text-white font-medium">
@@ -341,7 +341,7 @@ export function BankChartCanvasView({
                         });
                   })()}
                 </p>
-                <p className="text-sm text-slate-400 mt-1">
+                <p className="text-sm text-violet-200 mt-1">
                   hasta{" "}
                   {(() => {
                     const endDate = new Date(data.time_range.end);
@@ -354,8 +354,8 @@ export function BankChartCanvasView({
                   })()}
                 </p>
               </div>
-              <div className="border-l border-slate-800 pl-8">
-                <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">
+              <div className="border-l border-violet-900/50 pl-8">
+                <p className="text-violet-400 text-xs font-semibold uppercase tracking-wider mb-1">
                   Actualizado
                 </p>
                 <p className="text-3xl text-white font-medium">
@@ -369,7 +369,7 @@ export function BankChartCanvasView({
                         });
                   })()}
                 </p>
-                <p className="text-sm text-slate-400 mt-1">
+                <p className="text-sm text-violet-200 mt-1">
                   {(() => {
                     const asOfDate = new Date(data.data_as_of);
                     return isNaN(asOfDate.getTime())
@@ -403,23 +403,23 @@ export function BankChartCanvasView({
         )}
 
         {activeTab === "data" && (
-          <div className="rounded-lg border border-slate-800 bg-slate-950 overflow-hidden">
+          <div className="rounded-lg border border-violet-900/50 bg-transparent overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-slate-900 border-b border-slate-800">
+                <thead className="sticky top-0 bg-violet-950 border-b border-violet-900/50">
                   <tr>
-                    <th className="px-4 py-3 text-left font-medium text-teal-500 uppercase tracking-wide text-xs">
+                    <th className="px-4 py-3 text-left font-medium text-violet-400 uppercase tracking-wide text-xs">
                       Banco
                     </th>
-                    <th className="px-4 py-3 text-left font-medium text-teal-500 uppercase tracking-wide text-xs">
+                    <th className="px-4 py-3 text-left font-medium text-violet-400 uppercase tracking-wide text-xs">
                       Periodo
                     </th>
-                    <th className="px-4 py-3 text-right font-medium text-teal-500 uppercase tracking-wide text-xs">
+                    <th className="px-4 py-3 text-right font-medium text-violet-400 uppercase tracking-wide text-xs">
                       {data.metric_name}
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800">
+                <tbody className="divide-y divide-violet-900/50">
                   {data.plotly_config.data.map(
                     (trace: any, traceIdx: number) => {
                       const bankName = trace.name || `Banco ${traceIdx + 1}`;
@@ -429,12 +429,12 @@ export function BankChartCanvasView({
                       return xValues.map((period: string, idx: number) => (
                         <tr
                           key={`${traceIdx}-${idx}`}
-                          className="hover:bg-slate-800/30 transition-colors"
+                          className="hover:bg-violet-950/30 transition-colors"
                         >
                           <td className="px-4 py-2.5 text-white font-medium">
                             {bankName}
                           </td>
-                          <td className="px-4 py-2.5 text-slate-300">
+                          <td className="px-4 py-2.5 text-violet-200">
                             {period}
                           </td>
                           <td className="px-4 py-2.5 text-right text-white font-mono">
@@ -458,20 +458,20 @@ export function BankChartCanvasView({
         {activeTab === "query" && sanitizedSQL && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm text-slate-500">
-                <CodeBracketIcon className="h-4 w-4" />
+              <div className="flex items-center gap-2 text-sm text-violet-300">
+                <CodeBracketIcon className="h-4 w-4 text-violet-400" />
                 <span>Query SQL Generado</span>
               </div>
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(sanitizedSQL);
                 }}
-                className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-300 transition-colors"
+                className="px-3 py-1.5 text-xs font-medium text-violet-300 hover:text-violet-100 bg-violet-950 hover:bg-violet-900 rounded transition-colors"
               >
                 Copiar
               </button>
             </div>
-            <pre className="overflow-x-auto bg-[#0B1120] p-6 text-sm text-slate-300 font-mono rounded">
+            <pre className="overflow-x-auto bg-[#05020a] border border-violet-900/50 p-6 text-sm text-violet-100 font-mono rounded">
               {sanitizedSQL}
             </pre>
           </div>

@@ -302,16 +302,18 @@ export function ConversationList({
             <div
               className={cn(
                 "group relative flex w-full flex-col rounded-lg transition-all duration-150",
-                // Saptiva Minimal: Subtle border, minimal background
+                // Deep Purple Universe: Violet gradients
                 isActive
-                  ? "border-l-2 border-teal-400 bg-slate-900/50 pl-3 pr-3"
-                  : "border-l-2 border-transparent bg-transparent pl-3 pr-3",
-                !isActive && "hover:bg-slate-900/30",
+                  ? "border-l-4 border-violet-500 bg-gradient-to-r from-violet-900/40 to-transparent pl-3 pr-3 py-3"
+                  : "border-l-4 border-transparent bg-transparent pl-3 pr-3 py-3",
+                !isActive &&
+                  "hover:bg-gradient-to-r hover:from-violet-900/20 hover:to-transparent",
                 isFocused &&
                   !isActive &&
-                  "ring-1 ring-teal-400/40 bg-slate-900/20",
+                  "ring-1 ring-violet-500/40 bg-gradient-to-r from-violet-900/20 to-transparent",
                 // P0-UX-HIST-001: Highlight new sessions with animation
-                isNew && "animate-highlight-fade bg-slate-900/50",
+                isNew &&
+                  "animate-highlight-fade bg-gradient-to-r from-violet-900/40 to-transparent",
               )}
               onMouseEnter={() => setHoveredChatId(session.id)}
               onMouseLeave={() => setHoveredChatId(null)}
@@ -333,7 +335,7 @@ export function ConversationList({
                       <svg
                         className={cn(
                           "h-3 w-3 flex-shrink-0",
-                          isActive ? "text-teal-400" : "text-teal-400/70",
+                          isActive ? "text-violet-400" : "text-violet-400/70",
                         )}
                         fill="currentColor"
                         viewBox="0 0 24 24"
@@ -359,8 +361,8 @@ export function ConversationList({
                           className={cn(
                             "text-sm truncate",
                             isActive
-                              ? "font-medium text-teal-50"
-                              : "font-normal text-slate-500 hover:text-slate-300",
+                              ? "font-medium text-white"
+                              : "font-normal text-violet-300/60 hover:text-violet-200",
                           )}
                         >
                           {session.title || "Conversación sin título"}
@@ -417,7 +419,7 @@ export function ConversationList({
                     className={cn(
                       "h-7 w-7 flex items-center justify-center rounded transition-colors",
                       isPinned
-                        ? "text-teal-400 hover:text-teal-400/80 hover:bg-surface-2"
+                        ? "text-violet-400 hover:text-violet-400/80 hover:bg-surface-2"
                         : "text-text-muted hover:text-text hover:bg-surface-2",
                     )}
                     title={isPinned ? "Desfijar" : "Fijar"}
@@ -467,7 +469,7 @@ export function ConversationList({
     return (
       <div
         className={cn("flex h-full w-full flex-col bg-sidebar", className)}
-        style={{ backgroundColor: "#0B1120" }}
+        style={{ backgroundColor: "#130b24" }}
       >
         <div className="flex items-center justify-between gap-2 px-3 py-3">
           {/* Layout: [<] [Historial OctaviOS] [+] */}
@@ -477,7 +479,7 @@ export function ConversationList({
             <button
               type="button"
               onClick={onCollapse}
-              className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-saptiva-light transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/60 lg:flex"
+              className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-saptiva-light transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60 lg:flex"
               aria-label={
                 isCollapsed ? "Expandir historial" : "Colapsar historial"
               }
@@ -534,7 +536,7 @@ export function ConversationList({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-saptiva-light transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/60 lg:hidden"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-saptiva-light transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60 lg:hidden"
                   aria-label="Cerrar historial"
                 >
                   <svg
@@ -786,7 +788,7 @@ export function ConversationList({
   return (
     <div
       className={cn("flex h-full flex-col bg-sidebar text-text", className)}
-      style={{ backgroundColor: "#0B1120" }}
+      style={{ backgroundColor: "#130b24" }}
     >
       <div
         className={cn(
@@ -932,7 +934,7 @@ export function ConversationList({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 text-saptiva-light transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/60"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 text-saptiva-light transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60"
                   aria-label="Cerrar historial"
                 >
                   <svg
@@ -960,10 +962,10 @@ export function ConversationList({
                 onClick={handleCreate}
                 disabled={isCreatingConversation || !canCreateNew}
                 className={cn(
-                  "flex h-10 w-10 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/60",
+                  "flex h-10 w-10 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60",
                   isCreatingConversation || !canCreateNew
-                    ? "bg-teal-400/10 text-teal-400/60 cursor-not-allowed"
-                    : "bg-teal-400/20 text-teal-400 hover:scale-[1.02] hover:bg-teal-400/30",
+                    ? "bg-violet-500/10 text-violet-500/60 cursor-not-allowed"
+                    : "bg-violet-500/20 text-violet-500 hover:scale-[1.02] hover:bg-violet-500/30",
                 )}
                 aria-label={
                   isCreatingConversation
