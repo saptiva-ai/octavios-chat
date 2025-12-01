@@ -51,7 +51,7 @@ export function BankAdvisorResponse({
         data-testid="bank-chart-button"
         onClick={handleOpenCanvas}
         className="group relative w-full overflow-hidden rounded-lg border border-border bg-surface/50 hover:bg-surface px-4 py-3 text-left transition-all duration-200 hover:border-primary/40"
-        aria-label={`Abrir gráfica de ${bankChartData.metric_name.toUpperCase()} en canvas`}
+        aria-label={`Abrir gráfica de ${(bankChartData.metric_name || "Métrica").toUpperCase()} en canvas`}
       >
         {/* Content */}
         <div className="relative flex items-center gap-3">
@@ -61,10 +61,10 @@ export function BankAdvisorResponse({
 
           <div className="flex-1 min-w-0">
             <span className="font-medium text-sm text-foreground">
-              {bankChartData.metric_name.toUpperCase()}
+              {(bankChartData.metric_name || "Métrica").toUpperCase()}
             </span>
             <p className="text-xs text-muted truncate">
-              {bankChartData.bank_names.join(", ")}
+              {(bankChartData.bank_names || []).join(", ")}
             </p>
           </div>
 

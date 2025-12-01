@@ -86,7 +86,7 @@ export function BankChartViewer({ data, className }: BankChartViewerProps) {
     metric: metric_name,
     banks: bank_names,
     traces: plotly_config?.data?.length,
-    hasLayout: !!plotly_config?.layout
+    hasLayout: !!plotly_config?.layout,
   });
 
   // Default layout enhancements for dark theme
@@ -161,7 +161,20 @@ export function BankChartViewer({ data, className }: BankChartViewerProps) {
           </span>
           <span className="flex items-center gap-1">
             <span className="text-base">📅</span>
-            {time_range.start} → {time_range.end}
+            {(() => {
+              const start = time_range?.start
+                ? new Date(time_range.start)
+                : null;
+              const end = time_range?.end ? new Date(time_range.end) : null;
+              const isValidStart = start && !isNaN(start.getTime());
+              const isValidEnd = end && !isNaN(end.getTime());
+
+              if (!isValidStart && !isValidEnd) return "Sin rango";
+              if (!isValidStart) return `Hasta ${formatDate(time_range.end)}`;
+              if (!isValidEnd) return `Desde ${formatDate(time_range.start)}`;
+
+              return `${formatDate(time_range.start)} → ${formatDate(time_range.end)}`;
+            })()}
           </span>
           <span className="ml-auto flex items-center gap-1">
             <span className="text-base">🔄</span>

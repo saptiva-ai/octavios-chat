@@ -94,16 +94,42 @@ export function BankChartCanvasView({
   const sqlQuery = data.metadata?.sql_generated;
   const metricInterpretation = data.metadata?.metric_interpretation;
 
-  // Debug: Log SQL data
+  // 🔍 OBSERVABILITY: Debug logging for analytics data (ISSUE-6)
   useEffect(() => {
+    const isDevelopment = process.env.NODE_ENV === "development";
+    if (!isDevelopment) return;
+
+    const plotlyData = data.plotly_config?.data || [];
+    const firstPoint = plotlyData[0];
+    const lastPoint = plotlyData[plotlyData.length - 1];
+
     // eslint-disable-next-line no-console
-    console.log("[🔍 BankChartCanvasView] SQL Debug:", {
-      has_metadata: !!data.metadata,
-      sql_generated: sqlQuery,
-      sql_length: sqlQuery?.length,
-      metadata_keys: data.metadata ? Object.keys(data.metadata) : [],
+    console.log("[🔍 BankChartCanvasView] Analytics Debug:", {
+      metric_name: data.metric_name,
+      bank_names: data.bank_names,
+      time_range: {
+        start: data.time_range?.start,
+        end: data.time_range?.end,
+        is_valid_start: !isNaN(
+          new Date(data.time_range?.start || "").getTime(),
+        ),
+        is_valid_end: !isNaN(new Date(data.time_range?.end || "").getTime()),
+      },
+      data_points: {
+        total: plotlyData.length,
+        first_x: firstPoint?.x?.[0],
+        first_y: firstPoint?.y?.[0],
+        last_x: lastPoint?.x?.[lastPoint.x.length - 1],
+        last_y: lastPoint?.y?.[lastPoint.y.length - 1],
+      },
+      metadata: {
+        has_sql: !!sqlQuery,
+        sql_length: sqlQuery?.length,
+        has_interpretation: !!metricInterpretation,
+        keys: data.metadata ? Object.keys(data.metadata) : [],
+      },
     });
-  }, [data.metadata, sqlQuery]);
+  }, [data, sqlQuery, metricInterpretation]);
 
   // Sanitize user-generated content to prevent XSS attacks
   const sanitizedSQL = useMemo(() => {
@@ -156,11 +182,15 @@ export function BankChartCanvasView({
   const handleExportCSV = () => {
     try {
       // Extract data from Plotly config
-      const plotlyData = data.plotly_config.data;
+      const plotlyData = data.plotly_config?.data;
       if (!Array.isArray(plotlyData) || plotlyData.length === 0) return;
 
       // Create CSV header
-      const headers = ["Banco", "Periodo", data.metric_name.toUpperCase()];
+      const headers = [
+        "Banco",
+        "Periodo",
+        (data.metric_name || "Métrica").toUpperCase(),
+      ];
       const rows: string[][] = [headers];
 
       // Extract rows from each trace
@@ -204,8 +234,11 @@ export function BankChartCanvasView({
   const gridColor = isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)";
   const borderColor = isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.2)";
 
+  // Safe access to plotly_config with fallback defaults
+  const safeLayout = data.plotly_config?.layout || {};
+
   const plotlyLayout = {
-    ...data.plotly_config.layout,
+    ...safeLayout,
     autosize: true,
     height: 500, // Increased from 320px
     margin: { l: 50, r: 15, t: 15, b: 50 },
@@ -213,19 +246,19 @@ export function BankChartCanvasView({
     plot_bgcolor: "rgba(0,0,0,0)", // Transparent
     font: { color: textColor, size: 12 },
     xaxis: {
-      ...data.plotly_config.layout.xaxis,
+      ...(safeLayout.xaxis || {}),
       showgrid: false, // No vertical grid
       linecolor: borderColor,
       tickfont: { color: textColor },
     },
     yaxis: {
-      ...data.plotly_config.layout.yaxis,
+      ...(safeLayout.yaxis || {}),
       gridcolor: gridColor,
       linecolor: borderColor,
       tickfont: { color: textColor },
     },
     legend: {
-      ...data.plotly_config.layout.legend,
+      ...(safeLayout.legend || {}),
       bgcolor: "rgba(0,0,0,0)",
       font: { color: textColor },
     },
@@ -248,19 +281,29 @@ export function BankChartCanvasView({
         <div className="flex items-center gap-3 text-xs text-muted">
           <span className="flex items-center gap-1">
             <BuildingOffice2Icon className="h-3.5 w-3.5 text-primary" />
-            {data.bank_names.length} bancos
+            {data.bank_names.length} banco
+            {data.bank_names.length === 1 ? "" : "s"}
           </span>
           <span className="flex items-center gap-1">
             <CalendarDaysIcon className="h-3.5 w-3.5 text-primary" />
-            {new Date(data.time_range.start).toLocaleDateString("es-MX", {
-              month: "short",
-              year: "2-digit",
-            })}{" "}
-            -{" "}
-            {new Date(data.time_range.end).toLocaleDateString("es-MX", {
-              month: "short",
-              year: "2-digit",
-            })}
+            {(() => {
+              const start = data.time_range?.start
+                ? new Date(data.time_range.start)
+                : null;
+              const end = data.time_range?.end
+                ? new Date(data.time_range.end)
+                : null;
+              const isValidStart = start && !isNaN(start.getTime());
+              const isValidEnd = end && !isNaN(end.getTime());
+
+              if (!isValidStart && !isValidEnd) return "Sin rango de fechas";
+              if (!isValidStart)
+                return `Hasta ${end!.toLocaleDateString("es-MX", { month: "short", year: "2-digit" })}`;
+              if (!isValidEnd)
+                return `Desde ${start!.toLocaleDateString("es-MX", { month: "short", year: "2-digit" })}`;
+
+              return `${start!.toLocaleDateString("es-MX", { month: "short", year: "2-digit" })} - ${end!.toLocaleDateString("es-MX", { month: "short", year: "2-digit" })}`;
+            })()}
           </span>
         </div>
         <div className="flex items-center gap-1">
@@ -342,7 +385,7 @@ export function BankChartCanvasView({
             <div ref={plotContainerRef} className="w-full h-[500px]">
               <Plot
                 key={plotKey}
-                data={data.plotly_config.data as any}
+                data={(data.plotly_config?.data || []) as any}
                 layout={plotlyLayout as any}
                 config={{
                   responsive: true,
@@ -406,7 +449,7 @@ export function BankChartCanvasView({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {data.plotly_config.data.map(
+                  {(data.plotly_config?.data || []).map(
                     (trace: any, traceIdx: number) => {
                       const bankName = trace.name || `Banco ${traceIdx + 1}`;
                       const xValues = trace.x || [];
