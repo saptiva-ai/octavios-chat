@@ -556,7 +556,7 @@ class AnalyticsService:
         hover_template = (
             "<b>%{fullData.name}</b><br>" +
             "Fecha: %{x}<br>" +
-            ("Valor: %{y:.2f}%<extra></extra>" if is_ratio else "Valor: %{y:,.0f} MDP<extra></extra>")
+            ("Valor: %{y:.2f}%<extra></extra>" if is_ratio else "Valor: %{y:,.2f} MDP<extra></extra>")
         )
 
         # Group by bank for multi-line chart
@@ -586,7 +586,7 @@ class AnalyticsService:
                     "xaxis": {"title": "Fecha"},
                     "yaxis": {
                         "title": "%" if is_ratio else "MDP (Millones de Pesos)",
-                        "tickformat": ".2f",
+                        "tickformat": ".0f",
                         "ticksuffix": "%" if is_ratio else " MDP"
                     }
                 }
@@ -617,7 +617,7 @@ class AnalyticsService:
         # Build hovertemplate with units
         hover_template = (
             "<b>%{x}</b><br>" +
-            ("Valor: %{y:.2f}%<extra></extra>" if is_ratio else "Valor: %{y:,.0f} MDP<extra></extra>")
+            ("Valor: %{y:.2f}%<extra></extra>" if is_ratio else "Valor: %{y:,.2f} MDP<extra></extra>")
         )
 
         return {
@@ -640,7 +640,7 @@ class AnalyticsService:
                     "xaxis": {"title": "Banco"},
                     "yaxis": {
                         "title": "%" if is_ratio else "MDP (Millones de Pesos)",
-                        "tickformat": ".2f",
+                        "tickformat": ".0f",
                         "ticksuffix": "%" if is_ratio else " MDP"
                     }
                 }
@@ -672,7 +672,7 @@ class AnalyticsService:
         # Build hovertemplate with units
         hover_template = (
             "<b>%{y}</b><br>" +
-            ("Valor: %{x:.2f}%<extra></extra>" if is_ratio else "Valor: %{x:,.0f} MDP<extra></extra>")
+            ("Valor: %{x:.2f}%<extra></extra>" if is_ratio else "Valor: %{x:,.2f} MDP<extra></extra>")
         )
 
         return {
@@ -704,7 +704,7 @@ class AnalyticsService:
                     "title": f"Ranking de {display_name}",
                     "xaxis": {
                         "title": "%" if is_ratio else "MDP (Millones de Pesos)",
-                        "tickformat": ".2f",
+                        "tickformat": ".0f",
                         "ticksuffix": "%" if is_ratio else " MDP"
                     },
                     "yaxis": {"title": "Banco", "autorange": "reversed"}

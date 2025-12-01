@@ -102,7 +102,7 @@ class VisualizationService:
         # Build hovertemplate with units
         hover_template = (
             "<b>%{x}</b><br>" +
-            ("Valor: %{y:.2f}%<extra></extra>" if is_ratio else "Valor: %{y:,.0f} MDP<extra></extra>")
+            ("Valor: %{y:.2f}%<extra></extra>" if is_ratio else "Valor: %{y:,.2f} MDP<extra></extra>")
         )
 
         return {
@@ -121,7 +121,7 @@ class VisualizationService:
                 "title": f"{title} - {month_label}",
                 "yaxis": {
                     "title": "%" if is_ratio else "MDP (Millones de Pesos)",
-                    "tickformat": ".2f",
+                    "tickformat": ".0f",
                     "ticksuffix": "%" if is_ratio else " MDP"
                 },
                 "margin": {"l": 60, "r": 50, "t": 50, "b": 50},
@@ -152,7 +152,7 @@ class VisualizationService:
         hover_template = (
             "<b>%{fullData.name}</b><br>" +
             "Fecha: %{x}<br>" +
-            ("Valor: %{y:.2f}%<extra></extra>" if is_ratio else "Valor: %{y:,.0f} MDP<extra></extra>")
+            ("Valor: %{y:.2f}%<extra></extra>" if is_ratio else "Valor: %{y:,.2f} MDP<extra></extra>")
         )
 
         traces = []
@@ -189,7 +189,7 @@ class VisualizationService:
                 },
                 "yaxis": {
                     "title": "%" if is_ratio else "MDP (Millones de Pesos)",
-                    "tickformat": ".2f",
+                    "tickformat": ".0f",
                     "ticksuffix": "%" if is_ratio else " MDP"
                 },
                 "legend": {"orientation": "h", "y": -0.2},
