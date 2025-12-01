@@ -202,9 +202,7 @@ export function ChatInterface({
   );
 
   // Check if BankAdvisor is enabled
-  const isBankAdvisorEnabled = selectedTools?.includes(
-    "bank_advisor" as ToolId,
-  );
+  const isBankAdvisorEnabled = selectedTools?.includes("bank-advisor");
 
   // DEBUG: Log state for troubleshooting
   React.useEffect(() => {
