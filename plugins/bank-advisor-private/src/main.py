@@ -938,9 +938,7 @@ async def _try_nl2sql_pipeline(user_query: str, mode: str) -> Optional[Dict[str,
                 if is_ratio:
                     # Convert ratio to percentage
                     item["value"] = item["value"] * 100
-                else:
-                    # Convert currency from pesos to millions (MDP)
-                    item["value"] = item["value"] / 1_000_000
+                # else: Database values are ALREADY in millions (MDP), no conversion needed
 
     # Add section_config with mode based on template
     section_config = {

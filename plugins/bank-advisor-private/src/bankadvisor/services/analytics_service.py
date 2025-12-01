@@ -538,19 +538,22 @@ class AnalyticsService:
                    metric_id=metric_id,
                    metric_type=metric_type,
                    is_ratio=is_ratio,
-                   sample_values=df['value'].head(5).tolist() if len(df) > 0 else [])
+                   sample_values=df['value'].head(10).tolist() if len(df) > 0 else [],
+                   all_unique_values=sorted(df['value'].unique().tolist()) if len(df) > 0 else [])
 
         if is_ratio:
             df['value'] = df['value'] * 100
         else:
-            # Convert currency from pesos to millions (MDP)
-            df['value'] = df['value'] / 1_000_000
+            # IMPORTANT: Database values are ALREADY in millions (MDP)
+            # DO NOT divide by 1,000,000 as it would make them too small
+            # df['value'] = df['value'] / 1_000_000
+            pass  # Values are already in correct scale
 
         # DEBUG: Log converted values
         logger.info("analytics_service._format_evolution.values_after_conversion",
                    metric_id=metric_id,
                    is_ratio=is_ratio,
-                   sample_values=df['value'].head(5).tolist() if len(df) > 0 else [])
+                   sample_values=df['value'].head(10).tolist() if len(df) > 0 else [])
 
         # Build hovertemplate with units
         hover_template = (
@@ -605,9 +608,7 @@ class AnalyticsService:
         is_ratio = metric_type == "ratio"
         if is_ratio:
             df['value'] = df['value'] * 100
-        else:
-            # Convert currency from pesos to millions (MDP)
-            df['value'] = df['value'] / 1_000_000
+        # else: Database values are ALREADY in millions (MDP), no conversion needed
 
         # Get latest value per bank
         latest = df.sort_values('fecha').groupby('banco').last().reset_index()
@@ -659,9 +660,7 @@ class AnalyticsService:
         is_ratio = metric_type == "ratio"
         if is_ratio:
             df['value'] = df['value'] * 100
-        else:
-            # Convert currency from pesos to millions (MDP)
-            df['value'] = df['value'] / 1_000_000
+        # else: Database values are ALREADY in millions (MDP), no conversion needed
 
         # Get latest value per bank, sorted
         latest = df.sort_values('fecha').groupby('banco').last().reset_index()
@@ -724,9 +723,7 @@ class AnalyticsService:
         is_ratio = metric_type == "ratio"
         if is_ratio:
             df['value'] = df['value'] * 100
-        else:
-            # Convert currency from pesos to millions (MDP)
-            df['value'] = df['value'] / 1_000_000
+        # else: Database values are ALREADY in millions (MDP), no conversion needed
 
         # Get latest values
         latest = df.sort_values('fecha').groupby('banco').last().reset_index()
