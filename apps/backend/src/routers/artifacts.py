@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..core.auth import get_current_user
@@ -14,6 +14,7 @@ from ..models.artifact import Artifact, ArtifactType, ArtifactVersion
 from ..models.chat import ChatSession
 from ..models.user import User
 from ..validators.bank_chart import validate_bank_chart_content
+from ..middleware.rate_limit import limiter
 
 logger = structlog.get_logger(__name__)
 
@@ -105,8 +106,11 @@ def _to_response(artifact: Artifact) -> ArtifactResponse:
     response_model=ArtifactResponse,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit("100/hour")  # Max 100 artifact creations per hour per user
 async def create_artifact(
-    payload: ArtifactCreateRequest, current_user: User = Depends(get_current_user)
+    request: Request,
+    payload: ArtifactCreateRequest,
+    current_user: User = Depends(get_current_user),
 ) -> ArtifactResponse:
     """Create a new artifact for the authenticated user."""
     await _assert_chat_ownership(payload.chat_session_id, current_user)
