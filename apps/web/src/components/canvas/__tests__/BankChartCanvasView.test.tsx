@@ -63,8 +63,9 @@ describe("BankChartCanvasView", () => {
 
   it("should render time range", () => {
     render(<BankChartCanvasView data={mockChartData} />);
-    // Dates will be formatted based on locale
-    expect(screen.getByText(/2024/)).toBeInTheDocument();
+    // Dates will be formatted based on locale - check for any date from 2024
+    const dates = screen.getAllByText(/2024/);
+    expect(dates.length).toBeGreaterThan(0);
   });
 
   it("should render component without crashing", () => {

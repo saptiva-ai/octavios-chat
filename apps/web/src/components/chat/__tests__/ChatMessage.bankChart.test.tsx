@@ -9,6 +9,24 @@ import { ChatMessage } from "../ChatMessage";
 import { useCanvasStore } from "@/lib/stores/canvas-store";
 import type { BankChartData } from "@/lib/types";
 
+// Mock dependencies
+jest.mock("react-markdown", () => ({
+  __esModule: true,
+  default: ({ children }: { children: string }) => <div>{children}</div>,
+}));
+
+jest.mock("../StreamingMessage", () => ({
+  StreamingMessage: () => <div>Streaming...</div>,
+}));
+
+jest.mock("../BankChartMessage", () => ({
+  BankChartMessage: () => <div>Bank Chart</div>,
+}));
+
+jest.mock("../PreviewAttachment", () => ({
+  PreviewAttachment: () => <div>Attachment</div>,
+}));
+
 // Mock canvas store
 jest.mock("@/lib/stores/canvas-store", () => ({
   useCanvasStore: jest.fn(),
@@ -50,12 +68,26 @@ describe("ChatMessage - Bank Chart Button", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    (useCanvasStore as unknown as jest.Mock).mockImplementation((selector) =>
-      selector({
+
+    // Mock both the hook and getState
+    (useCanvasStore as unknown as jest.Mock).mockImplementation((selector) => {
+      if (typeof selector === "function") {
+        return selector({
+          openBankChart: mockOpenBankChart,
+          activeMessageId: null,
+        });
+      }
+      return {
         openBankChart: mockOpenBankChart,
         activeMessageId: null,
-      })
-    );
+      };
+    });
+
+    // Mock getState method
+    (useCanvasStore as any).getState = jest.fn(() => ({
+      openBankChart: mockOpenBankChart,
+      activeMessageId: null,
+    }));
   });
 
   it("should render bank chart button when bankChartData is present", () => {

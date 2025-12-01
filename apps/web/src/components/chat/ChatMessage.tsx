@@ -447,25 +447,49 @@ export function ChatMessage({
 
         {/* Bank chart visualization - Button to open in canvas */}
         {isAssistant && bankChartData && (
-          <button
-            onClick={() => {
-              const artifactId = (metadata as any)?.artifact_id || (metadata as any)?.bank_chart_artifact_id || "temp";
-              useCanvasStore.getState().openBankChart(
-                bankChartData,
-                artifactId,
-                id || "unknown",
-                false
-              );
-            }}
-            className={cn(
-              "mt-3 flex items-center gap-2 rounded-lg border border-primary/30 bg-gradient-to-r from-primary/10 to-primary/5 px-4 py-3 text-sm font-medium text-primary transition-all hover:border-primary/50 hover:from-primary/20 hover:to-primary/10 hover:shadow-lg hover:shadow-primary/20",
-              isUser ? "ml-auto" : ""
-            )}
-          >
-            <ChartBarIcon className="h-5 w-5" />
-            <span>Ver gráfica: {bankChartData.metric_name.toUpperCase()}</span>
-            <ArrowsPointingOutIcon className="h-4 w-4 ml-auto" />
-          </button>
+          <div className={cn("mt-3", isUser ? "ml-auto" : "")}>
+            <button
+              onClick={() => {
+                const artifactId = (metadata as any)?.artifact_id || (metadata as any)?.bank_chart_artifact_id || "temp";
+                useCanvasStore.getState().openBankChart(
+                  bankChartData,
+                  artifactId,
+                  id || "unknown",
+                  false
+                );
+              }}
+              className="group relative w-full overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5 p-4 text-left transition-all duration-300 hover:border-primary/40 hover:shadow-xl hover:shadow-primary/20 hover:scale-[1.02]"
+            >
+              {/* Background decoration */}
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+
+              {/* Content */}
+              <div className="relative flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/20 transition-colors group-hover:bg-primary/30">
+                  <ChartBarIcon className="h-5 w-5 text-primary" />
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-white">
+                      {bankChartData.metric_name.toUpperCase()}
+                    </span>
+                    <span className="rounded-full bg-primary/20 px-2 py-0.5 text-[10px] font-medium text-primary/80">
+                      {bankChartData.bank_names.length} {bankChartData.bank_names.length === 1 ? 'banco' : 'bancos'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-white/60 truncate">
+                    {bankChartData.bank_names.join(", ")}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 text-primary/80 transition-transform group-hover:translate-x-1">
+                  <span className="text-xs font-medium hidden sm:inline">Abrir en Canvas</span>
+                  <ArrowsPointingOutIcon className="h-4 w-4" />
+                </div>
+              </div>
+            </button>
+          </div>
         )}
 
         {/* Artifact cards should appear after the assistant's summary (and audit card) */}
