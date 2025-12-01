@@ -41,7 +41,6 @@ import {
 import { CanvasPanel } from "@/components/canvas/canvas-panel";
 import { useCanvas } from "@/context/CanvasContext";
 import { useCanvasStore } from "@/lib/stores/canvas-store";
-import { ResizableCanvas } from "@/components/ui/ResizableCanvas";
 // Files V1 imports
 import { useFiles } from "../../../hooks/useFiles";
 import type { FileAttachment } from "../../../types/files";
@@ -761,12 +760,16 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                     metaData.artifact_id = event.data.artifact_id;
 
                     // Auto-open canvas for FIRST chart in session
-                    if (!hasAutoOpenedCanvas && event.data.type === "bank_chart" && metaData.bank_chart_data) {
+                    if (
+                      !hasAutoOpenedCanvas &&
+                      event.data.type === "bank_chart" &&
+                      metaData.bank_chart_data
+                    ) {
                       useCanvasStore.getState().openBankChart(
                         metaData.bank_chart_data,
                         event.data.artifact_id,
                         placeholderId, // Use placeholder ID as message ID
-                        true // autoOpen flag
+                        true, // autoOpen flag
                       );
 
                       hasAutoOpenedCanvas = true;
@@ -782,7 +785,9 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                       ...event.data,
                       // BA-P0-004: Merge accumulated metaData (bank_chart_data, etc.) with event metadata
                       metadata: {
-                        ...(event.data?.metadata || (response as any)?.metadata || {}),
+                        ...(event.data?.metadata ||
+                          (response as any)?.metadata ||
+                          {}),
                         ...(metaData || {}),
                       },
                     } as ChatResponse;
@@ -1752,8 +1757,13 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
             </div>
           }
         >
-          <div className="flex h-full min-h-0 gap-4">
-            <div className="flex-1 min-w-0 transition-[flex-basis] duration-300">
+          <div className="flex h-full min-h-0 gap-0">
+            <div
+              className={cn(
+                "transition-all duration-300",
+                isCanvasOpen ? "flex-1 min-w-0" : "w-full",
+              )}
+            >
               <ChatInterface
                 key={`chat-${currentChatId}-${selectionEpoch}`}
                 className="flex-1"
@@ -1788,29 +1798,12 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                 onAuditError={handleAuditError}
               />
             </div>
-            {/* Canvas: Desktop - side by side with chat */}
-            {isCanvasOpen && (
-              <ResizableCanvas className="hidden h-full flex-shrink-0 lg:block" />
-            )}
+            {/* Canvas: Unified for both desktop and mobile, side by side with chat */}
+            <CanvasPanel
+              className="h-full"
+              reportPdfUrl={currentReportPdfUrl || undefined}
+            />
           </div>
-
-          {/* Canvas: Mobile - overlay */}
-          {isCanvasOpen && (
-            <div
-              className="lg:hidden fixed inset-0 z-40 bg-black/60"
-              onClick={toggleCanvas}
-            >
-              <div
-                className="absolute right-0 top-0 h-full w-[90%] max-w-md shadow-2xl"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <CanvasPanel
-                  className="h-full"
-                  reportPdfUrl={currentReportPdfUrl || undefined}
-                />
-              </div>
-            </div>
-          )}
         </ErrorBoundary>
       </div>
     </ChatShell>

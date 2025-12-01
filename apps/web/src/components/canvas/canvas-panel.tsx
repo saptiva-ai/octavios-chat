@@ -268,33 +268,18 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
 
   return (
     <>
-      {/* Mobile overlay - click outside to close */}
-      {isSidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden"
-          onClick={toggleSidebar}
-          data-testid="canvas-overlay"
-        />
-      )}
-
       <div
         data-testid="canvas-panel"
         data-canvas-panel
         className={cn(
-          "h-full bg-[#0b1021] border-l border-white/10 text-white transition-all duration-200 relative z-50",
-          // Mobile: fullscreen, Desktop: sidebar with custom width
-          "md:max-w-[800px]",
+          "h-full bg-[#0b1021] border-l border-white/10 text-white transition-all duration-200 relative",
+          // Responsive width: 40% of viewport on all screens
+          "flex-shrink-0",
           isSidebarOpen
-            ? "opacity-100 fixed inset-0 md:relative md:opacity-100"
-            : "opacity-0 pointer-events-none",
+            ? "opacity-100 w-full md:w-[40vw] md:max-w-[600px]"
+            : "opacity-0 pointer-events-none w-0",
           className,
         )}
-        style={{
-          width:
-            typeof window !== "undefined" && window.innerWidth >= 768
-              ? width
-              : undefined,
-        }}
       >
         {/* Resize handle - only visible on desktop */}
         <div
