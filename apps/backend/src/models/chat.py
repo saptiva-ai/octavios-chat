@@ -117,6 +117,15 @@ class ChatSettings(BaseModel):
     research_params: Optional[Dict[str, Any]] = Field(None, description="Research parameters")
 
 
+class CanvasState(BaseModel):
+    """Canvas state subdocument for persistence"""
+    is_sidebar_open: bool = Field(default=False, description="Whether canvas sidebar is open")
+    active_artifact_id: Optional[str] = Field(None, description="Currently active artifact ID")
+    active_message_id: Optional[str] = Field(None, description="Currently active message ID")
+    active_bank_chart: Optional[Dict[str, Any]] = Field(None, description="Active BankChart data")
+    updated_at: datetime = Field(default_factory=datetime.utcnow, description="Last canvas update")
+
+
 class ChatSession(Document):
     """Chat session document model"""
 
@@ -135,6 +144,9 @@ class ChatSession(Document):
     settings: ChatSettings = Field(default_factory=ChatSettings, description="Chat settings")
     pinned: bool = Field(default=False, description="Whether the chat is pinned")
     tools_enabled: Dict[str, bool] = Field(default_factory=dict, description="Enabled tools for this chat")
+
+    # Canvas state persistence
+    canvas_state: Optional[CanvasState] = Field(None, description="Canvas sidebar state for this conversation")
 
     # MVP-FILE-CONTEXT: Structured document states for this conversation
     documents: List[DocumentState] = Field(

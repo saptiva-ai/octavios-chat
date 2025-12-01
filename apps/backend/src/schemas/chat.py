@@ -227,3 +227,12 @@ class ChatSessionUpdateRequest(BaseModel):
         if v is not None and not v.strip():
             raise ValueError('Title cannot be empty or whitespace only')
         return v.strip() if v else None
+
+
+class CanvasStateUpdateRequest(BaseModel):
+    """Canvas state update request schema"""
+
+    is_sidebar_open: Optional[bool] = Field(None, description="Whether canvas sidebar is open")
+    active_artifact_id: Optional[str] = Field(None, description="Currently active artifact ID")
+    active_message_id: Optional[str] = Field(None, description="Currently active message ID")
+    active_bank_chart: Optional[Dict[str, Any]] = Field(None, description="Active BankChart data")

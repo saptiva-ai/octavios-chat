@@ -308,7 +308,6 @@ export function ChatMessage({
         "group flex gap-3 px-4 py-6 transition-colors duration-150",
         isUser ? "flex-row-reverse" : "flex-row",
         "hover:bg-white/5",
-        isActiveInCanvas && "ring-2 ring-primary/40 bg-primary/5", // 🆕 Highlight when active in canvas
         className,
       )}
       role="article"

@@ -136,6 +136,10 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
   const isCanvasOpen = useCanvasStore((state) => state.isSidebarOpen);
   const toggleCanvas = useCanvasStore((state) => state.toggleSidebar);
   const resetCanvas = useCanvasStore((state) => state.reset);
+  const setCurrentSessionId = useCanvasStore(
+    (state) => state.setCurrentSessionId,
+  );
+  const loadFromMongoDB = useCanvasStore((state) => state.loadFromMongoDB);
   const { closeCanvas } = useCanvas();
 
   // DEBUG: Log canvas state in ChatView
@@ -143,11 +147,27 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
     logDebug("🏠 [ChatView] isCanvasOpen changed", { isCanvasOpen });
   }, [isCanvasOpen]);
 
-  // Close/reset canvas when switching conversations to avoid leaking artifacts across chats
+  // Load canvas state from MongoDB when switching conversations
   React.useEffect(() => {
-    resetCanvas();
-    closeCanvas();
-  }, [resetCanvas, closeCanvas, resolvedChatId]);
+    if (resolvedChatId) {
+      // Load persisted canvas state from MongoDB
+      loadFromMongoDB(resolvedChatId);
+      logDebug("🎨 [ChatView] Loading canvas state from MongoDB", {
+        chatId: resolvedChatId,
+      });
+    } else {
+      // No chat selected, reset canvas
+      resetCanvas();
+      closeCanvas();
+      setCurrentSessionId(null);
+    }
+  }, [
+    resolvedChatId,
+    loadFromMongoDB,
+    resetCanvas,
+    closeCanvas,
+    setCurrentSessionId,
+  ]);
 
   // Files V1 state - MVP-LOCK: Pass chatId to persist attachments
   // FIX: Use resolvedChatId (from URL) instead of currentChatId (from async store)
