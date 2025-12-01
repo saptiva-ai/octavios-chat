@@ -13,6 +13,7 @@ from ..core.auth import get_current_user
 from ..models.artifact import Artifact, ArtifactType, ArtifactVersion
 from ..models.chat import ChatSession
 from ..models.user import User
+from ..validators.bank_chart import validate_bank_chart_content
 
 logger = structlog.get_logger(__name__)
 
@@ -109,6 +110,22 @@ async def create_artifact(
 ) -> ArtifactResponse:
     """Create a new artifact for the authenticated user."""
     await _assert_chat_ownership(payload.chat_session_id, current_user)
+
+    # Validate bank_chart content
+    if payload.type == ArtifactType.BANK_CHART:
+        if not isinstance(payload.content, dict):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="bank_chart content must be a dictionary"
+            )
+
+        try:
+            validate_bank_chart_content(payload.content)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid bank_chart data: {str(e)}"
+            )
 
     artifact = Artifact(
         user_id=str(current_user.id),
