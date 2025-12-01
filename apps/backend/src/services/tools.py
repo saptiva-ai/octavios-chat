@@ -478,11 +478,12 @@ DEFAULT_AVAILABLE_TOOLS = {
 def normalize_tools_state(tools: Optional[Dict[str, Any]]) -> Dict[str, bool]:
     """Normalize raw tools-enabled mapping to boolean map with defaults."""
 
-    # Default map from known tools (most tools disabled by default)
+    # Default map from known tools (all tools disabled by default)
     normalized: Dict[str, bool] = {name: False for name in DEFAULT_AVAILABLE_TOOLS.keys()}
 
-    # BA-P0-004: Enable bank_analytics by default for automatic detection
-    normalized["bank_analytics"] = True
+    # BA-P0-004: bank_analytics disabled by default - only enabled when user selects tool
+    # This ensures BankAdvisor only activates on explicit user selection
+    normalized["bank_analytics"] = False
 
     if tools:
         for name, value in tools.items():

@@ -168,6 +168,27 @@ dev-no-build:
 	@$(COMPOSE_DEV) up -d --no-build
 	@echo "$(GREEN)✅ Services started (no build performed)$(NC)"
 
+# Rebuild individual services
+rebuild-web:
+	@echo "$(YELLOW)🔨 Rebuilding web service...$(NC)"
+	@$(COMPOSE_DEV) up -d --build --no-deps web
+	@echo "$(GREEN)✅ Web service rebuilt$(NC)"
+
+rebuild-backend:
+	@echo "$(YELLOW)🔨 Rebuilding backend service...$(NC)"
+	@$(COMPOSE_DEV) up -d --build --no-deps backend
+	@echo "$(GREEN)✅ Backend service rebuilt$(NC)"
+
+rebuild-bank-advisor:
+	@echo "$(YELLOW)🔨 Rebuilding bank-advisor service...$(NC)"
+	@$(COMPOSE_DEV) up -d --build --no-deps bank-advisor
+	@echo "$(GREEN)✅ Bank-advisor service rebuilt$(NC)"
+
+rebuild-file-manager:
+	@echo "$(YELLOW)🔨 Rebuilding file-manager service...$(NC)"
+	@$(COMPOSE_DEV) up -d --build --no-deps file-manager
+	@echo "$(GREEN)✅ File-manager service rebuilt$(NC)"
+
 dev-reset:
 	@echo "$(RED)⚠️  WARNING: This will stop, remove, and rebuild all containers!$(NC)"
 	@echo "$(YELLOW)Press Ctrl+C within 5 seconds to cancel...$(NC)"
