@@ -30,6 +30,7 @@
     "framer-motion": "^12.23.22",
     "katex": "^0.16.25",
     "next": "^14.0.4",
+    "next-themes": "^0.4.6",
     "plotly.js": "^3.3.0",
     "plotly.js-dist-min": "^3.3.0",
     "react": "^18.2.0",

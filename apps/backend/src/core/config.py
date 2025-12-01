@@ -110,11 +110,12 @@ class Settings(BaseSettings):
     jwt_refresh_token_expire_days: int = Field(default=7, description="Refresh token expiry")
 
     # Email (SMTP for password reset)
-    smtp_host: str = Field(default="smtp.gmail.com", description="SMTP server host")
-    smtp_port: int = Field(default=587, description="SMTP server port")
-    smtp_user: str = Field(default="", description="SMTP username (email)")
-    smtp_password: str = Field(default="", description="SMTP password (app password for Gmail)")
-    smtp_from_email: str = Field(default="support@saptiva.com", description="From email address")
+    smtp_host: str = Field(default="smtp.gmail.com", description="SMTP server host", alias="MAIL_SERVER")
+    smtp_port: int = Field(default=587, description="SMTP server port", alias="MAIL_PORT")
+    smtp_user: str = Field(default="", description="SMTP username (email)", alias="MAIL_USERNAME")
+    smtp_password: str = Field(default="", description="SMTP password (app password for Gmail)", alias="MAIL_PASSWORD")
+    smtp_from_email: str = Field(default="support@saptiva.com", description="From email address", alias="MAIL_FROM")
+    mail_from_name: str = Field(default="Octavios Support", description="From name", alias="MAIL_FROM_NAME")
     password_reset_url_base: str = Field(default="http://localhost:3000", description="Base URL for password reset links")
 
     # Aletheia

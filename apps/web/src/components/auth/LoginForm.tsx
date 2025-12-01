@@ -157,7 +157,7 @@ export function LoginForm() {
   return (
     <div className="w-full max-w-[420px] rounded-2xl border border-border bg-surface px-8 py-10 shadow-card">
       <div className="mb-8 text-center">
-        <h1 className="text-2xl font-semibold text-text">Iniciar sesión</h1>
+        <h1 className="text-2xl font-semibold text-foreground">Iniciar sesión</h1>
       </div>
 
       {sessionExpiredMessage && (
@@ -224,7 +224,7 @@ export function LoginForm() {
           type="submit"
           loading={isLoading}
           disabled={isLoading}
-          className="w-full rounded-xl bg-[#49F7D9] text-base font-semibold text-white transition-opacity hover:opacity-90 disabled:bg-gray-600 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#49F7D9]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0B1217]"
+          className="w-full rounded-xl bg-primary text-base font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:bg-muted disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           Iniciar sesión
         </Button>

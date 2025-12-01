@@ -28,7 +28,7 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 # Configuration
-PROJECT_NAME="octavios-chat-capital414"
+PROJECT_NAME="octavios-chat-bajaware_invex"
 COMPOSE="docker compose -p $PROJECT_NAME -f infra/docker-compose.yml"
 
 echo -e "${BLUE}🧪 Ejecutando tests: ${TARGET}${NC}"
