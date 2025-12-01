@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   CodeBracketIcon,
   ChartBarIcon,
@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { BankChartData } from "@/lib/types";
 import dynamic from "next/dynamic";
+import DOMPurify from "dompurify";
 import { BankChartSkeleton } from "./BankChartSkeleton";
 import { BankChartError } from "./BankChartError";
 
@@ -85,6 +86,25 @@ export function BankChartCanvasView({
   // Extract enriched metadata
   const sqlQuery = data.metadata?.sql_generated;
   const metricInterpretation = data.metadata?.metric_interpretation;
+
+  // Sanitize user-generated content to prevent XSS attacks
+  const sanitizedSQL = useMemo(() => {
+    if (!sqlQuery) return null;
+    // SQL queries should only contain plain text, no HTML tags
+    return DOMPurify.sanitize(sqlQuery, {
+      ALLOWED_TAGS: [],
+      ALLOWED_ATTR: [],
+    });
+  }, [sqlQuery]);
+
+  const sanitizedInterpretation = useMemo(() => {
+    if (!metricInterpretation) return null;
+    // Allow basic formatting tags for interpretation text
+    return DOMPurify.sanitize(metricInterpretation, {
+      ALLOWED_TAGS: ["p", "br", "strong", "em", "code", "ul", "ol", "li"],
+      ALLOWED_ATTR: [],
+    });
+  }, [metricInterpretation]);
 
   // Retry handler
   const handleRetry = () => {
@@ -174,7 +194,7 @@ export function BankChartCanvasView({
         >
           Gráfica
         </button>
-        {sqlQuery && (
+        {sanitizedSQL && (
           <button
             onClick={() => setActiveTab("sql")}
             className={cn(
@@ -188,7 +208,7 @@ export function BankChartCanvasView({
             SQL Query
           </button>
         )}
-        {metricInterpretation && (
+        {sanitizedInterpretation && (
           <button
             onClick={() => setActiveTab("interpretation")}
             className={cn(
@@ -227,31 +247,28 @@ export function BankChartCanvasView({
           </div>
         )}
 
-        {activeTab === "sql" && sqlQuery && (
+        {activeTab === "sql" && sanitizedSQL && (
           <div className="rounded-lg border border-white/10 bg-slate-900/50 p-4">
             <div className="mb-2 flex items-center gap-2 text-sm text-white/60">
               <CodeBracketIcon className="h-4 w-4" />
               <span>Query SQL Generado</span>
             </div>
             <pre className="overflow-x-auto rounded bg-black/40 p-3 text-xs text-green-400">
-              {sqlQuery}
+              {sanitizedSQL}
             </pre>
           </div>
         )}
 
-        {activeTab === "interpretation" && metricInterpretation && (
+        {activeTab === "interpretation" && sanitizedInterpretation && (
           <div className="rounded-lg border border-white/10 bg-white/5 p-4">
             <div className="mb-3 flex items-center gap-2 text-sm text-white/60">
               <ChartBarIcon className="h-4 w-4" />
               <span>Interpretación de Métrica</span>
             </div>
-            <div className="prose prose-invert prose-sm max-w-none text-white/80">
-              {metricInterpretation.split("\n").map((line, i) => (
-                <p key={i} className="mb-2">
-                  {line}
-                </p>
-              ))}
-            </div>
+            <div
+              className="prose prose-invert prose-sm max-w-none text-white/80"
+              dangerouslySetInnerHTML={{ __html: sanitizedInterpretation }}
+            />
           </div>
         )}
       </div>
