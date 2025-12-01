@@ -7,6 +7,8 @@ import {
   CalendarDaysIcon,
   BuildingOffice2Icon,
   CircleStackIcon,
+  ArrowDownTrayIcon,
+  TableCellsIcon,
 } from "@heroicons/react/24/outline";
 import { cn } from "@/lib/utils";
 import type { BankChartData } from "@/lib/types";
@@ -113,6 +115,72 @@ export function BankChartCanvasView({
     setTimeout(() => setIsLoading(false), 1000);
   };
 
+  // Download chart as PNG
+  const handleDownloadPNG = async () => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const Plotly = await import("plotly.js-dist-min");
+      const plotElement = plotContainerRef.current?.querySelector(".plotly");
+
+      if (plotElement) {
+        await Plotly.downloadImage(plotElement as any, {
+          format: "png",
+          width: 1200,
+          height: 800,
+          filename: `${data.metric_name}_${data.bank_names.join("_")}`,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to download PNG:", error);
+    }
+  };
+
+  // Export data to CSV
+  const handleExportCSV = () => {
+    try {
+      // Extract data from Plotly config
+      const plotlyData = data.plotly_config.data;
+      if (!Array.isArray(plotlyData) || plotlyData.length === 0) return;
+
+      // Create CSV header
+      const headers = ["Banco", "Periodo", data.metric_name.toUpperCase()];
+      const rows: string[][] = [headers];
+
+      // Extract rows from each trace
+      plotlyData.forEach((trace: any) => {
+        const bankName = trace.name || "Unknown";
+        const xValues = trace.x || [];
+        const yValues = trace.y || [];
+
+        xValues.forEach((period: string, index: number) => {
+          rows.push([bankName, period, String(yValues[index] || "")]);
+        });
+      });
+
+      // Convert to CSV string
+      const csvContent = rows.map((row) => row.join(",")).join("\n");
+
+      // Download
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+
+      link.setAttribute("href", url);
+      link.setAttribute(
+        "download",
+        `${data.metric_name}_${data.bank_names.join("_")}.csv`,
+      );
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Failed to export CSV:", error);
+    }
+  };
+
   // Dark theme optimized for canvas (more space)
   const plotlyLayout = {
     ...data.plotly_config.layout,
@@ -153,11 +221,33 @@ export function BankChartCanvasView({
     <div className={cn("flex h-full flex-col space-y-4", className)}>
       {/* Metadata Header */}
       <div className="space-y-3 rounded-lg border border-white/10 bg-white/5 p-4">
-        <div className="flex items-center gap-2">
-          <ChartBarIcon className="h-5 w-5 text-primary" />
-          <h3 className="text-lg font-bold text-white">
-            {data.metric_name.toUpperCase()}
-          </h3>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ChartBarIcon className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-bold text-white">
+              {data.metric_name.toUpperCase()}
+            </h3>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleDownloadPNG}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white/70 hover:text-white bg-white/5 hover:bg-white/10 rounded-md transition-colors"
+              title="Descargar como PNG"
+            >
+              <ArrowDownTrayIcon className="h-4 w-4" />
+              <span>PNG</span>
+            </button>
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white/70 hover:text-white bg-white/5 hover:bg-white/10 rounded-md transition-colors"
+              title="Exportar a CSV"
+            >
+              <TableCellsIcon className="h-4 w-4" />
+              <span>CSV</span>
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3 text-xs">

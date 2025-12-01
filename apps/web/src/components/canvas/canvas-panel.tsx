@@ -87,6 +87,27 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
     };
   }, []);
 
+  // Keyboard shortcuts for canvas
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd+K (Mac) or Ctrl+K (Windows/Linux) to toggle canvas
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        toggleSidebar();
+      }
+      // Escape to close canvas
+      if (e.key === "Escape" && isSidebarOpen) {
+        e.preventDefault();
+        toggleSidebar();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [toggleSidebar, isSidebarOpen]);
+
   React.useEffect(() => {
     let cancelled = false;
 
@@ -287,6 +308,26 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
           onToggle={toggleSidebar}
           isSidebarOpen={isSidebarOpen}
         />
+
+        {/* Keyboard shortcuts hint */}
+        {isSidebarOpen && (
+          <div className="px-4 py-2 border-b border-white/5 bg-white/[0.02]">
+            <div className="flex items-center gap-4 text-xs text-white/40">
+              <span className="flex items-center gap-1">
+                <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/60 font-mono">
+                  ⌘K
+                </kbd>
+                <span>Toggle</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/60 font-mono">
+                  Esc
+                </kbd>
+                <span>Close</span>
+              </span>
+            </div>
+          </div>
+        )}
 
         <div className="h-[calc(100%-64px)] overflow-y-auto px-4 py-3">
           <CanvasErrorBoundary>{renderContent()}</CanvasErrorBoundary>
