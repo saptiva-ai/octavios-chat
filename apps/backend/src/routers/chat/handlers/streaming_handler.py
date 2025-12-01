@@ -1929,16 +1929,29 @@ NO digas que no tienes información - los datos YA ESTÁN disponibles en el grá
                         "data": json.dumps({"content": full_response})
                     }
 
+                # Prepare metadata for assistant message
+                assistant_metadata = {
+                    "streaming": True,
+                    "has_documents": bool(context.document_ids),
+                    "document_warnings": doc_warnings if doc_warnings else None
+                }
+
+                # BA-P0-004: Include bank_chart_data in metadata for persistence
+                if bank_chart_data:
+                    chart_data_dict = bank_chart_data if isinstance(bank_chart_data, dict) else bank_chart_data.model_dump(mode='json')
+                    assistant_metadata["bank_chart_data"] = chart_data_dict
+                    logger.info(
+                        "💾 Saving bank_chart_data in message metadata",
+                        metric=chart_data_dict.get("metric_name"),
+                        has_sql=bool(chart_data_dict.get("metadata", {}).get("sql_generated"))
+                    )
+
                 # Save assistant message
                 assistant_message = await chat_service.add_assistant_message(
                     chat_session=chat_session,
                     content=full_response,
                     model=context.model,
-                    metadata={
-                        "streaming": True,
-                        "has_documents": bool(context.document_ids),
-                        "document_warnings": doc_warnings if doc_warnings else None
-                    }
+                    metadata=assistant_metadata
                 )
 
                 # Yield completion event
