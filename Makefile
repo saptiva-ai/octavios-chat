@@ -378,9 +378,9 @@ endif
 	@chmod +x scripts/db-manager.sh
 	@./scripts/db-manager.sh $(CMD) $(PROJECT_NAME)
 
-# ============================================================================ 
+# ============================================================================
 # DEPLOYMENT
-# ============================================================================ 
+# ============================================================================
 
 deploy:
 ifndef ENV
@@ -390,6 +390,66 @@ ifndef ENV
 endif
 	@chmod +x scripts/deploy-manager.sh
 	@./scripts/deploy-manager.sh $(ENV) $(MODE)
+
+# Production deployment helpers
+prod-prepare:
+	@echo "$(YELLOW)🔧 Preparing for production deployment...$(NC)"
+	@echo "$(YELLOW)  ↳ Cleaning local .env files that may interfere...$(NC)"
+	@rm -f apps/backend/.env apps/web/.env plugins/public/bank-advisor/.env plugins/public/file-manager/.env
+	@echo "$(YELLOW)  ↳ Copying production environment...$(NC)"
+	@cp envs/.env.prod envs/.env
+	@echo "$(GREEN)✅ Production environment prepared$(NC)"
+
+prod-build:
+	@echo "$(YELLOW)🔨 Building production images...$(NC)"
+	@cd infra && docker compose --env-file ../envs/.env build backend web bank-advisor file-manager
+	@echo "$(GREEN)✅ Production images built$(NC)"
+
+prod-up:
+	@echo "$(YELLOW)🚀 Starting production containers...$(NC)"
+	@cd infra && docker compose --env-file ../envs/.env up -d
+	@echo "$(GREEN)✅ Production containers started$(NC)"
+	@echo "$(YELLOW)🟡 Waiting for services to be healthy...$(NC)"
+	@sleep 10
+	@cd infra && docker compose ps
+
+prod-restart:
+ifdef S
+	@echo "$(YELLOW)♻️  Restarting production service: $(S)...$(NC)"
+	@cd infra && docker compose --env-file ../envs/.env restart $(S)
+	@echo "$(GREEN)✅ Service $(S) restarted$(NC)"
+else
+	@echo "$(YELLOW)♻️  Restarting all production services...$(NC)"
+	@cd infra && docker compose --env-file ../envs/.env restart
+	@echo "$(GREEN)✅ All services restarted$(NC)"
+endif
+
+prod-logs:
+ifdef S
+	@cd infra && docker compose --env-file ../envs/.env logs --tail=100 $(S)
+else
+	@cd infra && docker compose --env-file ../envs/.env logs --tail=100
+endif
+
+prod-status:
+	@echo "$(BLUE)🔵━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BLUE)🔵 Production Container Status $(NC)"
+	@echo "$(BLUE)🔵━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@cd infra && docker compose --env-file ../envs/.env ps
+	@echo ""
+
+prod-deploy: prod-prepare prod-build prod-up
+	@echo ""
+	@echo "$(GREEN)🟢━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(GREEN)🟢  Production Deployment Complete $(NC)"
+	@echo "$(GREEN)🟢━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo ""
+	@echo "  $(BLUE)🔵 Frontend:     $(YELLOW)https://invex.saptiva.com$(NC)"
+	@echo "  $(BLUE)🔵 Backend API:  $(YELLOW)https://back-invex.saptiva.com$(NC)"
+	@echo "  $(BLUE)🔵 Health Check: $(YELLOW)https://back-invex.saptiva.com/api/health$(NC)"
+	@echo ""
+	@$(MAKE) prod-status
 
 # ============================================================================ 
 # CLEANUP

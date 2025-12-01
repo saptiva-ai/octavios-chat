@@ -165,6 +165,11 @@ class Settings(BaseSettings):
         description="Expose unified Files tool in the UI",
         alias="TOOL_FILES_ENABLED",
     )
+    tool_bank_advisor_enabled: bool = Field(
+        default=True,
+        description="Expose Bank Advisor analytics tool in the UI",
+        alias="TOOL_BANK_ADVISOR_ENABLED",
+    )
     tool_flags_updated_at: Optional[datetime] = Field(
         default=None,
         description="Timestamp of the last manual update to tool flags",
