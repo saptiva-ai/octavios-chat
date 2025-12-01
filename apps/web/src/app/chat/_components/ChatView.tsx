@@ -147,26 +147,44 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
     logDebug("🏠 [ChatView] isCanvasOpen changed", { isCanvasOpen });
   }, [isCanvasOpen]);
 
-  // Load canvas state from MongoDB when switching conversations
+  // Track previous chatId to detect conversation changes
+  const prevChatIdRef = React.useRef<string | null>(null);
+
+  // Reset and close canvas when switching conversations
   React.useEffect(() => {
+    const hasChanged = prevChatIdRef.current !== resolvedChatId;
+
+    if (hasChanged && prevChatIdRef.current !== null) {
+      // Conversation changed - close and reset canvas
+      resetCanvas();
+      if (isCanvasOpen) {
+        toggleCanvas(); // Close if open
+      }
+      logDebug("🎨 [ChatView] Canvas reset due to conversation change", {
+        from: prevChatIdRef.current,
+        to: resolvedChatId,
+      });
+    }
+
+    prevChatIdRef.current = resolvedChatId;
+
     if (resolvedChatId) {
-      // Load persisted canvas state from MongoDB
-      loadFromMongoDB(resolvedChatId);
-      logDebug("🎨 [ChatView] Loading canvas state from MongoDB", {
+      // Set session ID for future syncs (but don't load old state)
+      setCurrentSessionId(resolvedChatId);
+      logDebug("🎨 [ChatView] Canvas session ID set", {
         chatId: resolvedChatId,
       });
     } else {
       // No chat selected, reset canvas
       resetCanvas();
-      closeCanvas();
       setCurrentSessionId(null);
     }
   }, [
     resolvedChatId,
-    loadFromMongoDB,
     resetCanvas,
-    closeCanvas,
     setCurrentSessionId,
+    isCanvasOpen,
+    toggleCanvas,
   ]);
 
   // Files V1 state - MVP-LOCK: Pass chatId to persist attachments
