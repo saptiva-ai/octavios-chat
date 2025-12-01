@@ -10,6 +10,7 @@ import { MermaidGraph } from "./mermaid-graph";
 import { graphToMermaid } from "@/lib/utils/graph-to-mermaid";
 import { AuditDetailView } from "./views/AuditDetailView";
 import { BankChartCanvasView } from "./BankChartCanvasView";
+import { CanvasErrorBoundary } from "./CanvasErrorBoundary";
 
 interface CanvasPanelProps {
   className?: string;
@@ -245,31 +246,44 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
   };
 
   return (
-    <div
-      className={cn(
-        "h-full bg-[#0b1021] border-l border-white/10 text-white transition-opacity duration-200 relative",
-        isSidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none",
-        className,
+    <>
+      {/* Mobile overlay - click outside to close */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden"
+          onClick={toggleSidebar}
+          data-testid="canvas-overlay"
+        />
       )}
-      style={{ width }}
-    >
-      {/* Resize handle */}
-      <div
-        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/50 active:bg-primary transition-colors z-50"
-        onMouseDown={handleMouseDown}
-      />
-      <Header
-        reportPdfUrl={reportPdfUrl}
-        artifact={artifact}
-        activeArtifactData={activeArtifactData}
-        onToggle={toggleSidebar}
-        isSidebarOpen={isSidebarOpen}
-      />
 
-      <div className="h-[calc(100%-64px)] overflow-y-auto px-4 py-3">
-        {renderContent()}
+      <div
+        data-testid="canvas-panel"
+        data-canvas-panel
+        className={cn(
+          "h-full bg-[#0b1021] border-l border-white/10 text-white transition-opacity duration-200 relative z-50",
+          isSidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none",
+          className,
+        )}
+        style={{ width }}
+      >
+        {/* Resize handle */}
+        <div
+          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/50 active:bg-primary transition-colors z-50"
+          onMouseDown={handleMouseDown}
+        />
+        <Header
+          reportPdfUrl={reportPdfUrl}
+          artifact={artifact}
+          activeArtifactData={activeArtifactData}
+          onToggle={toggleSidebar}
+          isSidebarOpen={isSidebarOpen}
+        />
+
+        <div className="h-[calc(100%-64px)] overflow-y-auto px-4 py-3">
+          <CanvasErrorBoundary>{renderContent()}</CanvasErrorBoundary>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 

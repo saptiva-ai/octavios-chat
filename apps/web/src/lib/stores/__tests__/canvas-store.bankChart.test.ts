@@ -187,4 +187,34 @@ describe("Canvas Store - Bank Chart", () => {
       expect(state.chartHistory).toHaveLength(0);
     });
   });
+
+  describe("chartHistory limit", () => {
+    it("should limit chartHistory to 20 entries", () => {
+      const { openBankChart } = useCanvasStore.getState();
+
+      // Add 25 charts to exceed the limit
+      for (let i = 0; i < 25; i++) {
+        openBankChart(mockChartData, `artifact_${i}`, `msg_${i}`, false);
+      }
+
+      const state = useCanvasStore.getState();
+      expect(state.chartHistory).toHaveLength(20);
+
+      // Should keep the last 20 charts (artifact_5 through artifact_24)
+      expect(state.chartHistory[0].artifactId).toBe("artifact_5");
+      expect(state.chartHistory[19].artifactId).toBe("artifact_24");
+    });
+
+    it("should keep all charts when under limit", () => {
+      const { openBankChart } = useCanvasStore.getState();
+
+      // Add 10 charts (under the limit)
+      for (let i = 0; i < 10; i++) {
+        openBankChart(mockChartData, `artifact_${i}`, `msg_${i}`, false);
+      }
+
+      const state = useCanvasStore.getState();
+      expect(state.chartHistory).toHaveLength(10);
+    });
+  });
 });

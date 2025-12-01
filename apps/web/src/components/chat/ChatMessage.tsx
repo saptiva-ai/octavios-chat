@@ -22,7 +22,10 @@ import { ArtifactCard } from "./artifact-card";
 import { parseToolCalls } from "../../lib/tool-parser";
 import { AuditSummaryCard } from "./artifacts/AuditSummaryCard";
 import { useCanvasStore } from "@/lib/stores/canvas-store";
-import { ChartBarIcon, ArrowsPointingOutIcon } from "@heroicons/react/24/outline";
+import {
+  ChartBarIcon,
+  ArrowsPointingOutIcon,
+} from "@heroicons/react/24/outline";
 
 export interface ChatMessageProps {
   id?: string;
@@ -137,12 +140,17 @@ export function ChatMessage({
   // Fetch artifact content for bank_chart types
   React.useEffect(() => {
     const fetchArtifacts = async () => {
-      console.warn("[🎨 ARTIFACTS] Checking artifact invocations:", artifactInvocations);
+      console.warn(
+        "[🎨 ARTIFACTS] Checking artifact invocations:",
+        artifactInvocations,
+      );
       for (const inv of artifactInvocations) {
         const artifactId = inv.result?.id as string;
         const artifactType = inv.result?.type as string;
 
-        console.warn(`[🎨 ARTIFACTS] Found artifact: type=${artifactType}, id=${artifactId}`);
+        console.warn(
+          `[🎨 ARTIFACTS] Found artifact: type=${artifactType}, id=${artifactId}`,
+        );
 
         // Only fetch if it's a bank_chart and we haven't loaded it yet
         if (
@@ -151,20 +159,30 @@ export function ChatMessage({
           !artifactData[artifactId]
         ) {
           try {
-            console.warn(`[📊 BANK_CHART] Fetching artifact content for ${artifactId}`);
+            console.warn(
+              `[📊 BANK_CHART] Fetching artifact content for ${artifactId}`,
+            );
             const response = await fetch(`/api/artifacts/${artifactId}`);
             if (response.ok) {
               const data = await response.json();
-              console.warn(`[📊 BANK_CHART] Artifact content loaded:`, data.content);
+              console.warn(
+                `[📊 BANK_CHART] Artifact content loaded:`,
+                data.content,
+              );
               setArtifactData((prev) => ({
                 ...prev,
                 [artifactId]: data.content,
               }));
             } else {
-              console.error(`[📊 BANK_CHART] Failed to fetch artifact: ${response.status} ${response.statusText}`);
+              console.error(
+                `[📊 BANK_CHART] Failed to fetch artifact: ${response.status} ${response.statusText}`,
+              );
             }
           } catch (error) {
-            console.error(`[📊 BANK_CHART] Error fetching artifact ${artifactId}:`, error);
+            console.error(
+              `[📊 BANK_CHART] Error fetching artifact ${artifactId}:`,
+              error,
+            );
           }
         }
       }
@@ -221,7 +239,7 @@ export function ChatMessage({
       willRender: isAssistant && !!bankChartData,
       plotlyData: metadata.bank_chart_data.plotly_config?.data,
       plotlyLayout: metadata.bank_chart_data.plotly_config?.layout,
-      fullMetadata: metadata.bank_chart_data
+      fullMetadata: metadata.bank_chart_data,
     });
   }
 
@@ -449,16 +467,23 @@ export function ChatMessage({
         {isAssistant && bankChartData && (
           <div className={cn("mt-3", isUser ? "ml-auto" : "")}>
             <button
+              data-testid="bank-chart-button"
               onClick={() => {
-                const artifactId = (metadata as any)?.artifact_id || (metadata as any)?.bank_chart_artifact_id || "temp";
-                useCanvasStore.getState().openBankChart(
-                  bankChartData,
-                  artifactId,
-                  id || "unknown",
-                  false
-                );
+                const artifactId =
+                  (metadata as any)?.artifact_id ||
+                  (metadata as any)?.bank_chart_artifact_id ||
+                  "temp";
+                useCanvasStore
+                  .getState()
+                  .openBankChart(
+                    bankChartData,
+                    artifactId,
+                    id || "unknown",
+                    false,
+                  );
               }}
               className="group relative w-full overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5 p-4 text-left transition-all duration-300 hover:border-primary/40 hover:shadow-xl hover:shadow-primary/20 hover:scale-[1.02]"
+              aria-label={`Abrir gráfica de ${bankChartData.metric_name.toUpperCase()} en canvas`}
             >
               {/* Background decoration */}
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
@@ -475,7 +500,10 @@ export function ChatMessage({
                       {bankChartData.metric_name.toUpperCase()}
                     </span>
                     <span className="rounded-full bg-primary/20 px-2 py-0.5 text-[10px] font-medium text-primary/80">
-                      {bankChartData.bank_names.length} {bankChartData.bank_names.length === 1 ? 'banco' : 'bancos'}
+                      {bankChartData.bank_names.length}{" "}
+                      {bankChartData.bank_names.length === 1
+                        ? "banco"
+                        : "bancos"}
                     </span>
                   </div>
                   <p className="text-xs text-white/60 truncate">
@@ -484,7 +512,9 @@ export function ChatMessage({
                 </div>
 
                 <div className="flex items-center gap-2 text-primary/80 transition-transform group-hover:translate-x-1">
-                  <span className="text-xs font-medium hidden sm:inline">Abrir en Canvas</span>
+                  <span className="text-xs font-medium hidden sm:inline">
+                    Abrir en Canvas
+                  </span>
                   <ArrowsPointingOutIcon className="h-4 w-4" />
                 </div>
               </div>
@@ -505,7 +535,9 @@ export function ChatMessage({
               const artifactType = (inv.result?.type as any) || "markdown";
               const content = artifactData[artifactId];
 
-              console.warn(`[🎨 RENDER] Rendering artifact card: id=${artifactId}, type=${artifactType}, hasContent=${!!content}`);
+              console.warn(
+                `[🎨 RENDER] Rendering artifact card: id=${artifactId}, type=${artifactType}, hasContent=${!!content}`,
+              );
 
               return (
                 <ArtifactCard

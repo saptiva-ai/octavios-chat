@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   CodeBracketIcon,
   ChartBarIcon,
@@ -38,6 +38,24 @@ export function BankChartCanvasView({
   const [activeTab, setActiveTab] = useState<
     "chart" | "sql" | "interpretation"
   >("chart");
+  const plotContainerRef = useRef<HTMLDivElement>(null);
+  const [plotKey, setPlotKey] = useState(0);
+
+  // Force re-render of Plotly when container size changes
+  useEffect(() => {
+    if (!plotContainerRef.current) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      // Force Plotly to recalculate layout
+      setPlotKey((prev) => prev + 1);
+    });
+
+    resizeObserver.observe(plotContainerRef.current);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
 
   // Extract enriched metadata
   const sqlQuery = data.metadata?.sql_generated;
@@ -109,7 +127,7 @@ export function BankChartCanvasView({
             "px-4 py-2 text-sm font-medium transition-colors",
             activeTab === "chart"
               ? "border-b-2 border-primary text-primary"
-              : "text-white/60 hover:text-white"
+              : "text-white/60 hover:text-white",
           )}
         >
           Gráfica
@@ -121,7 +139,7 @@ export function BankChartCanvasView({
               "flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors",
               activeTab === "sql"
                 ? "border-b-2 border-primary text-primary"
-                : "text-white/60 hover:text-white"
+                : "text-white/60 hover:text-white",
             )}
           >
             <CodeBracketIcon className="h-4 w-4" />
@@ -135,7 +153,7 @@ export function BankChartCanvasView({
               "px-4 py-2 text-sm font-medium transition-colors",
               activeTab === "interpretation"
                 ? "border-b-2 border-primary text-primary"
-                : "text-white/60 hover:text-white"
+                : "text-white/60 hover:text-white",
             )}
           >
             Interpretación
@@ -146,8 +164,12 @@ export function BankChartCanvasView({
       {/* Tab Content */}
       <div className="flex-1 overflow-y-auto">
         {activeTab === "chart" && (
-          <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+          <div
+            ref={plotContainerRef}
+            className="rounded-lg border border-white/10 bg-white/5 p-4"
+          >
             <Plot
+              key={plotKey}
               data={data.plotly_config.data as any}
               layout={plotlyLayout as any}
               config={{
@@ -158,6 +180,7 @@ export function BankChartCanvasView({
               }}
               className="w-full"
               useResizeHandler
+              style={{ width: "100%", height: "100%" }}
             />
           </div>
         )}

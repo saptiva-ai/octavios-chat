@@ -22,7 +22,7 @@ interface CanvasState {
     chartData: BankChartData,
     artifactId: string,
     messageId: string,
-    autoOpen?: boolean
+    autoOpen?: boolean,
   ) => void;
   setActiveMessage: (messageId: string | null) => void;
   addToChartHistory: (sync: CanvasChartSync) => void;
@@ -109,7 +109,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         chartHistory: state.chartHistory.map((c) =>
           c.artifactId === artifactId
             ? { ...c, isActive: true }
-            : { ...c, isActive: false }
+            : { ...c, isActive: false },
         ),
       }));
     }
@@ -134,14 +134,23 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       })),
     })),
 
-  // 🆕 Add chart to history
+  // 🆕 Add chart to history (with max limit of 20 charts)
   addToChartHistory: (sync) =>
-    set((state) => ({
-      chartHistory: [
+    set((state) => {
+      const MAX_CHART_HISTORY = 20;
+      const updatedHistory = [
         ...state.chartHistory.map((c) => ({ ...c, isActive: false })),
         sync,
-      ],
-    })),
+      ];
+
+      // Keep only the last 20 charts
+      const limitedHistory =
+        updatedHistory.length > MAX_CHART_HISTORY
+          ? updatedHistory.slice(-MAX_CHART_HISTORY)
+          : updatedHistory;
+
+      return { chartHistory: limitedHistory };
+    }),
 
   // 🆕 Clear chart history (on session change)
   clearChartHistory: () =>
