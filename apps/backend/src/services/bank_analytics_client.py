@@ -161,8 +161,10 @@ async def query_bank_analytics(
                         clarification=clarification_data,
                     )
 
-                # Build BankChartData from the data payload
-                chart_data = _build_chart_data(tool_data, metric_or_query)
+                # Build BankChartData from tool_data (which has plotly_config, title, etc.)
+                # BA-P0-004: Pass tool_metadata to merge sql_generated into metadata
+                # Note: tool_data is result["data"], where plotly_config actually lives
+                chart_data = _build_chart_data(tool_data, metric_or_query, external_metadata=tool_metadata)
 
                 # Log metadata if available
                 if tool_metadata:
@@ -260,19 +262,32 @@ async def query_bank_analytics(
         raise BankAdvisorQueryError(f"Unexpected error: {str(e)}")
 
 
-def _build_chart_data(result: Dict[str, Any], query: str) -> BankChartData:
+def _build_chart_data(result: Dict[str, Any], query: str, external_metadata: Optional[Dict[str, Any]] = None) -> BankChartData:
     """
     Transform MCP tool result into BankChartData schema.
 
     Args:
         result: Raw result from bank_analytics MCP tool
         query: Original query string
+        external_metadata: Optional metadata from wrapper (for new format responses)
 
     Returns:
         BankChartData instance
     """
-    # Extract metadata
-    metadata = result.get("metadata", {})
+    # Extract metadata - merge external metadata (from wrapper) with internal metadata
+    # BA-P0-004: External metadata contains sql_generated, pipeline, etc.
+    internal_metadata = result.get("metadata", {})
+    metadata = {**internal_metadata, **(external_metadata or {})}
+
+    # Log metadata merge for debugging
+    logger.info(
+        "bank_analytics._build_chart_data.metadata_merge",
+        has_internal=bool(internal_metadata),
+        has_external=bool(external_metadata),
+        has_sql_generated=bool(metadata.get("sql_generated")),
+        metadata_keys=list(metadata.keys()) if metadata else []
+    )
+
     data = result.get("data", {})
     plotly_config = result.get("plotly_config", {})
 

@@ -530,11 +530,27 @@ class AnalyticsService:
 
         # Convert ratio metrics to percentage, currency to millions
         is_ratio = metric_type == "ratio"
+
+        # DEBUG: Log original values
+        import structlog
+        logger = structlog.get_logger(__name__)
+        logger.info("analytics_service._format_evolution.values_before_conversion",
+                   metric_id=metric_id,
+                   metric_type=metric_type,
+                   is_ratio=is_ratio,
+                   sample_values=df['value'].head(5).tolist() if len(df) > 0 else [])
+
         if is_ratio:
             df['value'] = df['value'] * 100
         else:
             # Convert currency from pesos to millions (MDP)
             df['value'] = df['value'] / 1_000_000
+
+        # DEBUG: Log converted values
+        logger.info("analytics_service._format_evolution.values_after_conversion",
+                   metric_id=metric_id,
+                   is_ratio=is_ratio,
+                   sample_values=df['value'].head(5).tolist() if len(df) > 0 else [])
 
         # Build hovertemplate with units
         hover_template = (
@@ -570,7 +586,7 @@ class AnalyticsService:
                     "xaxis": {"title": "Fecha"},
                     "yaxis": {
                         "title": "%" if is_ratio else "MDP (Millones de Pesos)",
-                        "tickformat": ".2f" if is_ratio else ",.0f",
+                        "tickformat": ".2f",
                         "ticksuffix": "%" if is_ratio else " MDP"
                     }
                 }
@@ -624,7 +640,7 @@ class AnalyticsService:
                     "xaxis": {"title": "Banco"},
                     "yaxis": {
                         "title": "%" if is_ratio else "MDP (Millones de Pesos)",
-                        "tickformat": ".2f" if is_ratio else ",.0f",
+                        "tickformat": ".2f",
                         "ticksuffix": "%" if is_ratio else " MDP"
                     }
                 }
@@ -688,7 +704,7 @@ class AnalyticsService:
                     "title": f"Ranking de {display_name}",
                     "xaxis": {
                         "title": "%" if is_ratio else "MDP (Millones de Pesos)",
-                        "tickformat": ".2f" if is_ratio else ",.0f",
+                        "tickformat": ".2f",
                         "ticksuffix": "%" if is_ratio else " MDP"
                     },
                     "yaxis": {"title": "Banco", "autorange": "reversed"}

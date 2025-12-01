@@ -16,11 +16,15 @@ interface CanvasState {
   // Current session ID for persistence
   currentSessionId: string | null;
 
+  // Canvas width as percentage of viewport (30-70%, default 40%)
+  canvasWidthPercent: number;
+
   // Existing methods
   setArtifact: (id: string | null) => void;
   openArtifact: (type: string, data: any) => void;
   toggleSidebar: () => void;
   reset: () => void;
+  setCanvasWidth: (widthPercent: number) => void;
 
   // 🆕 Bank chart methods (Phase 2)
   openBankChart: (
@@ -49,6 +53,7 @@ export const useCanvasStore = create<CanvasState>()(
       activeMessageId: null,
       chartHistory: [],
       currentSessionId: null,
+      canvasWidthPercent: 40, // Default to 40% of viewport width
 
       setArtifact: (id) =>
         set((state) => ({
@@ -97,6 +102,12 @@ export const useCanvasStore = create<CanvasState>()(
           activeBankChart: null,
           activeMessageId: null,
           chartHistory: [],
+        })),
+
+      // Set canvas width (percentage of viewport, constrained to 30-70%)
+      setCanvasWidth: (widthPercent) =>
+        set(() => ({
+          canvasWidthPercent: Math.min(Math.max(widthPercent, 30), 70),
         })),
 
       // 🆕 Open bank chart in canvas (main method)
@@ -242,6 +253,7 @@ export const useCanvasStore = create<CanvasState>()(
         activeArtifactId: state.activeArtifactId,
         activeMessageId: state.activeMessageId,
         currentSessionId: state.currentSessionId,
+        canvasWidthPercent: state.canvasWidthPercent,
         // Don't persist large objects like activeBankChart or activeArtifactData
       }),
     },

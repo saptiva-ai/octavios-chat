@@ -3,12 +3,11 @@
 /**
  * BankAdvisorResponse Component
  *
- * Displays structured responses from Bank Advisor queries with:
- * - SQL query code block (collapsible)
- * - "Abrir Canvas Panel" button to visualize the chart
+ * Displays the "Abrir Canvas Panel" button for bank chart visualizations.
+ * SQL query is shown directly in the LLM's response text.
  */
 
-import React, { useEffect } from "react";
+import React from "react";
 import { cn } from "@/lib/utils";
 import { useCanvasStore } from "@/lib/stores/canvas-store";
 import { ChartBarIcon } from "@heroicons/react/24/outline";
@@ -26,10 +25,9 @@ interface BankAdvisorResponseProps {
 }
 
 /**
- * Structured response component for Bank Advisor queries
- * Shows:
- * 1. SQL Query section (collapsible with copy button)
- * 2. "Abrir Canvas Panel" button
+ * Structured response component for Bank Advisor queries.
+ * Shows the "Abrir Canvas Panel" button.
+ * SQL query is displayed directly in the LLM's response text.
  */
 export function BankAdvisorResponse({
   bankChartData,
@@ -37,19 +35,6 @@ export function BankAdvisorResponse({
   metadata,
   className,
 }: BankAdvisorResponseProps) {
-  // Debug: Log the bankChartData to see if metadata.sql_generated exists
-  useEffect(() => {
-    console.warn("[📊 BankAdvisorResponse] Data received:", {
-      metric_name: bankChartData.metric_name,
-      has_metadata: !!bankChartData.metadata,
-      metadata_keys: bankChartData.metadata
-        ? Object.keys(bankChartData.metadata)
-        : [],
-      sql_generated: bankChartData.metadata?.sql_generated,
-      full_metadata: bankChartData.metadata,
-    });
-  }, [bankChartData]);
-
   const artifactId =
     metadata?.artifact_id || metadata?.bank_chart_artifact_id || "temp";
 
@@ -60,8 +45,8 @@ export function BankAdvisorResponse({
   };
 
   return (
-    <div className={cn("mt-4 space-y-3", className)}>
-      {/* Minimal Open Canvas Button */}
+    <div className={cn("mt-4", className)}>
+      {/* Open Canvas Button */}
       <button
         data-testid="bank-chart-button"
         onClick={handleOpenCanvas}
@@ -101,27 +86,6 @@ export function BankAdvisorResponse({
           </div>
         </div>
       </button>
-
-      {/* Additional metadata if available */}
-      {bankChartData.metadata?.metric_interpretation && (
-        <div className="px-4 py-2 bg-surface/50 rounded-lg border border-border">
-          <p className="text-xs text-muted">
-            <span className="font-medium text-foreground">
-              Interpretación:{" "}
-            </span>
-            {bankChartData.metadata.metric_interpretation}
-          </p>
-        </div>
-      )}
-
-      {/* Execution time */}
-      {bankChartData.metadata?.execution_time_ms && (
-        <div className="flex items-center gap-2 text-xs text-muted">
-          <span>
-            ⚡ Ejecutado en {bankChartData.metadata.execution_time_ms}ms
-          </span>
-        </div>
-      )}
     </div>
   );
 }

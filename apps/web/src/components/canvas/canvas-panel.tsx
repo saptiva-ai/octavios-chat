@@ -51,12 +51,13 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
   );
   // 🆕 Bank chart state for canvas visualization
   const activeBankChart = useCanvasStore((state) => state.activeBankChart);
+  const canvasWidthPercent = useCanvasStore((state) => state.canvasWidthPercent);
+  const setCanvasWidth = useCanvasStore((state) => state.setCanvasWidth);
   const cacheRef = React.useRef(new Map<string, ArtifactRecord>());
 
   const [artifact, setArtifact] = React.useState<ArtifactRecord | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [width, setWidth] = React.useState<number>(480);
   const draggingRef = React.useRef(false);
 
   const handleMouseDown = React.useCallback((e: React.MouseEvent) => {
@@ -68,11 +69,9 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
     const onMove = (e: MouseEvent) => {
       if (!draggingRef.current) return;
       const viewportWidth = window.innerWidth;
-      const newWidth = Math.min(
-        Math.max(viewportWidth - e.clientX, 400),
-        Math.min(800, viewportWidth * 0.5),
-      );
-      setWidth(newWidth);
+      // Calculate width as percentage of viewport (30-70%)
+      const widthPercent = ((viewportWidth - e.clientX) / viewportWidth) * 100;
+      setCanvasWidth(widthPercent); // Store will constrain to 30-70%
     };
 
     const onUp = () => {
@@ -85,7 +84,7 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, []);
+  }, [setCanvasWidth]);
 
   // Keyboard shortcuts for canvas
   React.useEffect(() => {
@@ -271,20 +270,26 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
       <div
         data-testid="canvas-panel"
         data-canvas-panel
+        style={
+          isSidebarOpen && typeof window !== "undefined" && window.innerWidth >= 768
+            ? { width: `${canvasWidthPercent}vw` }
+            : undefined
+        }
         className={cn(
           "h-full bg-surface border-l border-border text-foreground transition-all duration-200 relative flex flex-col overflow-hidden",
           // Responsive width with safe constraints
           "flex-shrink-0",
           isSidebarOpen
-            ? "opacity-100 w-full md:w-[35vw] md:min-w-[320px] md:max-w-[500px]"
+            ? "opacity-100 w-full md:w-auto" // Full width on mobile, use inline style on desktop
             : "opacity-0 pointer-events-none w-0",
           className,
         )}
       >
         {/* Resize handle - only visible on desktop */}
         <div
-          className="hidden md:block absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/50 active:bg-primary transition-colors z-50"
+          className="hidden md:block absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize bg-border/30 hover:bg-primary/50 active:bg-primary transition-colors z-50"
           onMouseDown={handleMouseDown}
+          title="Arrastrar para ajustar el ancho"
         />
         <Header
           reportPdfUrl={reportPdfUrl}

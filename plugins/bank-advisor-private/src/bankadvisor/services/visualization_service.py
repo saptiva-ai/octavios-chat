@@ -121,7 +121,7 @@ class VisualizationService:
                 "title": f"{title} - {month_label}",
                 "yaxis": {
                     "title": "%" if is_ratio else "MDP (Millones de Pesos)",
-                    "tickformat": ".2f" if is_ratio else ",.0f",
+                    "tickformat": ".2f",
                     "ticksuffix": "%" if is_ratio else " MDP"
                 },
                 "margin": {"l": 60, "r": 50, "t": 50, "b": 50},
@@ -189,7 +189,7 @@ class VisualizationService:
                 },
                 "yaxis": {
                     "title": "%" if is_ratio else "MDP (Millones de Pesos)",
-                    "tickformat": ".2f" if is_ratio else ",.0f",
+                    "tickformat": ".2f",
                     "ticksuffix": "%" if is_ratio else " MDP"
                 },
                 "legend": {"orientation": "h", "y": -0.2},
