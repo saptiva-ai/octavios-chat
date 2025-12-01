@@ -712,6 +712,9 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
               let accumulatedContent = "";
               // console.log("[DEBUG] Entering streaming path");
 
+              // 🆕 Phase 2: Track if canvas auto-opened in this session
+              let hasAutoOpenedCanvas = false;
+
               try {
                 const streamGenerator = apiClient.sendChatMessageStream(
                   {
@@ -748,11 +751,26 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                     }
                   } else if (event.type === "bank_chart") {
                     // BA-P0-004: Handle bank_chart event from streaming
-                    console.log("[📊 BANK_CHART] Event received in ChatView:", event.data);
                     // Store bank_chart data in metadata to be included in done event
                     if (!metaData) metaData = {};
                     metaData.bank_chart_data = event.data;
-                    console.log("[📊 BANK_CHART] Stored in metaData:", metaData);
+                  } else if (event.type === "artifact_created") {
+                    // 🆕 Phase 2: Handle artifact_created event (bank_chart persistence)
+                    // Store artifact_id in metadata
+                    if (!metaData) metaData = {};
+                    metaData.artifact_id = event.data.artifact_id;
+
+                    // Auto-open canvas for FIRST chart in session
+                    if (!hasAutoOpenedCanvas && event.data.type === "bank_chart" && metaData.bank_chart_data) {
+                      useCanvasStore.getState().openBankChart(
+                        metaData.bank_chart_data,
+                        event.data.artifact_id,
+                        placeholderId, // Use placeholder ID as message ID
+                        true // autoOpen flag
+                      );
+
+                      hasAutoOpenedCanvas = true;
+                    }
                   } else if (event.type === "chunk") {
                     accumulatedContent += event.data.content;
                     // console.log("[🔍 STREAMING DEBUG] Chunk received - content length:", event.data.content?.length, "accumulated:", accumulatedContent.length);

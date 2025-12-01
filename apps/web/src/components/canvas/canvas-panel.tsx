@@ -9,6 +9,7 @@ import { MarkdownRenderer } from "./markdown-renderer";
 import { MermaidGraph } from "./mermaid-graph";
 import { graphToMermaid } from "@/lib/utils/graph-to-mermaid";
 import { AuditDetailView } from "./views/AuditDetailView";
+import { BankChartCanvasView } from "./BankChartCanvasView";
 
 interface CanvasPanelProps {
   className?: string;
@@ -47,6 +48,8 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
   const activeArtifactData = useCanvasStore(
     (state) => state.activeArtifactData,
   );
+  // 🆕 Bank chart state for canvas visualization
+  const activeBankChart = useCanvasStore((state) => state.activeBankChart);
   const cacheRef = React.useRef(new Map<string, ArtifactRecord>());
 
   const [artifact, setArtifact] = React.useState<ArtifactRecord | null>(null);
@@ -138,7 +141,12 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
   }, [activeArtifactId, reportPdfUrl]);
 
   const renderContent = () => {
-    // New path: render audit detail directly if provided by store
+    // 🆕 Priority 1: activeBankChart (bank chart visualizations)
+    if (activeBankChart) {
+      return <BankChartCanvasView data={activeBankChart} />;
+    }
+
+    // Priority 2: render audit detail directly if provided by store
     if (activeArtifactData) {
       // Accept plain payload or wrapped {type, payload}
       const payload = (activeArtifactData as any).payload || activeArtifactData;
@@ -204,6 +212,20 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
           return <MermaidGraph chart={chart} />;
         } catch {
           return <GraphFallback data={artifact.content} />;
+        }
+      case "bank_chart": // 🆕 Case for persisted bank charts
+        try {
+          const chartData =
+            typeof artifact.content === "string"
+              ? JSON.parse(artifact.content)
+              : artifact.content;
+          return <BankChartCanvasView data={chartData} />;
+        } catch {
+          return (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+              Error al cargar gráfica. El formato de datos no es válido.
+            </div>
+          );
         }
       default:
         return (

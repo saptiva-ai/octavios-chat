@@ -148,6 +148,7 @@ export type ArtifactType = "markdown" | "code" | "graph" | "bank_chart";
 
 // BankAdvisor chart data structure (BA-P0-003)
 export interface BankChartData {
+  type?: "bank_chart";
   title?: string;
   metric_name: string;
   bank_names: string[];
@@ -181,6 +182,21 @@ export interface BankChartData {
   };
   data_as_of: string;
   source: string; // "bank-advisor-mcp"
+  // 🆕 Enriched metadata from backend (Phase 2)
+  metadata?: {
+    sql_generated?: string;
+    metric_interpretation?: string;
+    pipeline?: string;
+    execution_time_ms?: number;
+    [key: string]: any;
+  };
+}
+
+// 🆕 Canvas-Chart synchronization state (Phase 2)
+export interface CanvasChartSync {
+  artifactId: string;
+  messageId: string;
+  isActive: boolean;
 }
 
 export interface ArtifactVersion {

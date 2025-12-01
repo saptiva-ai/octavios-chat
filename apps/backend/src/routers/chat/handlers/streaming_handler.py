@@ -48,6 +48,8 @@ from ....services.empty_response_handler import (
     EmptyResponseScenario,
     ensure_non_empty_content
 )
+from ....services.artifact_service import get_artifact_service
+from ....schemas.bank_chart import BankChartArtifactRequest
 
 logger = structlog.get_logger(__name__)
 
@@ -1586,6 +1588,58 @@ NO digas que no tienes información - los datos YA ESTÁN disponibles en el grá
                                 "Sent bank_chart event to stream",
                                 metric=chart_data_dict.get("metric_name")
                             )
+
+                            # 🆕 Persist bank_chart artifact in background
+                            try:
+                                artifact_service = get_artifact_service()
+
+                                # Extract metadata for enrichment
+                                metadata = chart_data_dict.get("metadata", {})
+                                sql_query = metadata.get("sql_generated")
+                                metric_interpretation = metadata.get("metric_interpretation")
+
+                                # Create artifact request
+                                artifact_request = BankChartArtifactRequest(
+                                    user_id=context.user_id,
+                                    session_id=str(chat_session.id),
+                                    chart_data=chart_data_dict,
+                                    sql_query=sql_query,
+                                    metric_interpretation=metric_interpretation,
+                                )
+
+                                # Persist artifact
+                                artifact = await artifact_service.create_bank_chart_artifact(
+                                    artifact_request
+                                )
+
+                                # Send artifact_created event to frontend
+                                await event_queue.put({
+                                    "event": "artifact_created",
+                                    "data": json.dumps({
+                                        "artifact_id": artifact.id,
+                                        "type": "bank_chart",
+                                        "title": artifact.title,
+                                        "created_at": artifact.created_at.isoformat(),
+                                    })
+                                })
+
+                                logger.info(
+                                    "bank_chart_artifact_persisted",
+                                    artifact_id=artifact.id,
+                                    session_id=str(chat_session.id),
+                                    metric=chart_data_dict.get("metric_name"),
+                                )
+
+                            except Exception as artifact_exc:
+                                logger.error(
+                                    "Failed to persist bank_chart artifact",
+                                    error=str(artifact_exc),
+                                    exc_type=type(artifact_exc).__name__,
+                                    session_id=str(chat_session.id),
+                                    exc_info=True
+                                )
+                                # Don't block stream on artifact persistence failure
+                                # User will still see the chart preview in chat
 
                     # FIX-001: Use resolved system_prompt (not hardcoded system_message)
                     # Use model_params for temperature/max_tokens (registry overrides context)

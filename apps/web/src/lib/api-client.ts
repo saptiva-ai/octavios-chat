@@ -590,6 +590,7 @@ class ApiClient {
         data: { chat_id: string; user_message_id: string; model: string };
       }
     | { type: "bank_chart"; data: any }
+    | { type: "artifact_created"; data: { artifact_id: string; type: string; title: string; created_at: string } }
     | { type: "chunk"; data: { content: string } }
     | { type: "done"; data: ChatResponse }
     | { type: "error"; data: { error: string } },
@@ -787,20 +788,23 @@ class ApiClient {
 
                 // Use the event type from the "event:" line
                 if (currentEvent === "meta") {
-                  console.log("[🔍 SSE] Meta event received:", parsed);
+                  console.warn("[🔍 SSE] Meta event received:", parsed);
                   yield { type: "meta", data: parsed };
                 } else if (currentEvent === "bank_chart") {
-                  console.log("[📊 BANK_CHART] Event received from SSE:", parsed);
+                  console.warn("[📊 BANK_CHART] Event received from SSE:", parsed);
                   yield { type: "bank_chart", data: parsed };
                 } else if (currentEvent === "chunk") {
                   // Chunk logging disabled to avoid spam
                   yield { type: "chunk", data: parsed };
                 } else if (currentEvent === "done") {
-                  console.log("[🔍 SSE] Done event received");
+                  console.warn("[🔍 SSE] Done event received");
                   yield { type: "done", data: parsed as ChatResponse };
                 } else if (currentEvent === "error") {
-                  console.log("[❌ SSE] Error event received:", parsed);
+                  console.warn("[❌ SSE] Error event received:", parsed);
                   yield { type: "error", data: parsed };
+                } else if (currentEvent === "artifact_created") {
+                  console.warn("[🎨 ARTIFACT_CREATED] Event received:", parsed);
+                  yield { type: "artifact_created", data: parsed };
                 }
 
                 // Reset current event after processing

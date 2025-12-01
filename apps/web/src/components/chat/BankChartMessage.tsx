@@ -29,7 +29,7 @@ export interface BankChartMessageProps {
 export function BankChartMessage({ data, className }: BankChartMessageProps) {
   const [isExpanded, setIsExpanded] = React.useState(false);
 
-  console.log("[📊 BANK_CHART_MESSAGE] Rendering with data:", {
+  console.warn("[📊 BANK_CHART_MESSAGE] Rendering with data:", {
     hasPlotlyConfig: !!data.plotly_config,
     plotlyDataLength: data.plotly_config?.data?.length,
     plotlyData: data.plotly_config?.data,

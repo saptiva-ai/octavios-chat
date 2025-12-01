@@ -2,7 +2,7 @@
 Artifact model for user-generated canvases and research outputs.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 from uuid import uuid4
@@ -52,6 +52,9 @@ class Artifact(Document):
     )
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: Optional[datetime] = Field(
+        None, description="TTL timestamp for automatic cleanup"
+    )
 
     class Settings:
         name = "artifacts"
@@ -60,6 +63,8 @@ class Artifact(Document):
             "chat_session_id",
             "created_at",
             [("user_id", 1), ("created_at", -1)],
+            [("chat_session_id", 1), ("created_at", -1)],
+            "expires_at",  # TTL index for auto-cleanup
         ]
 
     def add_version(self, content: Union[str, Dict[str, Any]]) -> ArtifactVersion:
@@ -70,4 +75,54 @@ class Artifact(Document):
         self.content = content
         self.updated_at = datetime.utcnow()
         return version
+
+    @classmethod
+    def create_bank_chart(
+        cls,
+        user_id: str,
+        session_id: str,
+        chart_data: Dict[str, Any],
+        title: Optional[str] = None,
+        ttl_days: int = 30,
+    ) -> "Artifact":
+        """
+        Factory method to create a bank_chart artifact.
+
+        Args:
+            user_id: Owner user ID
+            session_id: Associated chat session ID
+            chart_data: BankChartData dict with plotly_config, metadata, etc.
+            title: Optional custom title (auto-generated if None)
+            ttl_days: Days until artifact expires (default 30)
+
+        Returns:
+            Artifact instance ready to be inserted
+
+        Example:
+            >>> artifact = Artifact.create_bank_chart(
+            ...     user_id="user123",
+            ...     session_id="session456",
+            ...     chart_data={
+            ...         "metric_name": "imor",
+            ...         "bank_names": ["INVEX", "Sistema"],
+            ...         "plotly_config": {...},
+            ...         "metadata": {"sql_generated": "SELECT ...", ...}
+            ...     }
+            ... )
+            >>> await artifact.insert()
+        """
+        metric_name = chart_data.get("metric_name", "metric")
+        bank_names = chart_data.get("bank_names", [])
+        banks_str = ", ".join(bank_names) if bank_names else "Banks"
+
+        auto_title = title or f"Gráfica: {metric_name.upper()} - {banks_str}"
+
+        return cls(
+            user_id=user_id,
+            chat_session_id=session_id,
+            title=auto_title,
+            type=ArtifactType.BANK_CHART,
+            content=chart_data,
+            expires_at=datetime.utcnow() + timedelta(days=ttl_days),
+        )
 

@@ -67,7 +67,7 @@ interface BankChartViewerProps {
 }
 
 export function BankChartViewer({ data, className }: BankChartViewerProps) {
-  console.log("[📊 BANK_CHART_VIEWER] Rendering with data:", data);
+  console.warn("[📊 BANK_CHART_VIEWER] Rendering with data:", data);
 
   const {
     plotly_config,
@@ -82,7 +82,7 @@ export function BankChartViewer({ data, className }: BankChartViewerProps) {
   const [showSql, setShowSql] = React.useState(false);
   const sqlQuery = metadata?.sql_generated;
 
-  console.log("[📊 BANK_CHART_VIEWER] Chart config:", {
+  console.warn("[📊 BANK_CHART_VIEWER] Chart config:", {
     metric: metric_name,
     banks: bank_names,
     traces: plotly_config?.data?.length,

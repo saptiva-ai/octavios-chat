@@ -8,6 +8,7 @@ import { StreamingMessage } from "./StreamingMessage";
 import { FileReviewMessage } from "./FileReviewMessage";
 import { MessageAuditCard } from "./MessageAuditCard";
 import { BankChartMessage } from "./BankChartMessage";
+import { BankChartPreview } from "./BankChartPreview";
 import { PreviewAttachment } from "./PreviewAttachment";
 import { featureFlags } from "../../lib/feature-flags";
 import type {
@@ -21,6 +22,7 @@ import type { FileAttachment } from "../../types/files";
 import { ArtifactCard } from "./artifact-card";
 import { parseToolCalls } from "../../lib/tool-parser";
 import { AuditSummaryCard } from "./artifacts/AuditSummaryCard";
+import { useCanvasStore } from "@/lib/stores/canvas-store";
 
 export interface ChatMessageProps {
   id?: string;
@@ -98,6 +100,10 @@ export function ChatMessage({
 }: ChatMessageProps) {
   const [copied, setCopied] = React.useState(false);
 
+  // 🆕 Canvas highlight synchronization (Phase 2)
+  const activeMessageId = useCanvasStore((state) => state.activeMessageId);
+  const isActiveInCanvas = activeMessageId === id;
+
   const isFileReview = kind === "file-review";
 
   const isUser = role === "user";
@@ -131,12 +137,12 @@ export function ChatMessage({
   // Fetch artifact content for bank_chart types
   React.useEffect(() => {
     const fetchArtifacts = async () => {
-      console.log("[🎨 ARTIFACTS] Checking artifact invocations:", artifactInvocations);
+      console.warn("[🎨 ARTIFACTS] Checking artifact invocations:", artifactInvocations);
       for (const inv of artifactInvocations) {
         const artifactId = inv.result?.id as string;
         const artifactType = inv.result?.type as string;
 
-        console.log(`[🎨 ARTIFACTS] Found artifact: type=${artifactType}, id=${artifactId}`);
+        console.warn(`[🎨 ARTIFACTS] Found artifact: type=${artifactType}, id=${artifactId}`);
 
         // Only fetch if it's a bank_chart and we haven't loaded it yet
         if (
@@ -145,11 +151,11 @@ export function ChatMessage({
           !artifactData[artifactId]
         ) {
           try {
-            console.log(`[📊 BANK_CHART] Fetching artifact content for ${artifactId}`);
+            console.warn(`[📊 BANK_CHART] Fetching artifact content for ${artifactId}`);
             const response = await fetch(`/api/artifacts/${artifactId}`);
             if (response.ok) {
               const data = await response.json();
-              console.log(`[📊 BANK_CHART] Artifact content loaded:`, data.content);
+              console.warn(`[📊 BANK_CHART] Artifact content loaded:`, data.content);
               setArtifactData((prev) => ({
                 ...prev,
                 [artifactId]: data.content,
@@ -208,7 +214,7 @@ export function ChatMessage({
 
   // Debug logging for bank chart data
   if (metadata?.bank_chart_data) {
-    console.log("[🔍 BANK_CHART DEBUG] Found bank_chart_data in metadata:", {
+    console.warn("[🔍 BANK_CHART DEBUG] Found bank_chart_data in metadata:", {
       isBankChart,
       hasData: !!bankChartData,
       isAssistant,
@@ -284,6 +290,7 @@ export function ChatMessage({
         "group flex gap-3 px-4 py-6 transition-colors duration-150",
         isUser ? "flex-row-reverse" : "flex-row",
         "hover:bg-white/5",
+        isActiveInCanvas && "ring-2 ring-primary/40 bg-primary/5", // 🆕 Highlight when active in canvas
         className,
       )}
       role="article"
@@ -438,10 +445,12 @@ export function ChatMessage({
             </div>
           )}
 
-        {/* Bank chart visualization (BA-P0-002) */}
+        {/* Bank chart visualization (BA-P0-002) - 🆕 Phase 2: Preview mode */}
         {isAssistant && bankChartData && (
-          <BankChartMessage
+          <BankChartPreview
             data={bankChartData}
+            artifactId={(metadata as any)?.artifact_id || (metadata as any)?.bank_chart_artifact_id || "temp"}
+            messageId={id || "unknown"}
             className={cn(isUser ? "ml-auto" : "")}
           />
         )}
@@ -459,7 +468,7 @@ export function ChatMessage({
               const artifactType = (inv.result?.type as any) || "markdown";
               const content = artifactData[artifactId];
 
-              console.log(`[🎨 RENDER] Rendering artifact card: id=${artifactId}, type=${artifactType}, hasContent=${!!content}`);
+              console.warn(`[🎨 RENDER] Rendering artifact card: id=${artifactId}, type=${artifactType}, hasContent=${!!content}`);
 
               return (
                 <ArtifactCard
