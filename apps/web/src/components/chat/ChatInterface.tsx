@@ -206,16 +206,45 @@ export function ChatInterface({
     "bank_advisor" as ToolId,
   );
 
+  // DEBUG: Log state for troubleshooting
+  React.useEffect(() => {
+    logDebug("[BankAdvisorHints DEBUG]", {
+      selectedTools,
+      isBankAdvisorEnabled,
+      currentChatId,
+      bankAdvisorHintsVisible,
+      shouldShow: currentChatId
+        ? shouldShowBankAdvisorHints(currentChatId)
+        : null,
+    });
+  }, [
+    selectedTools,
+    isBankAdvisorEnabled,
+    currentChatId,
+    bankAdvisorHintsVisible,
+    shouldShowBankAdvisorHints,
+  ]);
+
   // Show hints when BankAdvisor is activated for the first time in this conversation
   React.useEffect(() => {
     if (isBankAdvisorEnabled && currentChatId) {
       const shouldShow = shouldShowBankAdvisorHints(currentChatId);
+      logDebug("[BankAdvisorHints] Checking if should show", {
+        isBankAdvisorEnabled,
+        currentChatId,
+        shouldShow,
+        bankAdvisorHintsVisible,
+      });
       if (shouldShow && !bankAdvisorHintsVisible) {
+        logDebug("[BankAdvisorHints] ✅ Showing hints!");
         setBankAdvisorHintsVisible(true);
       }
     } else {
       // Hide hints when BankAdvisor is deactivated
       if (bankAdvisorHintsVisible) {
+        logDebug(
+          "[BankAdvisorHints] ❌ Hiding hints (BankAdvisor deactivated)",
+        );
         setBankAdvisorHintsVisible(false);
       }
     }
@@ -379,7 +408,12 @@ export function ChatInterface({
     if (currentChatId) {
       markBankAdvisorHintsSeen(currentChatId);
     }
-  }, [currentChatId, markBankAdvisorHintsSeen]);
+  }, [
+    currentChatId,
+    markBankAdvisorHintsSeen,
+    bankAdvisorHintsVisible,
+    isBankAdvisorEnabled,
+  ]);
 
   const handleSend = React.useCallback(async () => {
     const trimmed = inputValue.trim();
