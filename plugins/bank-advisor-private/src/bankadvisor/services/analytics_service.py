@@ -577,11 +577,53 @@ class AnalyticsService:
 
         display_name = config.get_metric_display_name(metric_id)
 
+        # Calculate time range and metadata from data
+        time_range = {}
+        bank_names = []
+        data_as_of = None
+        summary = None
+
+        if len(df) > 0:
+            df_sorted = df.sort_values('fecha')
+            min_date = df_sorted['fecha'].min()
+            max_date = df_sorted['fecha'].max()
+            time_range = {
+                "start": str(min_date),
+                "end": str(max_date)
+            }
+            bank_names = df['banco'].unique().tolist()
+            data_as_of = str(max_date)
+
+            # Calculate summary statistics for the primary bank (first in list)
+            primary_bank = bank_names[0] if bank_names else None
+            if primary_bank:
+                bank_df = df[df['banco'] == primary_bank].sort_values('fecha')
+                if len(bank_df) >= 2:
+                    current_value = bank_df.iloc[-1]['value']
+                    previous_value = bank_df.iloc[-2]['value']
+
+                    # Calculate percentage change
+                    change_pct = None
+                    if previous_value and previous_value != 0:
+                        change_pct = ((current_value - previous_value) / previous_value) * 100
+
+                    summary = {
+                        "current_value": float(current_value) if current_value else None,
+                        "previous_value": float(previous_value) if previous_value else None,
+                        "change_pct": round(change_pct, 2) if change_pct is not None else None,
+                        "period_end": str(max_date),
+                        "bank": primary_bank
+                    }
+
         return {
             "type": "data",
             "visualization": "line_chart",
             "metric_name": display_name,
             "metric_type": metric_type,  # Include type for context
+            "bank_names": bank_names,  # List of banks in chart
+            "time_range": time_range,  # Add time range for UI header
+            "data_as_of": data_as_of,  # Last data update
+            "summary": summary,  # Summary stats for LLM/UI alignment
             "plotly_config": {
                 "data": traces,
                 "layout": {
@@ -619,11 +661,40 @@ class AnalyticsService:
             ("Valor: %{y:.2f}%<extra></extra>" if is_ratio else "Valor: %{y:,.2f} MDP<extra></extra>")
         )
 
+        # Calculate metadata from data
+        time_range = {}
+        bank_names = []
+        data_as_of = None
+        summary = None
+
+        if len(df) > 0:
+            df_sorted = df.sort_values('fecha')
+            max_date = df_sorted['fecha'].max()
+            time_range = {
+                "start": str(df_sorted['fecha'].min()),
+                "end": str(max_date)
+            }
+            bank_names = latest['banco'].tolist()
+            data_as_of = str(max_date)
+
+            # For comparison, summary shows the highest value bank
+            if len(latest) > 0:
+                top_bank = latest.iloc[0]
+                summary = {
+                    "current_value": float(top_bank['value']) if top_bank['value'] else None,
+                    "period_end": str(max_date),
+                    "bank": top_bank['banco']
+                }
+
         return {
             "type": "data",
             "visualization": "bar_chart",
             "metric_name": display_name,
             "metric_type": metric_type,
+            "bank_names": bank_names,  # List of banks in chart
+            "time_range": time_range,  # Add time range for UI header
+            "data_as_of": data_as_of,  # Last data update
+            "summary": summary,  # Summary stats for LLM/UI alignment
             "plotly_config": {
                 "data": [{
                     "x": latest['banco'].tolist(),

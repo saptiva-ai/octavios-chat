@@ -241,7 +241,7 @@ export function BankChartCanvasView({
     ...safeLayout,
     autosize: true,
     height: 500, // Increased from 320px
-    margin: { l: 50, r: 15, t: 15, b: 50 },
+    margin: { l: 90, r: 15, t: 15, b: 50 }, // Increased left margin to prevent Y-axis tick clipping
     paper_bgcolor: "rgba(0,0,0,0)", // Transparent
     plot_bgcolor: "rgba(0,0,0,0)", // Transparent
     font: { color: textColor, size: 12 },
@@ -253,6 +253,7 @@ export function BankChartCanvasView({
     },
     yaxis: {
       ...(safeLayout.yaxis || {}),
+      automargin: true, // Let Plotly automatically adjust margin for Y-axis labels
       gridcolor: gridColor,
       linecolor: borderColor,
       tickfont: { color: textColor },
