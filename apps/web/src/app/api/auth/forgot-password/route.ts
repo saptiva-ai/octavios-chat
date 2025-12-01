@@ -28,6 +28,8 @@ export async function POST(request: NextRequest) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        // Set Host header to match backend service name
+        Host: "backend:8000",
       },
       body: JSON.stringify(body),
     });
