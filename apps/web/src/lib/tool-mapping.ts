@@ -5,7 +5,8 @@ type ToolKey =
   | "deep_research"
   | "code_analysis"
   | "document_analysis"
-  | "create_artifact";
+  | "create_artifact"
+  | "bank-advisor";
 
 const LEGACY_KEY_TO_TOOL_ID_MAP: Record<ToolKey, ToolId> = {
   web_search: "web-search",
@@ -13,6 +14,7 @@ const LEGACY_KEY_TO_TOOL_ID_MAP: Record<ToolKey, ToolId> = {
   code_analysis: "agent-mode",
   document_analysis: "canvas",
   create_artifact: "canvas",
+  "bank-advisor": "bank-advisor",
 };
 
 const TOOL_ID_TO_LEGACY_KEY_MAP: Partial<Record<ToolId, ToolKey>> = {
@@ -20,6 +22,7 @@ const TOOL_ID_TO_LEGACY_KEY_MAP: Partial<Record<ToolId, ToolKey>> = {
   "deep-research": "deep_research",
   "agent-mode": "code_analysis",
   canvas: "create_artifact",
+  "bank-advisor": "bank-advisor",
 };
 
 export const KNOWN_TOOL_KEYS: ToolKey[] = Object.keys(

@@ -761,26 +761,37 @@ class StreamingHandler:
             )
 
             # BA-P0-004: Check for bank analytics query BEFORE streaming
-            from ....services.tool_execution_service import ToolExecutionService
-            logger.info(
-                "Checking for bank analytics query",
-                message_preview=context.message[:100],
-                request_id=context.request_id
-            )
-            bank_chart_data = await ToolExecutionService.invoke_bank_analytics(
-                message=context.message,
-                user_id=user_id
-            )
-            # Note: bank_chart_data will be passed to _stream_chat_response
-            if bank_chart_data:
+            # Only invoke if bank-advisor tool is explicitly enabled by user
+            bank_chart_data = None
+            bank_advisor_enabled = context.tools_enabled.get("bank-advisor", False) or context.tools_enabled.get("bank_analytics", False)
+
+            if bank_advisor_enabled:
+                from ....services.tool_execution_service import ToolExecutionService
                 logger.info(
-                    "Bank analytics result will be streamed",
-                    metric=bank_chart_data.get("metric_name"),
+                    "Bank advisor enabled - checking for bank analytics query",
+                    message_preview=context.message[:100],
                     request_id=context.request_id
                 )
+                bank_chart_data = await ToolExecutionService.invoke_bank_analytics(
+                    message=context.message,
+                    user_id=user_id
+                )
+                # Note: bank_chart_data will be passed to _stream_chat_response
+                if bank_chart_data:
+                    logger.info(
+                        "Bank analytics result will be streamed",
+                        metric=bank_chart_data.get("metric_name"),
+                        request_id=context.request_id
+                    )
+                else:
+                    logger.info(
+                        "No bank analytics data returned",
+                        request_id=context.request_id
+                    )
             else:
-                logger.info(
-                    "No bank analytics data returned",
+                logger.debug(
+                    "Bank advisor not enabled - skipping bank analytics check",
+                    tools_enabled=list(context.tools_enabled.keys()),
                     request_id=context.request_id
                 )
 
