@@ -930,6 +930,18 @@ async def _try_nl2sql_pipeline(user_query: str, mode: str) -> Optional[Dict[str,
     config = get_config()
     metric_type = config.get_metric_type(spec.metric.lower())
 
+    # Convert values based on metric type
+    is_ratio = metric_type == "ratio"
+    for month in months_data:
+        for item in month["data"]:
+            if item["value"] is not None:
+                if is_ratio:
+                    # Convert ratio to percentage
+                    item["value"] = item["value"] * 100
+                else:
+                    # Convert currency from pesos to millions (MDP)
+                    item["value"] = item["value"] / 1_000_000
+
     # Add section_config with mode based on template
     section_config = {
         "title": title,
