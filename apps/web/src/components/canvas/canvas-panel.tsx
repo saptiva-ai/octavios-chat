@@ -272,7 +272,7 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
         data-testid="canvas-panel"
         data-canvas-panel
         className={cn(
-          "h-full bg-[#0b1021] border-l border-white/10 text-white transition-all duration-200 relative",
+          "h-full bg-[#0F172A] border-l border-slate-800 text-white transition-all duration-200 relative",
           // Responsive width: 40% of viewport on all screens
           "flex-shrink-0",
           isSidebarOpen

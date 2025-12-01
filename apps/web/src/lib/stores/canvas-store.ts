@@ -236,7 +236,6 @@ export const useCanvasStore = create<CanvasState>()(
     }),
     {
       name: "canvas-store",
-      partialPersist: true,
       // Only persist minimal state to avoid large localStorage entries
       partialize: (state) => ({
         isSidebarOpen: state.isSidebarOpen,

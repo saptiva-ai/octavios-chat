@@ -263,7 +263,7 @@ class ApiClient {
       return (
         process.env.NEXT_PUBLIC_API_URL ||
         process.env.API_BASE_URL ||
-        "http://localhost:8001"
+        "http://localhost:8000"
       );
     }
 

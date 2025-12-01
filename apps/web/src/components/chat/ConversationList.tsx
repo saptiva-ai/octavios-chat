@@ -301,12 +301,17 @@ export function ConversationList({
           <li key={session.id} {...keyboardNav.getItemProps(session, index)}>
             <div
               className={cn(
-                "group relative flex w-full flex-col rounded-lg border border-transparent px-3 py-2 transition-all duration-150",
-                "bg-transparent hover:bg-white/5",
-                isActive && "bg-white/10",
-                isFocused && !isActive && "ring-1 ring-white/20 bg-white/5",
+                "group relative flex w-full flex-col rounded-lg transition-all duration-150",
+                // Saptiva AI Design: Solid active state with teal border
+                isActive
+                  ? "border-l-4 border-teal-400 bg-slate-800 pl-2.5 pr-3"
+                  : "border-l-4 border-transparent bg-transparent pl-2.5 pr-3",
+                !isActive && "hover:bg-slate-800/30",
+                isFocused &&
+                  !isActive &&
+                  "ring-1 ring-teal-400/40 bg-slate-800/20",
                 // P0-UX-HIST-001: Highlight new sessions with animation
-                isNew && "animate-highlight-fade bg-white/10",
+                isNew && "animate-highlight-fade bg-slate-800/50",
               )}
               onMouseEnter={() => setHoveredChatId(session.id)}
               onMouseLeave={() => setHoveredChatId(null)}
@@ -326,7 +331,10 @@ export function ConversationList({
                     {/* Pin indicator - Classic office pushpin */}
                     {isPinned && (
                       <svg
-                        className="h-3 w-3 text-saptiva-mint flex-shrink-0"
+                        className={cn(
+                          "h-3 w-3 flex-shrink-0",
+                          isActive ? "text-teal-400" : "text-teal-400/70",
+                        )}
                         fill="currentColor"
                         viewBox="0 0 24 24"
                       >
@@ -347,7 +355,14 @@ export function ConversationList({
                       />
                     ) : (
                       <>
-                        <span className="text-sm font-medium text-white truncate">
+                        <span
+                          className={cn(
+                            "text-sm truncate",
+                            isActive
+                              ? "font-medium text-white"
+                              : "font-normal text-slate-400",
+                          )}
+                        >
                           {session.title || "Conversación sin título"}
                         </span>
                       </>
@@ -402,7 +417,7 @@ export function ConversationList({
                     className={cn(
                       "h-7 w-7 flex items-center justify-center rounded transition-colors",
                       isPinned
-                        ? "text-saptiva-mint hover:text-saptiva-mint/80 hover:bg-surface-2"
+                        ? "text-teal-400 hover:text-teal-400/80 hover:bg-surface-2"
                         : "text-text-muted hover:text-text hover:bg-surface-2",
                     )}
                     title={isPinned ? "Desfijar" : "Fijar"}
@@ -452,7 +467,7 @@ export function ConversationList({
     return (
       <div
         className={cn("flex h-full w-full flex-col bg-sidebar", className)}
-        style={{ backgroundColor: "#121A21" }}
+        style={{ backgroundColor: "#0B1120" }}
       >
         <div className="flex items-center justify-between gap-2 px-3 py-3">
           {/* Layout: [<] [Historial OctaviOS] [+] */}
@@ -462,7 +477,7 @@ export function ConversationList({
             <button
               type="button"
               onClick={onCollapse}
-              className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-saptiva-light transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-saptiva-mint/60 lg:flex"
+              className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-saptiva-light transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/60 lg:flex"
               aria-label={
                 isCollapsed ? "Expandir historial" : "Colapsar historial"
               }
@@ -519,7 +534,7 @@ export function ConversationList({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-saptiva-light transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-saptiva-mint/60 lg:hidden"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-saptiva-light transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/60 lg:hidden"
                   aria-label="Cerrar historial"
                 >
                   <svg
@@ -771,7 +786,7 @@ export function ConversationList({
   return (
     <div
       className={cn("flex h-full flex-col bg-sidebar text-text", className)}
-      style={{ backgroundColor: "#121A21" }}
+      style={{ backgroundColor: "#0B1120" }}
     >
       <div
         className={cn(
@@ -917,7 +932,7 @@ export function ConversationList({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 text-saptiva-light transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-saptiva-mint/60"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 text-saptiva-light transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/60"
                   aria-label="Cerrar historial"
                 >
                   <svg
@@ -945,10 +960,10 @@ export function ConversationList({
                 onClick={handleCreate}
                 disabled={isCreatingConversation || !canCreateNew}
                 className={cn(
-                  "flex h-10 w-10 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-saptiva-mint/60",
+                  "flex h-10 w-10 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/60",
                   isCreatingConversation || !canCreateNew
-                    ? "bg-saptiva-mint/10 text-saptiva-mint/60 cursor-not-allowed"
-                    : "bg-saptiva-mint/20 text-saptiva-mint hover:scale-[1.02] hover:bg-saptiva-mint/30",
+                    ? "bg-teal-400/10 text-teal-400/60 cursor-not-allowed"
+                    : "bg-teal-400/20 text-teal-400 hover:scale-[1.02] hover:bg-teal-400/30",
                 )}
                 aria-label={
                   isCreatingConversation

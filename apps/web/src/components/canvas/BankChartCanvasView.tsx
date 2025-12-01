@@ -44,8 +44,8 @@ export function BankChartCanvasView({
   className,
 }: BankChartCanvasViewProps) {
   const [activeTab, setActiveTab] = useState<
-    "chart" | "sql" | "interpretation"
-  >("chart");
+    "visualization" | "data" | "query"
+  >("visualization");
   const plotContainerRef = useRef<HTMLDivElement>(null);
   const [plotKey, setPlotKey] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -120,11 +120,11 @@ export function BankChartCanvasView({
     if (typeof window === "undefined") return;
 
     try {
-      const Plotly = await import("plotly.js-dist-min");
+      const Plotly = await import("plotly.js-dist-min" as any);
       const plotElement = plotContainerRef.current?.querySelector(".plotly");
 
       if (plotElement) {
-        await Plotly.downloadImage(plotElement as any, {
+        await (Plotly as any).downloadImage(plotElement as any, {
           format: "png",
           width: 1200,
           height: 800,
@@ -132,7 +132,7 @@ export function BankChartCanvasView({
         });
       }
     } catch (error) {
-      console.error("Failed to download PNG:", error);
+      // Silently handle error
     }
   };
 
@@ -177,7 +177,7 @@ export function BankChartCanvasView({
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error("Failed to export CSV:", error);
+      // Silently handle error
     }
   };
 
@@ -220,7 +220,7 @@ export function BankChartCanvasView({
   return (
     <div className={cn("flex h-full flex-col space-y-4", className)}>
       {/* Metadata Header */}
-      <div className="space-y-3 rounded-lg border border-white/10 bg-white/5 p-4">
+      <div className="space-y-3 rounded-lg border border-slate-800 bg-slate-950 p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <ChartBarIcon className="h-5 w-5 text-primary" />
@@ -233,7 +233,7 @@ export function BankChartCanvasView({
           <div className="flex items-center gap-2">
             <button
               onClick={handleDownloadPNG}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white/70 hover:text-white bg-white/5 hover:bg-white/10 rounded-md transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-md transition-colors"
               title="Descargar como PNG"
             >
               <ArrowDownTrayIcon className="h-4 w-4" />
@@ -241,7 +241,7 @@ export function BankChartCanvasView({
             </button>
             <button
               onClick={handleExportCSV}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white/70 hover:text-white bg-white/5 hover:bg-white/10 rounded-md transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-md transition-colors"
               title="Exportar a CSV"
             >
               <TableCellsIcon className="h-4 w-4" />
@@ -251,19 +251,19 @@ export function BankChartCanvasView({
         </div>
 
         <div className="grid grid-cols-2 gap-3 text-xs">
-          <div className="flex items-center gap-2 text-white/60">
-            <BuildingOffice2Icon className="h-4 w-4" />
+          <div className="flex items-center gap-2 text-slate-400">
+            <BuildingOffice2Icon className="h-4 w-4 text-teal-500" />
             <span>{data.bank_names.join(", ")}</span>
           </div>
-          <div className="flex items-center gap-2 text-white/60">
-            <CalendarDaysIcon className="h-4 w-4" />
+          <div className="flex items-center gap-2 text-slate-400">
+            <CalendarDaysIcon className="h-4 w-4 text-teal-500" />
             <span>
               {new Date(data.time_range.start).toLocaleDateString()} -{" "}
               {new Date(data.time_range.end).toLocaleDateString()}
             </span>
           </div>
-          <div className="flex items-center gap-2 text-white/60">
-            <CircleStackIcon className="h-4 w-4" />
+          <div className="flex items-center gap-2 text-slate-400">
+            <CircleStackIcon className="h-4 w-4 text-teal-500" />
             <span>
               Actualizado: {new Date(data.data_as_of).toLocaleString()}
             </span>
@@ -271,94 +271,194 @@ export function BankChartCanvasView({
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 border-b border-white/10">
+      {/* Saptiva AI Segmented Control */}
+      <div className="flex gap-1 p-1 bg-slate-900/50 rounded-lg border border-slate-800">
         <button
-          onClick={() => setActiveTab("chart")}
+          onClick={() => setActiveTab("visualization")}
           className={cn(
-            "px-4 py-2 text-sm font-medium transition-colors",
-            activeTab === "chart"
-              ? "border-b-2 border-primary text-primary"
-              : "text-white/60 hover:text-white",
+            "flex-1 px-4 py-2 text-sm font-medium transition-all rounded-md",
+            activeTab === "visualization"
+              ? "bg-slate-800 text-white shadow-sm"
+              : "text-slate-400 hover:text-slate-200",
           )}
         >
-          Gráfica
+          Visualización
+        </button>
+        <button
+          onClick={() => setActiveTab("data")}
+          className={cn(
+            "flex-1 px-4 py-2 text-sm font-medium transition-all rounded-md",
+            activeTab === "data"
+              ? "bg-slate-800 text-white shadow-sm"
+              : "text-slate-400 hover:text-slate-200",
+          )}
+        >
+          Datos
         </button>
         {sanitizedSQL && (
           <button
-            onClick={() => setActiveTab("sql")}
+            onClick={() => setActiveTab("query")}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors",
-              activeTab === "sql"
-                ? "border-b-2 border-primary text-primary"
-                : "text-white/60 hover:text-white",
+              "flex-1 px-4 py-2 text-sm font-medium transition-all rounded-md",
+              activeTab === "query"
+                ? "bg-slate-800 text-white shadow-sm"
+                : "text-slate-400 hover:text-slate-200",
             )}
           >
-            <CodeBracketIcon className="h-4 w-4" />
-            SQL Query
-          </button>
-        )}
-        {sanitizedInterpretation && (
-          <button
-            onClick={() => setActiveTab("interpretation")}
-            className={cn(
-              "px-4 py-2 text-sm font-medium transition-colors",
-              activeTab === "interpretation"
-                ? "border-b-2 border-primary text-primary"
-                : "text-white/60 hover:text-white",
-            )}
-          >
-            Interpretación
+            Query Inspector
           </button>
         )}
       </div>
 
       {/* Tab Content */}
-      <div className="flex-1 overflow-y-auto">
-        {activeTab === "chart" && (
-          <div
-            ref={plotContainerRef}
-            className="rounded-lg border border-white/10 bg-white/5 p-4"
-          >
-            <Plot
-              key={plotKey}
-              data={data.plotly_config.data as any}
-              layout={plotlyLayout as any}
-              config={{
-                responsive: true,
-                displayModeBar: true, // Show toolbar in canvas
-                modeBarButtonsToRemove: ["sendDataToCloud"],
-                displaylogo: false,
-              }}
-              className="w-full"
-              useResizeHandler
-              style={{ width: "100%", height: "100%" }}
-            />
+      <div className="flex-1 overflow-y-auto space-y-4">
+        {activeTab === "visualization" && (
+          <>
+            {/* KPI Cards Row */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-lg bg-slate-950 border border-slate-800 p-3">
+                <div className="text-xs font-medium text-teal-500 uppercase tracking-wide mb-1">
+                  Bancos
+                </div>
+                <div className="text-2xl font-bold text-white">
+                  {data.bank_names.length}
+                </div>
+                <div className="text-xs text-slate-400 mt-1">
+                  {data.bank_names.join(", ")}
+                </div>
+              </div>
+              <div className="rounded-lg bg-slate-950 border border-slate-800 p-3">
+                <div className="text-xs font-medium text-teal-500 uppercase tracking-wide mb-1">
+                  Periodo
+                </div>
+                <div className="text-lg font-bold text-white">
+                  {new Date(data.time_range.start).toLocaleDateString("es-MX", {
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </div>
+                <div className="text-xs text-slate-400 mt-1">
+                  hasta{" "}
+                  {new Date(data.time_range.end).toLocaleDateString("es-MX", {
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </div>
+              </div>
+              <div className="rounded-lg bg-slate-950 border border-slate-800 p-3">
+                <div className="text-xs font-medium text-teal-500 uppercase tracking-wide mb-1">
+                  Datos
+                </div>
+                <div className="text-lg font-bold text-white">
+                  {new Date(data.data_as_of).toLocaleDateString("es-MX", {
+                    day: "numeric",
+                    month: "short",
+                  })}
+                </div>
+                <div className="text-xs text-slate-400 mt-1">
+                  {new Date(data.data_as_of).toLocaleTimeString("es-MX", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Chart */}
+            <div
+              ref={plotContainerRef}
+              className="rounded-lg border border-slate-800 bg-slate-950 p-4"
+            >
+              <Plot
+                key={plotKey}
+                data={data.plotly_config.data as any}
+                layout={plotlyLayout as any}
+                config={{
+                  responsive: true,
+                  displayModeBar: true,
+                  modeBarButtonsToRemove: ["sendDataToCloud"],
+                  displaylogo: false,
+                }}
+                className="w-full"
+                useResizeHandler
+                style={{ width: "100%", height: "100%" }}
+              />
+            </div>
+          </>
+        )}
+
+        {activeTab === "data" && (
+          <div className="rounded-lg border border-slate-800 bg-slate-950 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-slate-900 border-b border-slate-800">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-medium text-teal-500 uppercase tracking-wide text-xs">
+                      Banco
+                    </th>
+                    <th className="px-4 py-3 text-left font-medium text-teal-500 uppercase tracking-wide text-xs">
+                      Periodo
+                    </th>
+                    <th className="px-4 py-3 text-right font-medium text-teal-500 uppercase tracking-wide text-xs">
+                      {data.metric_name}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {data.plotly_config.data.map(
+                    (trace: any, traceIdx: number) => {
+                      const bankName = trace.name || `Banco ${traceIdx + 1}`;
+                      const xValues = trace.x || [];
+                      const yValues = trace.y || [];
+
+                      return xValues.map((period: string, idx: number) => (
+                        <tr
+                          key={`${traceIdx}-${idx}`}
+                          className="hover:bg-slate-800/30 transition-colors"
+                        >
+                          <td className="px-4 py-2.5 text-white font-medium">
+                            {bankName}
+                          </td>
+                          <td className="px-4 py-2.5 text-slate-300">
+                            {period}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-white font-mono">
+                            {typeof yValues[idx] === "number"
+                              ? yValues[idx].toLocaleString("es-MX", {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })
+                              : yValues[idx]}
+                          </td>
+                        </tr>
+                      ));
+                    },
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
-        {activeTab === "sql" && sanitizedSQL && (
-          <div className="rounded-lg border border-white/10 bg-slate-900/50 p-4">
-            <div className="mb-2 flex items-center gap-2 text-sm text-white/60">
-              <CodeBracketIcon className="h-4 w-4" />
-              <span>Query SQL Generado</span>
+        {activeTab === "query" && sanitizedSQL && (
+          <div className="rounded-lg border border-slate-800 bg-slate-950 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm text-slate-400">
+                <CodeBracketIcon className="h-4 w-4" />
+                <span>Query SQL Generado</span>
+              </div>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(sanitizedSQL);
+                }}
+                className="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-md transition-colors"
+              >
+                Copiar
+              </button>
             </div>
-            <pre className="overflow-x-auto rounded bg-black/40 p-3 text-xs text-green-400">
+            <pre className="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs text-green-400 font-mono border border-slate-800">
               {sanitizedSQL}
             </pre>
-          </div>
-        )}
-
-        {activeTab === "interpretation" && sanitizedInterpretation && (
-          <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-            <div className="mb-3 flex items-center gap-2 text-sm text-white/60">
-              <ChartBarIcon className="h-4 w-4" />
-              <span>Interpretación de Métrica</span>
-            </div>
-            <div
-              className="prose prose-invert prose-sm max-w-none text-white/80"
-              dangerouslySetInnerHTML={{ __html: sanitizedInterpretation }}
-            />
           </div>
         )}
       </div>
