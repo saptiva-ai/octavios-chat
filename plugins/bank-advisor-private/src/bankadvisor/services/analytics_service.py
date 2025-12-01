@@ -532,6 +532,14 @@ class AnalyticsService:
         if metric_type == "ratio":
             df['value'] = df['value'] * 100
 
+        # Build hovertemplate with units
+        is_ratio = metric_type == "ratio"
+        hover_template = (
+            "<b>%{fullData.name}</b><br>" +
+            "Fecha: %{x}<br>" +
+            ("Valor: %{y:.2f}%<extra></extra>" if is_ratio else "Valor: %{y:,.0f} MDP<extra></extra>")
+        )
+
         # Group by bank for multi-line chart
         traces = []
         for banco in df['banco'].unique():
@@ -541,7 +549,8 @@ class AnalyticsService:
                 "y": bank_data['value'].tolist(),
                 "type": "scatter",
                 "mode": "lines+markers",
-                "name": banco
+                "name": banco,
+                "hovertemplate": hover_template
             })
 
         display_name = config.get_metric_display_name(metric_id)
@@ -550,14 +559,16 @@ class AnalyticsService:
             "type": "data",
             "visualization": "line_chart",
             "metric_name": display_name,
+            "metric_type": metric_type,  # Include type for context
             "plotly_config": {
                 "data": traces,
                 "layout": {
                     "title": f"Evolución de {display_name}",
                     "xaxis": {"title": "Fecha"},
                     "yaxis": {
-                        "title": display_name,
-                        "ticksuffix": "%" if metric_type == "ratio" else ""
+                        "title": "%" if is_ratio else "MDP (Millones de Pesos)",
+                        "tickformat": ".2f" if is_ratio else ",.0f",
+                        "ticksuffix": "%" if is_ratio else " MDP"
                     }
                 }
             },
@@ -579,24 +590,36 @@ class AnalyticsService:
         latest = df.sort_values('fecha').groupby('banco').last().reset_index()
 
         display_name = config.get_metric_display_name(metric_id)
+        is_ratio = metric_type == "ratio"
+
+        # Build hovertemplate with units
+        hover_template = (
+            "<b>%{x}</b><br>" +
+            ("Valor: %{y:.2f}%<extra></extra>" if is_ratio else "Valor: %{y:,.0f} MDP<extra></extra>")
+        )
 
         return {
             "type": "data",
             "visualization": "bar_chart",
             "metric_name": display_name,
+            "metric_type": metric_type,
             "plotly_config": {
                 "data": [{
                     "x": latest['banco'].tolist(),
                     "y": latest['value'].tolist(),
                     "type": "bar",
-                    "marker": {"color": "#4F46E5"}
+                    "marker": {"color": "#4F46E5"},
+                    "hovertemplate": hover_template,
+                    "text": [f"{v:.2f}%" if is_ratio else f"{v:,.0f} MDP" for v in latest['value'].tolist()],
+                    "textposition": "auto"
                 }],
                 "layout": {
                     "title": f"Comparación de {display_name}",
                     "xaxis": {"title": "Banco"},
                     "yaxis": {
-                        "title": display_name,
-                        "ticksuffix": "%" if metric_type == "ratio" else ""
+                        "title": "%" if is_ratio else "MDP (Millones de Pesos)",
+                        "tickformat": ".2f" if is_ratio else ",.0f",
+                        "ticksuffix": "%" if is_ratio else " MDP"
                     }
                 }
             },
@@ -611,7 +634,8 @@ class AnalyticsService:
         df = pd.DataFrame(rows, columns=['fecha', 'banco', 'value'])
 
         # Convert ratio metrics to percentage
-        if metric_type == "ratio":
+        is_ratio = metric_type == "ratio"
+        if is_ratio:
             df['value'] = df['value'] * 100
 
         # Get latest value per bank, sorted
@@ -620,32 +644,43 @@ class AnalyticsService:
 
         display_name = config.get_metric_display_name(metric_id)
 
+        # Build hovertemplate with units
+        hover_template = (
+            "<b>%{y}</b><br>" +
+            ("Valor: %{x:.2f}%<extra></extra>" if is_ratio else "Valor: %{x:,.0f} MDP<extra></extra>")
+        )
+
         return {
             "type": "data",
             "visualization": "ranking",
             "metric_name": display_name,
+            "metric_type": metric_type,
             "ranking": [
                 {
                     "position": i + 1,
                     "banco": row['banco'],
                     "value": round(row['value'], 2),
-                    "unit": "%" if metric_type == "ratio" else ""
+                    "unit": "%" if is_ratio else "MDP"
                 }
                 for i, (_, row) in enumerate(latest.iterrows())
             ],
             "plotly_config": {
                 "data": [{
-                    "x": latest['banco'].tolist(),
-                    "y": latest['value'].tolist(),
+                    "x": latest['value'].tolist(),
+                    "y": latest['banco'].tolist(),
                     "type": "bar",
                     "orientation": "h",
-                    "marker": {"color": "#10B981"}
+                    "marker": {"color": "#10B981"},
+                    "hovertemplate": hover_template,
+                    "text": [f"{v:.2f}%" if is_ratio else f"{v:,.0f} MDP" for v in latest['value'].tolist()],
+                    "textposition": "auto"
                 }],
                 "layout": {
                     "title": f"Ranking de {display_name}",
                     "xaxis": {
-                        "title": display_name,
-                        "ticksuffix": "%" if metric_type == "ratio" else ""
+                        "title": "%" if is_ratio else "MDP (Millones de Pesos)",
+                        "tickformat": ".2f" if is_ratio else ",.0f",
+                        "ticksuffix": "%" if is_ratio else " MDP"
                     },
                     "yaxis": {"title": "Banco", "autorange": "reversed"}
                 }
@@ -661,7 +696,8 @@ class AnalyticsService:
         df = pd.DataFrame(rows, columns=['fecha', 'banco', 'value'])
 
         # Convert ratio metrics to percentage
-        if metric_type == "ratio":
+        is_ratio = metric_type == "ratio"
+        if is_ratio:
             df['value'] = df['value'] * 100
 
         # Get latest values
@@ -673,12 +709,13 @@ class AnalyticsService:
             "type": "data",
             "visualization": "value",
             "metric_name": display_name,
+            "metric_type": metric_type,
             "values": [
                 {
                     "banco": row['banco'],
                     "value": round(row['value'], 2),
                     "fecha": str(row['fecha']),
-                    "unit": "%" if metric_type == "ratio" else ""
+                    "unit": "%" if is_ratio else "MDP"
                 }
                 for _, row in latest.iterrows()
             ],

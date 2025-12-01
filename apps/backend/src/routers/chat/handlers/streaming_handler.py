@@ -226,6 +226,68 @@ def build_auditor_breakdown_markdown(validation_event: dict) -> Optional[str]:
     return "### Análisis por auditor\n" + "\n".join(lines)
 
 
+def _extract_chart_statistics(bank_chart_data: dict) -> dict:
+    """
+    Extract key statistics from bank chart plotly_config for LLM context.
+
+    This provides summary statistics without sending full chart data,
+    optimizing context window usage (~200 tokens vs ~2000 tokens).
+
+    Args:
+        bank_chart_data: BankChartData dict with plotly_config
+
+    Returns:
+        Dict with statistics per bank: {bank_name: {min, max, avg, current, trend, change_pct}}
+    """
+    plotly_cfg = bank_chart_data.get("plotly_config", {})
+    traces = plotly_cfg.get("data", [])
+
+    if not traces:
+        return {}
+
+    stats_by_bank = {}
+    for trace in traces:
+        bank_name = trace.get("name", "N/A")
+        y_values = trace.get("y", [])
+
+        # Filter out None values
+        valid_values = [v for v in y_values if v is not None]
+
+        if valid_values:
+            first_val = valid_values[0]
+            current_val = valid_values[-1]
+            avg_val = sum(valid_values) / len(valid_values)
+
+            # Calculate change percentage safely
+            change_pct = 0.0
+            if first_val != 0:
+                change_pct = ((current_val - first_val) / first_val) * 100
+
+            # Determine trend
+            if len(valid_values) >= 2:
+                if current_val > first_val:
+                    trend = "creciente"
+                elif current_val < first_val:
+                    trend = "decreciente"
+                else:
+                    trend = "estable"
+            else:
+                trend = "N/A"
+
+            stats_by_bank[bank_name] = {
+                "min": min(valid_values),
+                "max": max(valid_values),
+                "avg": avg_val,
+                "current": current_val,
+                "first": first_val,
+                "trend": trend,
+                "change_pct": change_pct,
+                "data_points": len(valid_values)
+            }
+
+    return stats_by_bank
+
+
 class _InlineValidationReport:
     """
     Lightweight report model for generating PDFs in streaming context
@@ -1484,9 +1546,15 @@ NO intentes adivinar qué opción quiere el usuario. Espera a que seleccione una
 
                     # Extract SQL if available (from metadata or direct field)
                     sql_query = None
+                    metadata = {}
                     if isinstance(bank_chart_data, dict):
                         metadata = bank_chart_data.get("metadata", {})
                         sql_query = metadata.get("sql_generated") or bank_chart_data.get("sql_generated")
+
+                    # Extract statistics from plotly_config for enriched LLM context
+                    chart_stats = _extract_chart_statistics(bank_chart_data)
+                    is_ratio = metadata.get("type") == "ratio" or metadata.get("metric_type") == "ratio"
+                    unit_label = "%" if is_ratio else "MDP"
 
                     bank_context = f"""
 
@@ -1496,33 +1564,56 @@ NO intentes adivinar qué opción quiere el usuario. Espera a que seleccione una
 - Período: {time_range.get('start', 'N/A')} a {time_range.get('end', 'N/A')}
 - Datos actualizados al: {data_as_of}"""
 
-                    # Add SQL query if available
-                    if sql_query:
+                    # Add statistics by bank if available
+                    if chart_stats:
                         bank_context += f"""
-- Consulta SQL generada:
-```sql
-{sql_query}
-```"""
+
+**Estadísticas de {metric_name}:**"""
+                        for bank, stats in chart_stats.items():
+                            if is_ratio:
+                                # Format as percentage
+                                bank_context += f"""
+- **{bank}**:
+  - Actual: {stats['current']:.2f}{unit_label}
+  - Mín: {stats['min']:.2f}{unit_label} | Máx: {stats['max']:.2f}{unit_label}
+  - Promedio: {stats['avg']:.2f}{unit_label}
+  - Tendencia: {stats['trend']} ({stats['change_pct']:+.1f}%)"""
+                            else:
+                                # Format as MDP (thousands separator)
+                                bank_context += f"""
+- **{bank}**:
+  - Actual: {stats['current']:,.0f} {unit_label}
+  - Mín: {stats['min']:,.0f} {unit_label} | Máx: {stats['max']:,.0f} {unit_label}
+  - Promedio: {stats['avg']:,.0f} {unit_label}
+  - Tendencia: {stats['trend']} ({stats['change_pct']:+.1f}%)"""
 
                     bank_context += f"""
 
 **IMPORTANTE**: Los datos del gráfico de {metric_name} ya están siendo enviados al usuario.
-Genera una respuesta que:
-1. Confirme que se encontraron los datos solicitados
-2. Mencione el banco y período consultado
-3. Indique que el gráfico interactivo está disponible"""
+Genera una respuesta COMPLETA que incluya:
+1. Confirma que se encontraron los datos solicitados sobre {metric_name}
+2. Menciona el período analizado ({time_range.get('start', 'N/A')} a {time_range.get('end', 'N/A')}) y que los datos están actualizados al {data_as_of}
+3. Indica que el gráfico interactivo con la evolución de la métrica ya ha sido generado y está disponible para visualización
+4. **ANALIZA las estadísticas proporcionadas**: compara los valores entre bancos, menciona tendencias y cambios porcentuales"""
 
                     if sql_query:
                         bank_context += f"""
-4. Incluya un bloque de código SQL mostrando la consulta generada (usa markdown ```sql)
-5. Proporcione un breve análisis o contexto sobre la métrica {metric_name}"""
+5. Proporciona una breve explicación de qué representa {metric_name} y por qué es importante
+6. Si es posible, menciona qué se puede observar o analizar con estos datos
+7. **AL FINAL del mensaje**, incluye la consulta SQL utilizada en el siguiente formato exacto:
+   "La consulta SQL utilizada fue:"
+   ```sql
+   {sql_query}
+   ```"""
                     else:
                         bank_context += f"""
-4. Proporcione un breve análisis o contexto sobre la métrica {metric_name}"""
+5. Proporciona una breve explicación de qué representa {metric_name} y por qué es importante"""
 
                     bank_context += """
 
-NO digas que no tienes información - los datos YA ESTÁN disponibles en el gráfico."""
+NO digas que no tienes información - los datos YA ESTÁN disponibles en el gráfico.
+Usa las estadísticas proporcionadas para dar un análisis más profundo y contextualizado.
+Escribe la respuesta de forma fluida y profesional, como un analista financiero."""
 
                     system_prompt += bank_context
 

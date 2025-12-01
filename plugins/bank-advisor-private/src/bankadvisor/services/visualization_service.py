@@ -97,7 +97,13 @@ class VisualizationService:
         def format_value(v, is_ratio):
             if v is None or v == 0:
                 return "N/A"
-            return f"{v:.2f}%" if is_ratio else f"{v:,.0f}"
+            return f"{v:.2f}%" if is_ratio else f"{v:,.0f} MDP"
+
+        # Build hovertemplate with units
+        hover_template = (
+            "<b>%{x}</b><br>" +
+            ("Valor: %{y:.2f}%<extra></extra>" if is_ratio else "Valor: %{y:,.0f} MDP<extra></extra>")
+        )
 
         return {
             "data": [
@@ -107,16 +113,18 @@ class VisualizationService:
                     "y": vals,
                     "marker": {"color": colors},
                     "text": [format_value(v, is_ratio) for v in vals],
-                    "textposition": "auto"
+                    "textposition": "auto",
+                    "hovertemplate": hover_template
                 }
             ],
             "layout": {
                 "title": f"{title} - {month_label}",
                 "yaxis": {
-                    "title": unit,
-                    "tickformat": ".1%" if is_ratio else "s"
+                    "title": "%" if is_ratio else "MDP (Millones de Pesos)",
+                    "tickformat": ".2f" if is_ratio else ",.0f",
+                    "ticksuffix": "%" if is_ratio else " MDP"
                 },
-                "margin": {"l": 50, "r": 50, "t": 50, "b": 50},
+                "margin": {"l": 60, "r": 50, "t": 50, "b": 50},
                 "autosize": True
             }
         }
@@ -140,6 +148,13 @@ class VisualizationService:
                 elif "SISTEMA" in item["category"].upper():
                     sistema_data.append(value)
         
+        # Build hovertemplate with units
+        hover_template = (
+            "<b>%{fullData.name}</b><br>" +
+            "Fecha: %{x}<br>" +
+            ("Valor: %{y:.2f}%<extra></extra>" if is_ratio else "Valor: %{y:,.0f} MDP<extra></extra>")
+        )
+
         traces = []
         if invex_data:
             traces.append({
@@ -148,9 +163,10 @@ class VisualizationService:
                 "name": "INVEX",
                 "x": months,
                 "y": invex_data,
-                "line": {"color": COLOR_INVEX, "width": 3}
+                "line": {"color": COLOR_INVEX, "width": 3},
+                "hovertemplate": hover_template
             })
-            
+
         if sistema_data:
             traces.append({
                 "type": "scatter",
@@ -158,9 +174,10 @@ class VisualizationService:
                 "name": "Sistema",
                 "x": months,
                 "y": sistema_data,
-                "line": {"color": COLOR_SISTEMA, "width": 2, "dash": "dot"}
+                "line": {"color": COLOR_SISTEMA, "width": 2, "dash": "dot"},
+                "hovertemplate": hover_template
             })
-            
+
         return {
             "data": traces,
             "layout": {
@@ -171,11 +188,12 @@ class VisualizationService:
                     "title": "Período"
                 },
                 "yaxis": {
-                    "title": unit,
-                    "tickformat": ".1%" if is_ratio else "s" # 's' es SI prefix para miles/millones
+                    "title": "%" if is_ratio else "MDP (Millones de Pesos)",
+                    "tickformat": ".2f" if is_ratio else ",.0f",
+                    "ticksuffix": "%" if is_ratio else " MDP"
                 },
                 "legend": {"orientation": "h", "y": -0.2},
-                "margin": {"l": 50, "r": 50, "t": 50, "b": 50},
+                "margin": {"l": 60, "r": 50, "t": 50, "b": 50},
                 "autosize": True
             }
         }

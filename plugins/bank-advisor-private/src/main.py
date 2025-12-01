@@ -473,7 +473,44 @@ async def _try_hu3_nlp_pipeline(
                 if plotly_config:
                     data["plotly_config"] = plotly_config
 
-            # Add metadata
+            # Generate SQL representation for frontend display
+            # Build SQL that represents the query executed
+            bank_filter = ""
+            if entities.banks and len(entities.banks) > 0:
+                banks_str = ", ".join([f"'{b}'" for b in entities.banks])
+                bank_filter = f"\n    WHERE banco_norm IN ({banks_str})"
+
+            date_filter = ""
+            if entities.date_start or entities.date_end:
+                date_conditions = []
+                if entities.date_start:
+                    date_conditions.append(f"fecha >= '{entities.date_start}'")
+                if entities.date_end:
+                    date_conditions.append(f"fecha <= '{entities.date_end}'")
+                date_filter_str = " AND ".join(date_conditions)
+                if bank_filter:
+                    date_filter = f"\n      AND {date_filter_str}"
+                else:
+                    date_filter = f"\n    WHERE {date_filter_str}"
+
+            sql_generated = f"""SELECT
+    fecha,
+    banco_norm,
+    {entities.metric_id} AS value
+FROM monthly_kpis{bank_filter}{date_filter}
+ORDER BY fecha ASC;"""
+
+            # Add metadata with sql_generated and metric_type
+            metric_type = config.get_metric_type(entities.metric_id)
+            data["metadata"] = {
+                "metric": entities.metric_id,
+                "metric_type": metric_type,
+                "data_as_of": data.get("data_as_of", ""),
+                "title": f"{entities.metric_display}",
+                "pipeline": "hu3_nlp",
+                "sql_generated": sql_generated
+            }
+
             data["query_info"] = {
                 "original_query": user_query,
                 "detected_metric": entities.metric_display,
@@ -488,7 +525,8 @@ async def _try_hu3_nlp_pipeline(
                 query=user_query,
                 metric=entities.metric_id,
                 intent=intent_result.intent.value,
-                banks_count=len(entities.banks) if entities.banks else 0
+                banks_count=len(entities.banks) if entities.banks else 0,
+                has_sql_generated=True
             )
 
             return data
@@ -888,13 +926,17 @@ async def _try_nl2sql_pipeline(user_query: str, mode: str) -> Optional[Dict[str,
     # Use spec to determine title and styling
     title = f"{spec.metric} - {' vs '.join(spec.bank_names) if spec.bank_names else 'Sistema'}"
 
+    # Get metric type from config
+    config = get_config()
+    metric_type = config.get_metric_type(spec.metric.lower())
+
     # Add section_config with mode based on template
     section_config = {
         "title": title,
         "field": spec.metric.lower(),
         "description": f"Query: {user_query}",
         "mode": "timeline_with_summary" if sql_result.metadata.get("template") == "metric_timeseries" else "dashboard_month_comparison",
-        "type": "ratio" if spec.metric.upper() in ["IMOR", "ICOR", "ICAP", "TDA"] else "absolute"
+        "type": metric_type
     }
 
     plotly_config = VisualizationService.build_plotly_config(
@@ -906,7 +948,8 @@ async def _try_nl2sql_pipeline(user_query: str, mode: str) -> Optional[Dict[str,
         "nl2sql_pipeline.success",
         query=user_query,
         rows_returned=len(months_data),
-        template_used=sql_result.metadata.get("template")
+        template_used=sql_result.metadata.get("template"),
+        metric_type=metric_type
     )
 
     return {
@@ -914,6 +957,7 @@ async def _try_nl2sql_pipeline(user_query: str, mode: str) -> Optional[Dict[str,
         "data": {"months": months_data},
         "metadata": {
             "metric": spec.metric,
+            "metric_type": metric_type,
             "data_as_of": "2025-11-27",  # TODO: Extract from actual data
             "title": title,
             "pipeline": "nl2sql",
