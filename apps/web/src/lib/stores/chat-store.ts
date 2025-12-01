@@ -47,6 +47,10 @@ interface ChatState {
   hydratedByChatId: Record<string, boolean>;
   isHydratingByChatId: Record<string, boolean>;
 
+  // BankAdvisor hints state (per conversation)
+  bankAdvisorHintsSeenByChatId: Record<string, boolean>;
+  bankAdvisorHintsVisible: boolean;
+
   // Actions
   setCurrentChatId: (chatId: string | null) => void;
   switchChat: (
@@ -77,6 +81,11 @@ interface ChatState {
     reviewData: Partial<ChatMessage["review"]>,
   ) => void;
   findFileReviewMessage: (docId: string) => ChatMessage | undefined;
+
+  // BankAdvisor hints actions
+  setBankAdvisorHintsVisible: (visible: boolean) => void;
+  markBankAdvisorHintsSeen: (chatId: string) => void;
+  shouldShowBankAdvisorHints: (chatId: string | null) => boolean;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -96,6 +105,8 @@ export const useChatStore = create<ChatState>()(
         chatNotFound: false,
         hydratedByChatId: {},
         isHydratingByChatId: {},
+        bankAdvisorHintsSeenByChatId: {},
+        bankAdvisorHintsVisible: false,
 
         // Actions
         setCurrentChatId: (chatId) => {
@@ -537,12 +548,36 @@ export const useChatStore = create<ChatState>()(
             (msg) => msg.kind === "file-review" && msg.review?.docId === docId,
           );
         },
+
+        // BankAdvisor hints actions
+        setBankAdvisorHintsVisible: (visible: boolean) => {
+          set({ bankAdvisorHintsVisible: visible });
+        },
+
+        markBankAdvisorHintsSeen: (chatId: string) => {
+          set((state) => ({
+            bankAdvisorHintsSeenByChatId: {
+              ...state.bankAdvisorHintsSeenByChatId,
+              [chatId]: true,
+            },
+            bankAdvisorHintsVisible: false,
+          }));
+        },
+
+        shouldShowBankAdvisorHints: (chatId: string | null) => {
+          if (!chatId) return false;
+          const state = get();
+          const hasSeenInSession = state.bankAdvisorHintsSeenByChatId[chatId];
+          const isBankAdvisorEnabled = state.toolsEnabled.bank_advisor;
+          return isBankAdvisorEnabled && !hasSeenInSession;
+        },
       }),
       {
         name: "chat-store",
         partialize: (state) => ({
           selectedModel: state.selectedModel,
           toolsEnabled: state.toolsEnabled,
+          bankAdvisorHintsSeenByChatId: state.bankAdvisorHintsSeenByChatId,
         }),
       },
     ),
