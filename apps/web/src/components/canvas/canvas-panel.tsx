@@ -260,15 +260,24 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
         data-testid="canvas-panel"
         data-canvas-panel
         className={cn(
-          "h-full bg-[#0b1021] border-l border-white/10 text-white transition-opacity duration-200 relative z-50",
-          isSidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none",
+          "h-full bg-[#0b1021] border-l border-white/10 text-white transition-all duration-200 relative z-50",
+          // Mobile: fullscreen, Desktop: sidebar with custom width
+          "md:max-w-[800px]",
+          isSidebarOpen
+            ? "opacity-100 fixed inset-0 md:relative md:opacity-100"
+            : "opacity-0 pointer-events-none",
           className,
         )}
-        style={{ width }}
+        style={{
+          width:
+            typeof window !== "undefined" && window.innerWidth >= 768
+              ? width
+              : undefined,
+        }}
       >
-        {/* Resize handle */}
+        {/* Resize handle - only visible on desktop */}
         <div
-          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/50 active:bg-primary transition-colors z-50"
+          className="hidden md:block absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/50 active:bg-primary transition-colors z-50"
           onMouseDown={handleMouseDown}
         />
         <Header

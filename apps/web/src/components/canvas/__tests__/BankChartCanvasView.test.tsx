@@ -45,8 +45,10 @@ const mockChartData: BankChartData = {
     },
   },
   metadata: {
-    sql_generated: "SELECT metric_value FROM banking_metrics WHERE metric_name = 'imor'",
-    metric_interpretation: "El Índice de Morosidad (IMOR) representa el porcentaje de créditos vencidos.",
+    sql_generated:
+      "SELECT metric_value FROM banking_metrics WHERE metric_name = 'imor'",
+    metric_interpretation:
+      "El Índice de Morosidad (IMOR) representa el porcentaje de créditos vencidos.",
   },
 };
 
@@ -94,7 +96,9 @@ describe("BankChartCanvasView", () => {
     const interpretationTab = screen.getByText(/Interpretación/i);
     fireEvent.click(interpretationTab);
 
-    expect(screen.getByText(/porcentaje de créditos vencidos/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/porcentaje de créditos vencidos/i),
+    ).toBeInTheDocument();
   });
 
   it("should switch between tabs correctly", () => {
@@ -162,5 +166,58 @@ describe("BankChartCanvasView", () => {
 
     expect(layoutContent).toContain("IMOR");
     expect(layoutContent).toContain("Periodo");
+  });
+
+  it("should show error when plotly_config.data is missing", () => {
+    const invalidData = {
+      ...mockChartData,
+      plotly_config: {
+        ...mockChartData.plotly_config,
+        data: undefined as any,
+      },
+    };
+
+    render(<BankChartCanvasView data={invalidData} />);
+
+    expect(
+      screen.getByText("Datos de gráfica inválidos o faltantes"),
+    ).toBeInTheDocument();
+  });
+
+  it("should show error when metric_name is missing", () => {
+    const invalidData = {
+      ...mockChartData,
+      metric_name: undefined as any,
+    };
+
+    render(<BankChartCanvasView data={invalidData} />);
+
+    expect(screen.getByText("Nombre de métrica faltante")).toBeInTheDocument();
+  });
+
+  it("should show error when bank_names is empty", () => {
+    const invalidData = {
+      ...mockChartData,
+      bank_names: [],
+    };
+
+    render(<BankChartCanvasView data={invalidData} />);
+
+    expect(screen.getByText("No se especificaron bancos")).toBeInTheDocument();
+  });
+
+  it("should show retry button on error", () => {
+    const invalidData = {
+      ...mockChartData,
+      plotly_config: {
+        ...mockChartData.plotly_config,
+        data: undefined as any,
+      },
+    };
+
+    render(<BankChartCanvasView data={invalidData} />);
+
+    const retryButton = screen.getByRole("button", { name: /reintentar/i });
+    expect(retryButton).toBeInTheDocument();
   });
 });

@@ -11,8 +11,13 @@ import {
 import { cn } from "@/lib/utils";
 import type { BankChartData } from "@/lib/types";
 import dynamic from "next/dynamic";
+import { BankChartSkeleton } from "./BankChartSkeleton";
+import { BankChartError } from "./BankChartError";
 
-const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
+const Plot = dynamic(() => import("react-plotly.js"), {
+  ssr: false,
+  loading: () => <BankChartSkeleton />,
+});
 
 interface BankChartCanvasViewProps {
   data: BankChartData;
@@ -40,6 +45,26 @@ export function BankChartCanvasView({
   >("chart");
   const plotContainerRef = useRef<HTMLDivElement>(null);
   const [plotKey, setPlotKey] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Validate chart data immediately (not in useEffect)
+  const validateData = (): string | null => {
+    if (!data?.plotly_config?.data || !Array.isArray(data.plotly_config.data)) {
+      return "Datos de gráfica inválidos o faltantes";
+    }
+
+    if (!data?.metric_name) {
+      return "Nombre de métrica faltante";
+    }
+
+    if (!data?.bank_names || data.bank_names.length === 0) {
+      return "No se especificaron bancos";
+    }
+
+    return null;
+  };
+
+  const validationError = validateData();
 
   // Force re-render of Plotly when container size changes
   useEffect(() => {
@@ -60,6 +85,13 @@ export function BankChartCanvasView({
   // Extract enriched metadata
   const sqlQuery = data.metadata?.sql_generated;
   const metricInterpretation = data.metadata?.metric_interpretation;
+
+  // Retry handler
+  const handleRetry = () => {
+    setIsLoading(true);
+    setPlotKey((prev) => prev + 1);
+    setTimeout(() => setIsLoading(false), 1000);
+  };
 
   // Dark theme optimized for canvas (more space)
   const plotlyLayout = {
@@ -86,6 +118,16 @@ export function BankChartCanvasView({
       font: { color: "rgba(255,255,255,0.8)" },
     },
   };
+
+  // Early return for loading state
+  if (isLoading) {
+    return <BankChartSkeleton />;
+  }
+
+  // Early return for validation error
+  if (validationError) {
+    return <BankChartError message={validationError} onRetry={handleRetry} />;
+  }
 
   return (
     <div className={cn("flex h-full flex-col space-y-4", className)}>
