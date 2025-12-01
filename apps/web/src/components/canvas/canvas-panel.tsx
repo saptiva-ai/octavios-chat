@@ -294,18 +294,18 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
           isSidebarOpen={isSidebarOpen}
         />
 
-        {/* Keyboard shortcuts hint */}
+        {/* Keyboard shortcuts hint - Minimal */}
         {isSidebarOpen && (
-          <div className="px-4 py-2 border-b border-white/5 bg-white/[0.02]">
-            <div className="flex items-center gap-4 text-xs text-white/40">
-              <span className="flex items-center gap-1">
-                <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/60 font-mono">
+          <div className="px-8 py-3 border-b border-slate-800">
+            <div className="flex items-center gap-4 text-xs text-slate-500">
+              <span className="flex items-center gap-1.5">
+                <kbd className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 font-mono text-[10px]">
                   ⌘K
                 </kbd>
                 <span>Toggle</span>
               </span>
-              <span className="flex items-center gap-1">
-                <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white/60 font-mono">
+              <span className="flex items-center gap-1.5">
+                <kbd className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 font-mono text-[10px]">
                   Esc
                 </kbd>
                 <span>Close</span>
@@ -314,7 +314,7 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
           </div>
         )}
 
-        <div className="h-[calc(100%-64px)] overflow-y-auto px-4 py-3">
+        <div className="flex-1 px-8 py-6 overflow-y-auto">
           <CanvasErrorBoundary>{renderContent()}</CanvasErrorBoundary>
         </div>
       </div>

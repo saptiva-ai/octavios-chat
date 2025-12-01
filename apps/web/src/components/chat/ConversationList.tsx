@@ -302,16 +302,16 @@ export function ConversationList({
             <div
               className={cn(
                 "group relative flex w-full flex-col rounded-lg transition-all duration-150",
-                // Saptiva AI Design: Solid active state with teal border
+                // Saptiva Minimal: Subtle border, minimal background
                 isActive
-                  ? "border-l-4 border-teal-400 bg-slate-800 pl-2.5 pr-3"
-                  : "border-l-4 border-transparent bg-transparent pl-2.5 pr-3",
-                !isActive && "hover:bg-slate-800/30",
+                  ? "border-l-2 border-teal-400 bg-slate-900/50 pl-3 pr-3"
+                  : "border-l-2 border-transparent bg-transparent pl-3 pr-3",
+                !isActive && "hover:bg-slate-900/30",
                 isFocused &&
                   !isActive &&
-                  "ring-1 ring-teal-400/40 bg-slate-800/20",
+                  "ring-1 ring-teal-400/40 bg-slate-900/20",
                 // P0-UX-HIST-001: Highlight new sessions with animation
-                isNew && "animate-highlight-fade bg-slate-800/50",
+                isNew && "animate-highlight-fade bg-slate-900/50",
               )}
               onMouseEnter={() => setHoveredChatId(session.id)}
               onMouseLeave={() => setHoveredChatId(null)}
@@ -359,8 +359,8 @@ export function ConversationList({
                           className={cn(
                             "text-sm truncate",
                             isActive
-                              ? "font-medium text-white"
-                              : "font-normal text-slate-400",
+                              ? "font-medium text-teal-50"
+                              : "font-normal text-slate-500 hover:text-slate-300",
                           )}
                         >
                           {session.title || "Conversación sin título"}

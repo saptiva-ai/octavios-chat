@@ -181,29 +181,31 @@ export function BankChartCanvasView({
     }
   };
 
-  // Dark theme optimized for canvas (more space)
+  // Saptiva Minimal: Clean chart configuration
   const plotlyLayout = {
     ...data.plotly_config.layout,
     autosize: true,
-    height: 500, // Full-size in canvas
-    margin: { l: 60, r: 40, t: 60, b: 60 },
-    paper_bgcolor: "rgba(0,0,0,0)",
-    plot_bgcolor: "rgba(255,255,255,0.02)",
-    font: { color: "rgba(255,255,255,0.8)", size: 12 },
+    height: 400,
+    margin: { l: 60, r: 20, t: 20, b: 60 },
+    paper_bgcolor: "rgba(0,0,0,0)", // Transparent
+    plot_bgcolor: "rgba(0,0,0,0)", // Transparent
+    font: { color: "rgba(148, 163, 184, 1)", size: 11 }, // slate-400
     xaxis: {
       ...data.plotly_config.layout.xaxis,
-      gridcolor: "rgba(255,255,255,0.1)",
-      linecolor: "rgba(255,255,255,0.2)",
+      showgrid: false, // No vertical grid
+      linecolor: "rgba(30, 41, 59, 1)", // slate-800
+      tickfont: { color: "rgba(148, 163, 184, 1)" },
     },
     yaxis: {
       ...data.plotly_config.layout.yaxis,
-      gridcolor: "rgba(255,255,255,0.1)",
-      linecolor: "rgba(255,255,255,0.2)",
+      gridcolor: "rgba(30, 41, 59, 0.3)", // Very subtle horizontal grid
+      linecolor: "rgba(30, 41, 59, 1)",
+      tickfont: { color: "rgba(148, 163, 184, 1)" },
     },
     legend: {
       ...data.plotly_config.layout.legend,
       bgcolor: "rgba(0,0,0,0)",
-      font: { color: "rgba(255,255,255,0.8)" },
+      font: { color: "rgba(148, 163, 184, 1)" },
     },
   };
 
@@ -219,15 +221,12 @@ export function BankChartCanvasView({
 
   return (
     <div className={cn("flex h-full flex-col space-y-4", className)}>
-      {/* Metadata Header */}
-      <div className="space-y-3 rounded-lg border border-slate-800 bg-slate-950 p-4">
+      {/* Metadata Header - Minimal */}
+      <div className="space-y-3 pb-6 mb-6 border-b border-slate-800">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <ChartBarIcon className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-bold text-white">
-              {data.metric_name.toUpperCase()}
-            </h3>
-          </div>
+          <h2 className="text-2xl font-bold text-white">
+            {data.metric_name.toUpperCase()}
+          </h2>
 
           {/* Action buttons */}
           <div className="flex items-center gap-2">
@@ -271,15 +270,15 @@ export function BankChartCanvasView({
         </div>
       </div>
 
-      {/* Saptiva AI Segmented Control */}
-      <div className="flex gap-1 p-1 bg-slate-900/50 rounded-lg border border-slate-800">
+      {/* Saptiva Minimal: Underline Tabs */}
+      <div className="flex space-x-8 border-b border-slate-800 mb-8">
         <button
           onClick={() => setActiveTab("visualization")}
           className={cn(
-            "flex-1 px-4 py-2 text-sm font-medium transition-all rounded-md",
+            "pb-3 text-sm font-medium transition-colors border-b-2",
             activeTab === "visualization"
-              ? "bg-slate-800 text-white shadow-sm"
-              : "text-slate-400 hover:text-slate-200",
+              ? "border-teal-400 text-teal-400"
+              : "border-transparent text-slate-500 hover:text-slate-300",
           )}
         >
           Visualización
@@ -287,10 +286,10 @@ export function BankChartCanvasView({
         <button
           onClick={() => setActiveTab("data")}
           className={cn(
-            "flex-1 px-4 py-2 text-sm font-medium transition-all rounded-md",
+            "pb-3 text-sm font-medium transition-colors border-b-2",
             activeTab === "data"
-              ? "bg-slate-800 text-white shadow-sm"
-              : "text-slate-400 hover:text-slate-200",
+              ? "border-teal-400 text-teal-400"
+              : "border-transparent text-slate-500 hover:text-slate-300",
           )}
         >
           Datos
@@ -299,10 +298,10 @@ export function BankChartCanvasView({
           <button
             onClick={() => setActiveTab("query")}
             className={cn(
-              "flex-1 px-4 py-2 text-sm font-medium transition-all rounded-md",
+              "pb-3 text-sm font-medium transition-colors border-b-2",
               activeTab === "query"
-                ? "bg-slate-800 text-white shadow-sm"
-                : "text-slate-400 hover:text-slate-200",
+                ? "border-teal-400 text-teal-400"
+                : "border-transparent text-slate-500 hover:text-slate-300",
             )}
           >
             Query Inspector
@@ -314,69 +313,85 @@ export function BankChartCanvasView({
       <div className="flex-1 overflow-y-auto space-y-4">
         {activeTab === "visualization" && (
           <>
-            {/* KPI Cards Row */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-lg bg-slate-950 border border-slate-800 p-3">
-                <div className="text-xs font-medium text-teal-500 uppercase tracking-wide mb-1">
+            {/* KPIs Flotantes (Sin Cajas) */}
+            <div className="grid grid-cols-3 gap-8 mb-10">
+              <div className="pl-0">
+                <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">
                   Bancos
-                </div>
-                <div className="text-2xl font-bold text-white">
+                </p>
+                <p className="text-3xl text-white font-medium">
                   {data.bank_names.length}
-                </div>
-                <div className="text-xs text-slate-400 mt-1">
+                </p>
+                <p className="text-sm text-slate-400 mt-1">
                   {data.bank_names.join(", ")}
-                </div>
+                </p>
               </div>
-              <div className="rounded-lg bg-slate-950 border border-slate-800 p-3">
-                <div className="text-xs font-medium text-teal-500 uppercase tracking-wide mb-1">
+              <div className="border-l border-slate-800 pl-8">
+                <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">
                   Periodo
-                </div>
-                <div className="text-lg font-bold text-white">
-                  {new Date(data.time_range.start).toLocaleDateString("es-MX", {
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </div>
-                <div className="text-xs text-slate-400 mt-1">
+                </p>
+                <p className="text-3xl text-white font-medium">
+                  {(() => {
+                    const startDate = new Date(data.time_range.start);
+                    return isNaN(startDate.getTime())
+                      ? "—"
+                      : startDate.toLocaleDateString("es-MX", {
+                          month: "short",
+                          year: "numeric",
+                        });
+                  })()}
+                </p>
+                <p className="text-sm text-slate-400 mt-1">
                   hasta{" "}
-                  {new Date(data.time_range.end).toLocaleDateString("es-MX", {
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </div>
+                  {(() => {
+                    const endDate = new Date(data.time_range.end);
+                    return isNaN(endDate.getTime())
+                      ? "—"
+                      : endDate.toLocaleDateString("es-MX", {
+                          month: "short",
+                          year: "numeric",
+                        });
+                  })()}
+                </p>
               </div>
-              <div className="rounded-lg bg-slate-950 border border-slate-800 p-3">
-                <div className="text-xs font-medium text-teal-500 uppercase tracking-wide mb-1">
-                  Datos
-                </div>
-                <div className="text-lg font-bold text-white">
-                  {new Date(data.data_as_of).toLocaleDateString("es-MX", {
-                    day: "numeric",
-                    month: "short",
-                  })}
-                </div>
-                <div className="text-xs text-slate-400 mt-1">
-                  {new Date(data.data_as_of).toLocaleTimeString("es-MX", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </div>
+              <div className="border-l border-slate-800 pl-8">
+                <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">
+                  Actualizado
+                </p>
+                <p className="text-3xl text-white font-medium">
+                  {(() => {
+                    const asOfDate = new Date(data.data_as_of);
+                    return isNaN(asOfDate.getTime())
+                      ? "—"
+                      : asOfDate.toLocaleDateString("es-MX", {
+                          day: "numeric",
+                          month: "short",
+                        });
+                  })()}
+                </p>
+                <p className="text-sm text-slate-400 mt-1">
+                  {(() => {
+                    const asOfDate = new Date(data.data_as_of);
+                    return isNaN(asOfDate.getTime())
+                      ? "—"
+                      : asOfDate.toLocaleTimeString("es-MX", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        });
+                  })()}
+                </p>
               </div>
             </div>
 
-            {/* Chart */}
-            <div
-              ref={plotContainerRef}
-              className="rounded-lg border border-slate-800 bg-slate-950 p-4"
-            >
+            {/* Chart - Minimal (No Border) */}
+            <div ref={plotContainerRef} className="w-full h-[400px]">
               <Plot
                 key={plotKey}
                 data={data.plotly_config.data as any}
                 layout={plotlyLayout as any}
                 config={{
                   responsive: true,
-                  displayModeBar: true,
-                  modeBarButtonsToRemove: ["sendDataToCloud"],
+                  displayModeBar: false, // Hide toolbar
                   displaylogo: false,
                 }}
                 className="w-full"
@@ -441,9 +456,9 @@ export function BankChartCanvasView({
         )}
 
         {activeTab === "query" && sanitizedSQL && (
-          <div className="rounded-lg border border-slate-800 bg-slate-950 p-4 space-y-3">
+          <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm text-slate-400">
+              <div className="flex items-center gap-2 text-sm text-slate-500">
                 <CodeBracketIcon className="h-4 w-4" />
                 <span>Query SQL Generado</span>
               </div>
@@ -451,12 +466,12 @@ export function BankChartCanvasView({
                 onClick={() => {
                   navigator.clipboard.writeText(sanitizedSQL);
                 }}
-                className="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-md transition-colors"
+                className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-300 transition-colors"
               >
                 Copiar
               </button>
             </div>
-            <pre className="overflow-x-auto rounded-lg bg-slate-900 p-4 text-xs text-green-400 font-mono border border-slate-800">
+            <pre className="overflow-x-auto bg-[#0B1120] p-6 text-sm text-slate-300 font-mono rounded">
               {sanitizedSQL}
             </pre>
           </div>
