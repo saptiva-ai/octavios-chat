@@ -12,9 +12,10 @@
 
 import { NextRequest, NextResponse } from "next/server";
 
-// Use backend URL (port 8000), not file-manager (port 8001)
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+// Use backend service name for Docker inter-container communication
+// In Docker: http://backend:8000
+// For local development outside Docker: http://localhost:8000
+const BACKEND_URL = process.env.BACKEND_API_URL || "http://backend:8000";
 
 export async function POST(request: NextRequest) {
   try {
