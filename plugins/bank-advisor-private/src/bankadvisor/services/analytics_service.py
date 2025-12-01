@@ -528,12 +528,15 @@ class AnalyticsService:
 
         df = pd.DataFrame(rows, columns=['fecha', 'banco', 'value'])
 
-        # Convert ratio metrics to percentage
-        if metric_type == "ratio":
+        # Convert ratio metrics to percentage, currency to millions
+        is_ratio = metric_type == "ratio"
+        if is_ratio:
             df['value'] = df['value'] * 100
+        else:
+            # Convert currency from pesos to millions (MDP)
+            df['value'] = df['value'] / 1_000_000
 
         # Build hovertemplate with units
-        is_ratio = metric_type == "ratio"
         hover_template = (
             "<b>%{fullData.name}</b><br>" +
             "Fecha: %{x}<br>" +
@@ -582,15 +585,18 @@ class AnalyticsService:
 
         df = pd.DataFrame(rows, columns=['fecha', 'banco', 'value'])
 
-        # Convert ratio metrics to percentage
-        if metric_type == "ratio":
+        # Convert ratio metrics to percentage, currency to millions
+        is_ratio = metric_type == "ratio"
+        if is_ratio:
             df['value'] = df['value'] * 100
+        else:
+            # Convert currency from pesos to millions (MDP)
+            df['value'] = df['value'] / 1_000_000
 
         # Get latest value per bank
         latest = df.sort_values('fecha').groupby('banco').last().reset_index()
 
         display_name = config.get_metric_display_name(metric_id)
-        is_ratio = metric_type == "ratio"
 
         # Build hovertemplate with units
         hover_template = (
@@ -633,10 +639,13 @@ class AnalyticsService:
 
         df = pd.DataFrame(rows, columns=['fecha', 'banco', 'value'])
 
-        # Convert ratio metrics to percentage
+        # Convert ratio metrics to percentage, currency to millions
         is_ratio = metric_type == "ratio"
         if is_ratio:
             df['value'] = df['value'] * 100
+        else:
+            # Convert currency from pesos to millions (MDP)
+            df['value'] = df['value'] / 1_000_000
 
         # Get latest value per bank, sorted
         latest = df.sort_values('fecha').groupby('banco').last().reset_index()
@@ -695,10 +704,13 @@ class AnalyticsService:
 
         df = pd.DataFrame(rows, columns=['fecha', 'banco', 'value'])
 
-        # Convert ratio metrics to percentage
+        # Convert ratio metrics to percentage, currency to millions
         is_ratio = metric_type == "ratio"
         if is_ratio:
             df['value'] = df['value'] * 100
+        else:
+            # Convert currency from pesos to millions (MDP)
+            df['value'] = df['value'] / 1_000_000
 
         # Get latest values
         latest = df.sort_values('fecha').groupby('banco').last().reset_index()
