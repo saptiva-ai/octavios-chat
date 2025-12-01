@@ -9,6 +9,7 @@ import type { ChatSession, ChatSessionOptimistic } from "../../lib/types";
 import { cn, formatRelativeTime, debounce } from "../../lib/utils";
 import { useAuthStore } from "../../lib/auth-store";
 import { useKeyboardNavigation } from "../../hooks/useKeyboardNavigation";
+import { ModeToggle } from "../ui/ModeToggle";
 // import { VirtualizedConversationList } from './VirtualizedConversationList'
 
 // Threshold for enabling virtualization (performance optimization)
@@ -267,13 +268,13 @@ export function ConversationList({
   const shouldVirtualize = sortedSessions.length > VIRTUALIZATION_THRESHOLD;
 
   const listContent = isLoading ? (
-    <div className="flex h-full items-center justify-center text-sm text-saptiva-light/70">
+    <div className="flex h-full items-center justify-center text-sm text-muted">
       Cargando conversaciones...
     </div>
   ) : sessions.length === 0 ? (
     // Empty state - no card, just subtle text
     <div className="flex h-full items-center justify-center px-6 text-center">
-      <p className="text-sm text-saptiva-light/50">No hay conversaciones aún</p>
+      <p className="text-sm text-muted/70">No hay conversaciones aún</p>
     </div>
   ) : false ? null : (
     // Virtualization temporarily disabled - always use regular list
@@ -302,18 +303,16 @@ export function ConversationList({
             <div
               className={cn(
                 "group relative flex w-full flex-col rounded-lg transition-all duration-150",
-                // Deep Purple Universe: Violet gradients
+                // Saptiva Design: Active state with primary accent
                 isActive
-                  ? "border-l-4 border-violet-500 bg-gradient-to-r from-violet-900/40 to-transparent pl-3 pr-3 py-3"
+                  ? "border-l-4 border-primary bg-surface shadow-sm pl-3 pr-3 py-3"
                   : "border-l-4 border-transparent bg-transparent pl-3 pr-3 py-3",
-                !isActive &&
-                  "hover:bg-gradient-to-r hover:from-violet-900/20 hover:to-transparent",
+                !isActive && "hover:bg-surface/50",
                 isFocused &&
                   !isActive &&
-                  "ring-1 ring-violet-500/40 bg-gradient-to-r from-violet-900/20 to-transparent",
+                  "ring-1 ring-primary/40 bg-surface/50",
                 // P0-UX-HIST-001: Highlight new sessions with animation
-                isNew &&
-                  "animate-highlight-fade bg-gradient-to-r from-violet-900/40 to-transparent",
+                isNew && "animate-highlight-fade",
               )}
               onMouseEnter={() => setHoveredChatId(session.id)}
               onMouseLeave={() => setHoveredChatId(null)}
@@ -335,7 +334,7 @@ export function ConversationList({
                       <svg
                         className={cn(
                           "h-3 w-3 flex-shrink-0",
-                          isActive ? "text-violet-400" : "text-violet-400/70",
+                          isActive ? "text-primary" : "text-primary/70",
                         )}
                         fill="currentColor"
                         viewBox="0 0 24 24"
@@ -352,7 +351,7 @@ export function ConversationList({
                         onChange={(e) => setRenameValue(e.target.value)}
                         onKeyDown={handleRenameKeyDown}
                         onBlur={handleFinishRename}
-                        className="bg-surface-2 text-sm font-semibold text-white rounded px-2 py-1 border border-border focus:border-primary focus:outline-none min-w-0 flex-1"
+                        className="bg-surface-2 text-sm font-semibold text-foreground rounded px-2 py-1 border border-border focus:border-primary focus:outline-none min-w-0 flex-1"
                         onClick={(e) => e.stopPropagation()}
                       />
                     ) : (
@@ -361,8 +360,8 @@ export function ConversationList({
                           className={cn(
                             "text-sm truncate",
                             isActive
-                              ? "font-medium text-white"
-                              : "font-normal text-violet-300/60 hover:text-violet-200",
+                              ? "font-medium text-foreground"
+                              : "font-normal text-muted hover:text-foreground",
                           )}
                         >
                           {session.title || "Conversación sin título"}
@@ -419,8 +418,8 @@ export function ConversationList({
                     className={cn(
                       "h-7 w-7 flex items-center justify-center rounded transition-colors",
                       isPinned
-                        ? "text-violet-400 hover:text-violet-400/80 hover:bg-surface-2"
-                        : "text-text-muted hover:text-text hover:bg-surface-2",
+                        ? "text-primary hover:text-primary/80 hover:bg-surface-2"
+                        : "text-muted hover:text-foreground hover:bg-surface-2",
                     )}
                     title={isPinned ? "Desfijar" : "Fijar"}
                   >
@@ -467,10 +466,7 @@ export function ConversationList({
   );
   if (!isGridLayout) {
     return (
-      <div
-        className={cn("flex h-full w-full flex-col bg-sidebar", className)}
-        style={{ backgroundColor: "#130b24" }}
-      >
+      <div className={cn("flex h-full w-full flex-col bg-surface", className)}>
         <div className="flex items-center justify-between gap-2 px-3 py-3">
           {/* Layout: [<] [Historial OctaviOS] [+] */}
 
@@ -479,7 +475,7 @@ export function ConversationList({
             <button
               type="button"
               onClick={onCollapse}
-              className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-saptiva-light transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60 lg:flex"
+              className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface-2 text-muted transition hover:bg-surface hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 lg:flex"
               aria-label={
                 isCollapsed ? "Expandir historial" : "Colapsar historial"
               }
@@ -522,7 +518,7 @@ export function ConversationList({
               <p className="text-xs uppercase tracking-[0.2em] text-text-muted">
                 Historial
               </p>
-              <h2 className="text-lg font-semibold text-white">
+              <h2 className="text-lg font-semibold text-foreground">
                 OctaviOS Chat
               </h2>
             </div>
@@ -536,7 +532,7 @@ export function ConversationList({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-saptiva-light transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60 lg:hidden"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-2 text-muted transition hover:bg-surface hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 lg:hidden"
                   aria-label="Cerrar historial"
                 >
                   <svg
@@ -568,10 +564,10 @@ export function ConversationList({
                 className={cn(
                   "flex h-8 w-8 items-center justify-center rounded-lg transition",
                   isCreatingConversation || !canCreateNew
-                    ? "bg-white/5 text-white/60 cursor-not-allowed"
+                    ? "bg-surface-2/60 text-muted cursor-not-allowed"
                     : existingEmptyDraft
-                      ? "bg-white/10 text-white hover:bg-white/15"
-                      : "bg-white/5 text-white/70 hover:bg-white/10",
+                      ? "bg-primary/10 text-primary hover:bg-primary/20"
+                      : "bg-surface-2 text-foreground hover:bg-surface",
                 )}
                 aria-label={
                   isCreatingConversation
@@ -787,8 +783,10 @@ export function ConversationList({
 
   return (
     <div
-      className={cn("flex h-full flex-col bg-sidebar text-text", className)}
-      style={{ backgroundColor: "#130b24" }}
+      className={cn(
+        "flex h-full flex-col bg-surface text-foreground",
+        className,
+      )}
     >
       <div
         className={cn(
@@ -848,7 +846,7 @@ export function ConversationList({
                 <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted">
                   Historial
                 </p>
-                <h2 className="text-sm font-semibold text-white">
+                <h2 className="text-sm font-semibold text-foreground">
                   OctaviOS Chat
                 </h2>
               </div>
@@ -925,7 +923,7 @@ export function ConversationList({
               <p className="text-xs uppercase tracking-[0.2em] text-text-muted">
                 Historial
               </p>
-              <h2 className="text-lg font-semibold text-white">
+              <h2 className="text-lg font-semibold text-foreground">
                 OctaviOS Chat
               </h2>
             </div>
@@ -934,7 +932,7 @@ export function ConversationList({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 text-saptiva-light transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-2 text-muted transition hover:bg-surface hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                   aria-label="Cerrar historial"
                 >
                   <svg
@@ -962,10 +960,10 @@ export function ConversationList({
                 onClick={handleCreate}
                 disabled={isCreatingConversation || !canCreateNew}
                 className={cn(
-                  "flex h-10 w-10 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60",
+                  "flex h-10 w-10 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
                   isCreatingConversation || !canCreateNew
-                    ? "bg-violet-500/10 text-violet-500/60 cursor-not-allowed"
-                    : "bg-violet-500/20 text-violet-500 hover:scale-[1.02] hover:bg-violet-500/30",
+                    ? "bg-primary/10 text-primary/60 cursor-not-allowed"
+                    : "bg-primary/20 text-primary hover:scale-[1.02] hover:bg-primary/30",
                 )}
                 aria-label={
                   isCreatingConversation

@@ -3,10 +3,8 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   CodeBracketIcon,
-  ChartBarIcon,
   CalendarDaysIcon,
   BuildingOffice2Icon,
-  CircleStackIcon,
   ArrowDownTrayIcon,
   TableCellsIcon,
 } from "@heroicons/react/24/outline";
@@ -43,9 +41,9 @@ export function BankChartCanvasView({
   data,
   className,
 }: BankChartCanvasViewProps) {
-  const [activeTab, setActiveTab] = useState<
-    "visualization" | "data" | "query"
-  >("visualization");
+  const [activeTab, setActiveTab] = useState<"visualization" | "data">(
+    "visualization",
+  );
   const plotContainerRef = useRef<HTMLDivElement>(null);
   const [plotKey, setPlotKey] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -181,31 +179,32 @@ export function BankChartCanvasView({
     }
   };
 
-  // Deep Purple Universe: Violet chart configuration
+  // Saptiva Dual Theme: Chart configuration (uses CSS variable colors)
+  // Note: Plotly requires explicit colors, so we use muted teal tones
   const plotlyLayout = {
     ...data.plotly_config.layout,
     autosize: true,
-    height: 400,
-    margin: { l: 60, r: 20, t: 20, b: 60 },
+    height: 500, // Increased from 320px
+    margin: { l: 50, r: 15, t: 15, b: 50 },
     paper_bgcolor: "rgba(0,0,0,0)", // Transparent
     plot_bgcolor: "rgba(0,0,0,0)", // Transparent
-    font: { color: "rgba(233, 213, 255, 1)", size: 11 }, // violet-200
+    font: { color: "hsl(var(--foreground))", size: 12 }, // White in dark mode
     xaxis: {
       ...data.plotly_config.layout.xaxis,
       showgrid: false, // No vertical grid
-      linecolor: "rgba(76, 29, 149, 0.5)", // violet-900/50
-      tickfont: { color: "rgba(233, 213, 255, 1)" }, // violet-200
+      linecolor: "hsl(var(--border))",
+      tickfont: { color: "hsl(var(--foreground))" }, // White in dark mode
     },
     yaxis: {
       ...data.plotly_config.layout.yaxis,
-      gridcolor: "rgba(76, 29, 149, 0.2)", // Very subtle violet grid
-      linecolor: "rgba(76, 29, 149, 0.5)", // violet-900/50
-      tickfont: { color: "rgba(233, 213, 255, 1)" }, // violet-200
+      gridcolor: "hsl(var(--border))",
+      linecolor: "hsl(var(--border))",
+      tickfont: { color: "hsl(var(--foreground))" }, // White in dark mode
     },
     legend: {
       ...data.plotly_config.layout.legend,
       bgcolor: "rgba(0,0,0,0)",
-      font: { color: "rgba(233, 213, 255, 1)" }, // violet-200
+      font: { color: "hsl(var(--foreground))" }, // White in dark mode
     },
   };
 
@@ -221,144 +220,86 @@ export function BankChartCanvasView({
 
   return (
     <div className={cn("flex h-full flex-col space-y-4", className)}>
-      {/* Metadata Header - Deep Purple */}
-      <div className="space-y-3 pb-6 mb-6 border-b border-violet-900/50">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-white">
-            {data.metric_name.toUpperCase()}
-          </h2>
-
-          {/* Action buttons */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleDownloadPNG}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-violet-300 hover:text-white bg-violet-950 hover:bg-violet-900 rounded-md transition-colors"
-              title="Descargar como PNG"
-            >
-              <ArrowDownTrayIcon className="h-4 w-4" />
-              <span>PNG</span>
-            </button>
-            <button
-              onClick={handleExportCSV}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-violet-300 hover:text-white bg-violet-950 hover:bg-violet-900 rounded-md transition-colors"
-              title="Exportar a CSV"
-            >
-              <TableCellsIcon className="h-4 w-4" />
-              <span>CSV</span>
-            </button>
-          </div>
+      {/* Compact Action Bar */}
+      <div className="flex items-center justify-between pb-3 mb-3 border-b border-border">
+        <div className="flex items-center gap-3 text-xs text-muted">
+          <span className="flex items-center gap-1">
+            <BuildingOffice2Icon className="h-3.5 w-3.5 text-primary" />
+            {data.bank_names.length} bancos
+          </span>
+          <span className="flex items-center gap-1">
+            <CalendarDaysIcon className="h-3.5 w-3.5 text-primary" />
+            {new Date(data.time_range.start).toLocaleDateString("es-MX", {
+              month: "short",
+              year: "2-digit",
+            })}{" "}
+            -{" "}
+            {new Date(data.time_range.end).toLocaleDateString("es-MX", {
+              month: "short",
+              year: "2-digit",
+            })}
+          </span>
         </div>
-
-        <div className="grid grid-cols-2 gap-3 text-xs">
-          <div className="flex items-center gap-2 text-violet-200">
-            <BuildingOffice2Icon className="h-4 w-4 text-violet-400" />
-            <span>{data.bank_names.join(", ")}</span>
-          </div>
-          <div className="flex items-center gap-2 text-violet-200">
-            <CalendarDaysIcon className="h-4 w-4 text-violet-400" />
-            <span>
-              {new Date(data.time_range.start).toLocaleDateString()} -{" "}
-              {new Date(data.time_range.end).toLocaleDateString()}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-violet-200">
-            <CircleStackIcon className="h-4 w-4 text-violet-400" />
-            <span>
-              Actualizado: {new Date(data.data_as_of).toLocaleString()}
-            </span>
-          </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleDownloadPNG}
+            className="p-1.5 text-muted hover:text-foreground hover:bg-surface-2 rounded transition-colors"
+            title="Descargar PNG"
+          >
+            <ArrowDownTrayIcon className="h-4 w-4" />
+          </button>
+          <button
+            onClick={handleExportCSV}
+            className="p-1.5 text-muted hover:text-foreground hover:bg-surface-2 rounded transition-colors"
+            title="Exportar CSV"
+          >
+            <TableCellsIcon className="h-4 w-4" />
+          </button>
         </div>
       </div>
 
-      {/* Deep Purple: Underline Tabs */}
-      <div className="flex space-x-8 border-b border-violet-900/50 mb-8">
+      {/* Compact Tabs */}
+      <div className="flex gap-4 border-b border-border mb-4">
         <button
           onClick={() => setActiveTab("visualization")}
           className={cn(
-            "pb-3 text-sm font-medium transition-colors border-b-2",
+            "pb-2 text-xs font-medium transition-colors border-b-2",
             activeTab === "visualization"
-              ? "border-violet-400 text-violet-400"
-              : "border-transparent text-violet-400/50 hover:text-violet-300",
+              ? "border-primary text-primary"
+              : "border-transparent text-muted hover:text-foreground",
           )}
         >
-          Visualización
+          Gráfica
         </button>
         <button
           onClick={() => setActiveTab("data")}
           className={cn(
-            "pb-3 text-sm font-medium transition-colors border-b-2",
+            "pb-2 text-xs font-medium transition-colors border-b-2",
             activeTab === "data"
-              ? "border-violet-400 text-violet-400"
-              : "border-transparent text-violet-400/50 hover:text-violet-300",
+              ? "border-primary text-primary"
+              : "border-transparent text-muted hover:text-foreground",
           )}
         >
           Datos
         </button>
-        {sanitizedSQL && (
-          <button
-            onClick={() => setActiveTab("query")}
-            className={cn(
-              "pb-3 text-sm font-medium transition-colors border-b-2",
-              activeTab === "query"
-                ? "border-violet-400 text-violet-400"
-                : "border-transparent text-violet-400/50 hover:text-violet-300",
-            )}
-          >
-            Query Inspector
-          </button>
-        )}
       </div>
 
       {/* Tab Content */}
       <div className="flex-1 overflow-y-auto space-y-4">
         {activeTab === "visualization" && (
           <>
-            {/* KPIs Flotantes Violeta */}
-            <div className="grid grid-cols-3 gap-8 mb-10">
-              <div className="pl-0">
-                <p className="text-violet-400 text-xs font-semibold uppercase tracking-wider mb-1">
-                  Bancos
-                </p>
-                <p className="text-3xl text-white font-medium">
-                  {data.bank_names.length}
-                </p>
-                <p className="text-sm text-violet-200 mt-1">
+            {/* Compact KPI Row */}
+            <div className="flex items-center gap-4 text-xs mb-4 pb-3 border-b border-border/50">
+              <div>
+                <span className="text-muted">Bancos: </span>
+                <span className="text-foreground font-medium">
                   {data.bank_names.join(", ")}
-                </p>
+                </span>
               </div>
-              <div className="border-l border-violet-900/50 pl-8">
-                <p className="text-violet-400 text-xs font-semibold uppercase tracking-wider mb-1">
-                  Periodo
-                </p>
-                <p className="text-3xl text-white font-medium">
-                  {(() => {
-                    const startDate = new Date(data.time_range.start);
-                    return isNaN(startDate.getTime())
-                      ? "—"
-                      : startDate.toLocaleDateString("es-MX", {
-                          month: "short",
-                          year: "numeric",
-                        });
-                  })()}
-                </p>
-                <p className="text-sm text-violet-200 mt-1">
-                  hasta{" "}
-                  {(() => {
-                    const endDate = new Date(data.time_range.end);
-                    return isNaN(endDate.getTime())
-                      ? "—"
-                      : endDate.toLocaleDateString("es-MX", {
-                          month: "short",
-                          year: "numeric",
-                        });
-                  })()}
-                </p>
-              </div>
-              <div className="border-l border-violet-900/50 pl-8">
-                <p className="text-violet-400 text-xs font-semibold uppercase tracking-wider mb-1">
-                  Actualizado
-                </p>
-                <p className="text-3xl text-white font-medium">
+              <div className="text-muted">|</div>
+              <div>
+                <span className="text-muted">Actualizado: </span>
+                <span className="text-foreground font-medium">
                   {(() => {
                     const asOfDate = new Date(data.data_as_of);
                     return isNaN(asOfDate.getTime())
@@ -366,25 +307,16 @@ export function BankChartCanvasView({
                       : asOfDate.toLocaleDateString("es-MX", {
                           day: "numeric",
                           month: "short",
-                        });
-                  })()}
-                </p>
-                <p className="text-sm text-violet-200 mt-1">
-                  {(() => {
-                    const asOfDate = new Date(data.data_as_of);
-                    return isNaN(asOfDate.getTime())
-                      ? "—"
-                      : asOfDate.toLocaleTimeString("es-MX", {
                           hour: "2-digit",
                           minute: "2-digit",
                         });
                   })()}
-                </p>
+                </span>
               </div>
             </div>
 
-            {/* Chart - Minimal (No Border) */}
-            <div ref={plotContainerRef} className="w-full h-[400px]">
+            {/* Chart - Larger */}
+            <div ref={plotContainerRef} className="w-full h-[500px]">
               <Plot
                 key={plotKey}
                 data={data.plotly_config.data as any}
@@ -399,27 +331,52 @@ export function BankChartCanvasView({
                 style={{ width: "100%", height: "100%" }}
               />
             </div>
+
+            {/* SQL Query Section - Below Chart */}
+            {sanitizedSQL && (
+              <div className="space-y-3 pt-4 border-t border-border">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm">
+                    <CodeBracketIcon className="h-4 w-4 text-primary" />
+                    <span className="font-medium text-foreground">
+                      Consulta SQL
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(sanitizedSQL);
+                    }}
+                    className="px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground bg-surface-2 hover:bg-surface rounded transition-colors"
+                  >
+                    Copiar
+                  </button>
+                </div>
+                <pre className="overflow-x-auto bg-surface border border-border p-4 text-xs text-foreground dark:text-white font-mono rounded leading-relaxed">
+                  {sanitizedSQL}
+                </pre>
+              </div>
+            )}
           </>
         )}
 
         {activeTab === "data" && (
-          <div className="rounded-lg border border-violet-900/50 bg-transparent overflow-hidden">
+          <div className="rounded-lg border border-border bg-transparent overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-violet-950 border-b border-violet-900/50">
+                <thead className="sticky top-0 bg-surface-2 border-b border-border">
                   <tr>
-                    <th className="px-4 py-3 text-left font-medium text-violet-400 uppercase tracking-wide text-xs">
+                    <th className="px-4 py-3 text-left font-medium text-primary uppercase tracking-wide text-xs">
                       Banco
                     </th>
-                    <th className="px-4 py-3 text-left font-medium text-violet-400 uppercase tracking-wide text-xs">
+                    <th className="px-4 py-3 text-left font-medium text-primary uppercase tracking-wide text-xs">
                       Periodo
                     </th>
-                    <th className="px-4 py-3 text-right font-medium text-violet-400 uppercase tracking-wide text-xs">
+                    <th className="px-4 py-3 text-right font-medium text-primary uppercase tracking-wide text-xs">
                       {data.metric_name}
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-violet-900/50">
+                <tbody className="divide-y divide-border">
                   {data.plotly_config.data.map(
                     (trace: any, traceIdx: number) => {
                       const bankName = trace.name || `Banco ${traceIdx + 1}`;
@@ -429,15 +386,13 @@ export function BankChartCanvasView({
                       return xValues.map((period: string, idx: number) => (
                         <tr
                           key={`${traceIdx}-${idx}`}
-                          className="hover:bg-violet-950/30 transition-colors"
+                          className="hover:bg-surface-2/50 transition-colors"
                         >
-                          <td className="px-4 py-2.5 text-white font-medium">
+                          <td className="px-4 py-2.5 text-foreground font-medium">
                             {bankName}
                           </td>
-                          <td className="px-4 py-2.5 text-violet-200">
-                            {period}
-                          </td>
-                          <td className="px-4 py-2.5 text-right text-white font-mono">
+                          <td className="px-4 py-2.5 text-muted">{period}</td>
+                          <td className="px-4 py-2.5 text-right text-foreground font-mono">
                             {typeof yValues[idx] === "number"
                               ? yValues[idx].toLocaleString("es-MX", {
                                   minimumFractionDigits: 2,
@@ -452,28 +407,6 @@ export function BankChartCanvasView({
                 </tbody>
               </table>
             </div>
-          </div>
-        )}
-
-        {activeTab === "query" && sanitizedSQL && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm text-violet-300">
-                <CodeBracketIcon className="h-4 w-4 text-violet-400" />
-                <span>Query SQL Generado</span>
-              </div>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(sanitizedSQL);
-                }}
-                className="px-3 py-1.5 text-xs font-medium text-violet-300 hover:text-violet-100 bg-violet-950 hover:bg-violet-900 rounded transition-colors"
-              >
-                Copiar
-              </button>
-            </div>
-            <pre className="overflow-x-auto bg-[#05020a] border border-violet-900/50 p-6 text-sm text-violet-100 font-mono rounded">
-              {sanitizedSQL}
-            </pre>
           </div>
         )}
       </div>

@@ -493,7 +493,7 @@ export function ChatInterface({
             className="flex-1 flex items-center justify-center px-4"
           >
             <div className="w-full max-w-[640px] space-y-6 text-center">
-              <h1 className="text-3xl font-semibold text-white/95">
+              <h1 className="text-3xl font-semibold text-foreground">
                 ¿Cómo puedo ayudarte, {user?.username || "Usuario"}?
               </h1>
 
@@ -613,7 +613,7 @@ export function ChatInterface({
         onClose={handleCloseAuditModal}
         title={auditModal.filename || "Reporte de auditoría"}
         size="xl"
-        className="bg-zinc-900 text-zinc-100 border border-zinc-800"
+        className="bg-surface text-foreground border border-border"
       >
         {auditModal.loading ? (
           <div className="flex items-center justify-center py-12">
@@ -626,7 +626,7 @@ export function ChatInterface({
             <ValidationFindings report={auditModal.report} />
           </div>
         ) : (
-          <p className="text-sm text-zinc-400">
+          <p className="text-sm text-muted">
             Selecciona un reporte de auditoría para ver los detalles.
           </p>
         )}
@@ -637,14 +637,14 @@ export function ChatInterface({
 
 export function ChatWelcomeMessage() {
   return (
-    <div className="mx-auto max-w-xl text-center text-white">
-      <div className="inline-flex items-center rounded-full border border-white/20 bg-white/5 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-saptiva-light/70">
+    <div className="mx-auto max-w-xl text-center text-foreground">
+      <div className="inline-flex items-center rounded-full border border-border bg-surface px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-muted">
         Saptiva Copilot OS
       </div>
-      <h2 className="mt-4 text-3xl font-semibold text-white">
+      <h2 className="mt-4 text-3xl font-semibold text-foreground">
         Conversaciones con enfoque, evidencia y control
       </h2>
-      <p className="mt-3 text-sm text-saptiva-light/70">
+      <p className="mt-3 text-sm text-muted">
         Inicia tu consulta o activa Deep Research para investigar con
         trazabilidad completa.
       </p>

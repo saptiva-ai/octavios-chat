@@ -712,12 +712,22 @@ async def _bank_analytics_impl(
             pipeline="legacy"
         )
 
+        # Generate SQL representation for frontend display
+        sql_generated = f"""SELECT
+    fecha,
+    banco_norm,
+    {config["field"]}
+FROM monthly_kpis
+ORDER BY fecha ASC;"""
+
         return {
             "data": payload["data"],
             "metadata": {
                 "metric": config["field"],
                 "data_as_of": data_as_of,
                 "title": payload.get("title", config.get("title", "Análisis Bancario")),
+                "pipeline": "legacy",
+                "sql_generated": sql_generated,
                 "performance": {
                     "duration_ms": round(duration_ms, 2),
                     "rows_returned": n_rows

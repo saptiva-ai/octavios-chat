@@ -1,20 +1,32 @@
+"use client";
+
 import Image from "next/image";
 import type { ReactNode } from "react";
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-bg text-text">
+    <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col items-center justify-center gap-10 px-4">
-        {/* Logo OctaviOS */}
+        {/* Logo OctaviOS - Theme Aware */}
         <div className="flex flex-col items-center">
           <div className="relative h-48 w-48">
+            {/* Light theme logo - hidden in dark mode */}
+            <Image
+              src="/OctaviOS_WhiteBack2.png"
+              alt="OctaviOS Chat"
+              fill
+              priority
+              sizes="192px"
+              className="object-contain drop-shadow-[0_10px_30px_rgba(45,212,191,0.45)] dark:hidden"
+            />
+            {/* Dark theme logo - hidden in light mode */}
             <Image
               src="/OctaviOS_DarkBack2.png"
               alt="OctaviOS Chat"
               fill
               priority
               sizes="192px"
-              className="object-contain drop-shadow-[0_10px_30px_rgba(73,247,217,0.45)]"
+              className="object-contain drop-shadow-[0_10px_30px_rgba(45,212,191,0.45)] hidden dark:block"
             />
           </div>
         </div>

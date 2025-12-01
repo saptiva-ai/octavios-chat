@@ -2,10 +2,12 @@
 
 import * as React from "react";
 import Image from "next/image";
+import { useTheme } from "next-themes";
 
 import { cn } from "../../lib/utils";
 import { ModelSelector, type ChatModel } from "./ModelSelector";
 import { featureFlags } from "../../lib/feature-flags";
+import { ModeToggle } from "../ui/ModeToggle";
 
 interface ChatShellProps {
   sidebar: React.ReactNode;
@@ -34,6 +36,7 @@ function GridChatShell({
   selectedModel,
   onModelChange,
 }: ChatShellProps) {
+  const { resolvedTheme } = useTheme();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = React.useState(false);
   const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] =
     React.useState(false);
@@ -41,6 +44,12 @@ function GridChatShell({
 
   const sidebarWidth = isDesktopSidebarCollapsed ? 64 : 280;
   const safeLeft = !isDesktop && !isMobileSidebarOpen ? "48px" : "0px";
+
+  // Theme-aware Saptiva logo
+  const logoSrc =
+    resolvedTheme === "dark"
+      ? "/SaptivaAIlogo_blackbg.PNG" // White logo for dark background
+      : "/SaptivaAIlogo_whitebg.PNG"; // Dark logo for white background
 
   // Update body data attribute for CSS variable switching
   React.useEffect(() => {
@@ -158,7 +167,7 @@ function GridChatShell({
 
   return (
     <div
-      className="relative h-[100dvh] w-full overflow-hidden bg-bg text-text"
+      className="relative h-[100dvh] w-full overflow-hidden bg-background text-foreground"
       style={containerStyle}
     >
       {isDesktop ? (
@@ -187,10 +196,11 @@ function GridChatShell({
                 className="max-w-xs"
               />
             ) : null}
-            <div className="flex items-center">
+            <div className="flex items-center gap-3">
+              <ModeToggle />
               <Image
-                src="/OctaviOS_DarkBack2.png"
-                alt="OctaviOS Chat"
+                src={logoSrc}
+                alt="Saptiva AI"
                 width={120}
                 height={32}
                 className="h-8 w-auto"
@@ -252,17 +262,25 @@ function LegacyMobileLayout({
   onModelChange,
   footer,
 }: LegacyMobileLayoutProps) {
+  const { resolvedTheme } = useTheme();
+
+  // Theme-aware Saptiva logo
+  const logoSrc =
+    resolvedTheme === "dark"
+      ? "/SaptivaAIlogo_blackbg.PNG" // White logo for dark background
+      : "/SaptivaAIlogo_whitebg.PNG"; // Dark logo for white background
+
   return (
-    <div className="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-bg text-text">
-      <div className="absolute left-4 top-4 z-30 block">
+    <div className="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-background text-foreground">
+      <div className="absolute left-3 top-2.5 z-30 block">
         <button
           type="button"
           onClick={onRequestSidebar}
-          className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-surface text-text shadow-card transition hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-surface text-foreground shadow-card transition hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
           aria-label="Abrir historial"
         >
           <svg
-            className="h-5 w-5"
+            className="h-4 w-4"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -295,22 +313,20 @@ function LegacyMobileLayout({
         </div>
       </aside>
 
-      <header
-        className="sticky top-0 z-20 flex shrink-0 items-center justify-between gap-3 border-b border-border/40 bg-surface/95 px-4 py-3 backdrop-blur transition-all duration-200"
-        style={{ paddingLeft: "var(--safe-left, 48px)" }}
-      >
+      <header className="sticky top-0 z-20 flex shrink-0 items-center justify-between gap-3 border-b border-border/40 bg-surface/95 pl-[52px] pr-3 py-2.5 backdrop-blur transition-all duration-200">
         {selectedModel && onModelChange ? (
           <ModelSelector
             models={models}
             selectedModel={selectedModel}
             onModelChange={onModelChange}
-            className="max-w-[50%]"
+            className="max-w-[40%] min-w-0"
           />
         ) : null}
-        <div className="flex items-center">
+        <div className="flex items-center gap-3 shrink-0">
+          <ModeToggle />
           <Image
-            src="/OctaviOS_DarkBack2.png"
-            alt="OctaviOS Chat"
+            src={logoSrc}
+            alt="Saptiva AI"
             width={100}
             height={28}
             className="h-7 w-auto"
@@ -392,7 +408,7 @@ function LegacyChatShell({
   }, [sidebar, handleCloseSidebar]);
 
   return (
-    <div className="safe-area-top relative flex h-[100dvh] w-full overflow-hidden bg-bg text-text">
+    <div className="safe-area-top relative flex h-[100dvh] w-full overflow-hidden bg-background text-foreground">
       {/* Desktop sidebar - with persistent rail */}
       <aside
         className={cn(
@@ -478,9 +494,7 @@ function LegacyChatShell({
 
         {/* Input area as footer - conditionally render */}
         {footer && (
-          <footer className="shrink-0 border-t border-white/10">
-            {footer}
-          </footer>
+          <footer className="shrink-0 border-t border-border">{footer}</footer>
         )}
       </main>
     </div>

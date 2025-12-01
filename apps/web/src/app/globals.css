@@ -25,22 +25,49 @@
  * SAPTIVA DESIGN TOKENS (inlined)
  * ======================================== */
 
-/* === CSS VARIABLES DARK THEME === */
+/* === SAPTIVA DUAL THEME SYSTEM === */
+/* Light Mode: Clean Saptiva (Default) */
+/* Dark Mode: Enterprise Slate */
 :root {
-  /* Updated dark theme palette */
-  --color-bg: #0B1217;
-  --color-surface: #121A21;
-  --color-surface-2: #18222C;
-  --color-border: #1F2A33;
-  --color-text: #E6E8EB;
-  --color-text-muted: #9AA4AF;
-  --color-primary: #49F7D9;
+  /* --- SAPTIVA LIGHT MODE (Default) --- */
+  --background: 0 0% 100%;           /* #FFFFFF - Pure White */
+  --surface: 210 40% 98%;            /* #F9FAFB - Very Light Gray (Sidebar) */
+  --surface-2: 210 20% 96%;          /* #F3F4F6 - Slightly darker surface */
+  --foreground: 222 47% 11%;         /* #111827 - Near Black (Text) */
+  --muted: 215 16% 47%;              /* #6B7280 - Medium Gray (Secondary Text) */
+
+  --primary: 168 76% 36%;            /* #14A890 - Darker Teal for light mode */
+  --primary-fg: 0 0% 100%;           /* White text on primary buttons */
+  --primary-600: 168 76% 30%;        /* Darker teal */
+  --primary-700: 168 76% 24%;        /* Even darker teal */
+
+  --border: 214 32% 91%;             /* #E5E7EB - Subtle Gray Border */
+  --input: 214 32% 91%;              /* Input borders */
+
+  --chart-grid: 220 13% 91%;         /* Soft grid for charts */
+  --chart-text: 215 16% 47%;         /* Muted chart text */
+
+  --success: 168 64% 50%;            /* #2DD4BF - Same as primary */
+  --warning: 45 93% 58%;             /* #F4C430 - Yellow */
+  --danger: 0 84% 60%;               /* #F87171 - Red */
+
+  --card-shadow: 0 6px 20px rgba(0,0,0,0.08);
+  --radius: 12px;
+
+  /* Legacy compat */
+  --color-bg: #FFFFFF;
+  --color-surface: #F9FAFB;
+  --color-surface-2: #F3F4F6;
+  --color-border: #E5E7EB;
+  --color-text: #111827;
+  --color-text-muted: #6B7280;
+  --color-primary: #2DD4BF;
   --color-primary-600: #2DC4AE;
   --color-primary-700: #1EA595;
-  --color-success: #49F7D9;
+  --color-success: #2DD4BF;
   --color-warning: #F4C430;
   --color-danger: #F87171;
-  --color-link: #49F7D9;
+  --color-link: #2DD4BF;
 
   /* Tipografía del plan */
   --font-family: 'IBM Plex Sans', system-ui, sans-serif;
@@ -57,6 +84,51 @@
   --border-radius-card: 12px;
 
   /* Shadows del plan */
+  --shadow-card: 0 6px 20px rgba(0,0,0,0.08);
+}
+
+.dark {
+  /* --- SAPTIVA DARK MODE (Enterprise Slate) --- */
+  --background: 220 30% 7%;          /* #0B1120 - Deep Navy (Base App) */
+  --surface: 217 33% 17%;            /* #1e293b - Slate 800 (Sidebar/Cards) */
+  --surface-2: 217 28% 22%;          /* #2d3a4d - Slightly lighter surface */
+  --foreground: 210 40% 98%;         /* #F9FAFB - Soft White (Text) */
+  --muted: 215 20% 65%;              /* #94a3b8 - Slate 400 (Secondary Text) */
+
+  --primary: 168 64% 50%;            /* #2DD4BF - Same Teal (brighter on dark) */
+  --primary-fg: 0 0% 100%;
+  --primary-600: 168 64% 40%;
+  --primary-700: 168 64% 34%;
+
+  --border: 217 25% 28%;             /* #3d4a5c - Visible borders in dark mode */
+  --input: 217 33% 25%;              /* Slightly lighter input borders */
+
+  --chart-grid: 217 33% 20%;         /* Dark grid */
+  --chart-text: 215 20% 65%;         /* Muted chart text */
+
+  --success: 168 64% 50%;
+  --warning: 45 93% 58%;
+  --danger: 0 84% 60%;
+
+  --card-shadow: 0 6px 20px rgba(0,0,0,0.24);
+  --radius: 12px;
+
+  /* Legacy compat */
+  --color-bg: #0B1120;
+  --color-surface: #1e293b;
+  --color-surface-2: #2d3a4d;
+  --color-border: #1e293b;
+  --color-text: #F9FAFB;
+  --color-text-muted: #94a3b8;
+  --color-primary: #2DD4BF;
+  --color-primary-600: #2DC4AE;
+  --color-primary-700: #1EA595;
+  --color-success: #2DD4BF;
+  --color-warning: #F4C430;
+  --color-danger: #F87171;
+  --color-link: #2DD4BF;
+
+  /* Dark mode shadows */
   --shadow-card: 0 6px 20px rgba(0,0,0,0.24);
 }
 
@@ -145,6 +217,7 @@
 
   body {
     overflow-x: hidden;
+    @apply bg-background text-foreground transition-colors duration-300;
   }
 
   /* Dynamic viewport height support */
@@ -166,12 +239,17 @@
   }
 
   /* ========================================
-   * Minimal Scrollbars (ChatGPT-style)
+   * Minimal Scrollbars (Theme-aware)
    * ======================================== */
 
-  /* Firefox scrollbar styling */
+  /* Firefox scrollbar styling - Light mode */
   * {
     scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
+  }
+
+  /* Dark mode Firefox scrollbars */
+  .dark * {
     scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
   }
 
@@ -185,22 +263,39 @@
     background: transparent;
   }
 
+  /* Light mode scrollbar thumb */
   *::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.18);
+    background: rgba(0, 0, 0, 0.15);
     border-radius: 9999px;
   }
 
-  /* Subtle highlight on hover */
   *:hover::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.25);
+  }
+
+  /* Dark mode scrollbar thumb */
+  .dark *::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+  }
+
+  .dark *:hover::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.28);
   }
 
   /* Extra subtle for textareas */
   textarea::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(0, 0, 0, 0.12);
   }
 
   textarea:hover::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.25);
+  }
+
+  .dark textarea::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .dark textarea:hover::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.28);
   }
 
@@ -237,10 +332,18 @@
   }
 
   /* ========================================
-   * Minimalist Surface Tokens (ChatGPT-style)
+   * Minimalist Surface Tokens (Theme-aware)
    * ======================================== */
+  /* Light mode: subtle dark overlays */
   :root {
-    --surface: rgba(255, 255, 255, 0.04);
+    --surface-overlay: rgba(0, 0, 0, 0.02);
+    --surface-strong: rgba(0, 0, 0, 0.04);
+    --hairline: rgba(0, 0, 0, 0.08);
+  }
+
+  /* Dark mode: subtle light overlays */
+  .dark {
+    --surface-overlay: rgba(255, 255, 255, 0.04);
     --surface-strong: rgba(255, 255, 255, 0.06);
     --hairline: rgba(255, 255, 255, 0.08);
   }

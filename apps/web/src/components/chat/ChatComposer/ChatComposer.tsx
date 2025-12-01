@@ -671,7 +671,7 @@ export function ChatComposer({
         <div
           ref={composerRef}
           className={cn(
-            "grid grid-rows-[auto_auto] gap-2 rounded-[2rem] border border-zinc-700/50 bg-zinc-900/70 p-2 shadow-sm transition-all duration-200 backdrop-blur supports-[backdrop-filter]:bg-zinc-900/60 sm:p-3",
+            "grid grid-rows-[auto_auto] gap-2 rounded-[2rem] border border-border bg-surface/70 p-2 shadow-sm transition-all duration-200 backdrop-blur supports-[backdrop-filter]:bg-surface/60 sm:p-3",
             "hover:shadow-md focus-within:shadow-md",
           )}
         >
@@ -696,7 +696,7 @@ export function ChatComposer({
               disabled={disabled || loading}
               maxLength={maxLength}
               rows={1}
-              className="peer h-full w-full max-h-[176px] resize-none overflow-y-auto rounded-xl bg-transparent px-2 py-1.5 text-sm leading-relaxed text-zinc-100 placeholder:text-zinc-400 focus:outline-none"
+              className="peer h-full w-full max-h-[176px] resize-none overflow-y-auto rounded-xl bg-transparent px-2 py-1.5 text-sm leading-relaxed text-foreground placeholder:text-muted focus:outline-none"
             />
           </div>
 
@@ -779,8 +779,8 @@ export function ChatComposer({
                     disabled={!canSubmit}
                     aria-label="Enviar mensaje"
                     className={cn(
-                      "grid min-h-[36px] min-w-[40px] place-items-center rounded-xl bg-emerald-600 text-white transition-colors",
-                      "hover:bg-emerald-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900",
+                      "grid min-h-[36px] min-w-[40px] place-items-center rounded-xl bg-primary text-primary-foreground transition-colors",
+                      "hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
                       !canSubmit && "cursor-not-allowed opacity-50",
                     )}
                   >
@@ -798,10 +798,10 @@ export function ChatComposer({
                     className={cn(
                       "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors",
                       attachment.status === "completed"
-                        ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-200"
+                        ? "border-primary/50 bg-primary/10 text-primary"
                         : attachment.status === "error"
-                          ? "border-red-500/60 bg-red-500/10 text-red-300"
-                          : "border-zinc-700/70 bg-zinc-900/80 text-zinc-200",
+                          ? "border-red-500/60 bg-red-500/10 text-red-400"
+                          : "border-border bg-surface text-foreground",
                     )}
                   >
                     <span className="text-sm">

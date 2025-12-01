@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: ["class"], // Enable class-based dark mode for next-themes
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -8,41 +9,46 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Dark theme palette según plan-ui.yaml TOK-01
-        bg: '#0B1217',
-        surface: '#121A21',
-        'surface-2': '#18222C',
-        border: '#1F2A33',
-        text: '#E6E8EB',
-        'text-muted': '#9AA4AF',
+        // === SAPTIVA SEMANTIC COLORS (HSL from CSS variables) ===
+        background: "hsl(var(--background))",
+        surface: "hsl(var(--surface))",
+        'surface-2': "hsl(var(--surface-2))",
+        foreground: "hsl(var(--foreground))",
+        muted: "hsl(var(--muted))",
         primary: {
-          DEFAULT: '#49F7D9',
-          600: '#2DC4AE',
-          700: '#1EA595',
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-fg))",
+          600: "hsl(var(--primary-600))",
+          700: "hsl(var(--primary-700))",
         },
-        success: '#49F7D9',
-        warning: '#F4C430',
-        danger: '#F87171',
-        link: '#49F7D9',
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        success: "hsl(var(--success))",
+        warning: "hsl(var(--warning))",
+        danger: "hsl(var(--danger))",
 
-        // Semantic UI colors - centralized for easy design changes
-        sidebar: '#121A21',  // Conversation list / history panel background
+        // Legacy aliases for backwards compatibility
+        bg: "hsl(var(--background))",
+        text: "hsl(var(--foreground))",
+        'text-muted': "hsl(var(--muted))",
+        link: "hsl(var(--primary))",
+        sidebar: "hsl(var(--surface))",
 
         // Legacy SAPTIVA colors para compatibilidad
         saptiva: {
-          mint: '#49F7D9',
+          mint: '#2DD4BF',
           blue: '#4472C4',
           lightBlue: '#5B9BD5',
           orange: '#ED7D31',
           yellow: '#FFC000',
-          green: '#49F7D9',
+          green: '#2DD4BF',
           purple: '#954F72',
-          dark: '#0B1217',
-          charcoal: '#121A21',
+          dark: '#0B1120',
+          charcoal: '#1e293b',
           slate: '#44546A',
-          silver: '#9AA4AF',
-          light: '#E6E8EB',
-          hyperlink: '#49F7D9',
+          silver: '#94a3b8',
+          light: '#F9FAFB',
+          hyperlink: '#2DD4BF',
         },
 
         // Grays mantenidos para elementos neutros
@@ -83,11 +89,11 @@ module.exports = {
         bold: '700',
       },
       borderRadius: {
-        // SAPTIVA token system según plan (card: 12px)
-        'sm': '8px',
-        'md': '12px',       // Radius principal del plan
-        'lg': '16px',
-        'xl': '12px',       // Para cards según plan
+        // SAPTIVA token system using CSS variable
+        'sm': 'calc(var(--radius) - 4px)',
+        'md': 'var(--radius)',
+        'lg': 'calc(var(--radius) + 4px)',
+        'xl': 'var(--radius)',
         'none': '0',
         'DEFAULT': '0.25rem',
         '2xl': '1rem',
@@ -124,6 +130,44 @@ module.exports = {
         highlightFade: {
           '0%': { backgroundColor: 'rgba(73, 247, 217, 0.15)', borderColor: 'rgba(73, 247, 217, 0.6)' },
           '100%': { backgroundColor: 'rgba(73, 247, 217, 0)', borderColor: 'transparent' },
+        },
+      },
+      // Typography plugin configuration for dual theme support
+      typography: {
+        DEFAULT: {
+          css: {
+            '--tw-prose-body': 'hsl(var(--foreground))',
+            '--tw-prose-headings': 'hsl(var(--foreground))',
+            '--tw-prose-links': 'hsl(var(--primary))',
+            '--tw-prose-bold': 'hsl(var(--foreground))',
+            '--tw-prose-counters': 'hsl(var(--muted))',
+            '--tw-prose-bullets': 'hsl(var(--primary))',
+            '--tw-prose-hr': 'hsl(var(--border))',
+            '--tw-prose-quotes': 'hsl(var(--foreground))',
+            '--tw-prose-quote-borders': 'hsl(var(--primary))',
+            '--tw-prose-captions': 'hsl(var(--muted))',
+            '--tw-prose-code': 'hsl(var(--primary))',
+            '--tw-prose-pre-code': 'hsl(var(--foreground))',
+            '--tw-prose-pre-bg': 'hsl(var(--surface))',
+            '--tw-prose-th-borders': 'hsl(var(--border))',
+            '--tw-prose-td-borders': 'hsl(var(--border))',
+            // Invert colors for dark mode
+            '--tw-prose-invert-body': 'hsl(var(--foreground))',
+            '--tw-prose-invert-headings': 'hsl(var(--foreground))',
+            '--tw-prose-invert-links': 'hsl(var(--primary))',
+            '--tw-prose-invert-bold': 'hsl(var(--foreground))',
+            '--tw-prose-invert-counters': 'hsl(var(--muted))',
+            '--tw-prose-invert-bullets': 'hsl(var(--primary))',
+            '--tw-prose-invert-hr': 'hsl(var(--border))',
+            '--tw-prose-invert-quotes': 'hsl(var(--foreground))',
+            '--tw-prose-invert-quote-borders': 'hsl(var(--primary))',
+            '--tw-prose-invert-captions': 'hsl(var(--muted))',
+            '--tw-prose-invert-code': 'hsl(var(--primary))',
+            '--tw-prose-invert-pre-code': 'hsl(var(--foreground))',
+            '--tw-prose-invert-pre-bg': 'hsl(var(--surface))',
+            '--tw-prose-invert-th-borders': 'hsl(var(--border))',
+            '--tw-prose-invert-td-borders': 'hsl(var(--border))',
+          },
         },
       },
     },

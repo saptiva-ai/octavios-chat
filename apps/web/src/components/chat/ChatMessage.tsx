@@ -8,6 +8,7 @@ import { StreamingMessage } from "./StreamingMessage";
 import { FileReviewMessage } from "./FileReviewMessage";
 import { MessageAuditCard } from "./MessageAuditCard";
 import { BankChartMessage } from "./BankChartMessage";
+import { BankAdvisorResponse } from "./BankAdvisorResponse";
 import { PreviewAttachment } from "./PreviewAttachment";
 import { featureFlags } from "../../lib/feature-flags";
 import type {
@@ -307,7 +308,7 @@ export function ChatMessage({
       className={cn(
         "group flex gap-3 px-4 py-6 transition-colors duration-150",
         isUser ? "flex-row-reverse" : "flex-row",
-        "hover:bg-white/5",
+        "hover:bg-surface-2/50",
         className,
       )}
       role="article"
@@ -317,9 +318,7 @@ export function ChatMessage({
       <div
         className={cn(
           "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-medium uppercase",
-          isUser
-            ? "bg-primary/20 text-primary"
-            : "bg-white/10 text-white opacity-60",
+          isUser ? "bg-primary/20 text-primary" : "bg-muted/20 text-muted",
         )}
       >
         {isUser ? "Tú" : "AI"}
@@ -369,8 +368,8 @@ export function ChatMessage({
           className={cn(
             "inline-flex max-w-full rounded-3xl px-5 py-4 text-left text-sm leading-relaxed",
             isUser
-              ? "bg-primary/15 text-white"
-              : "bg-[var(--surface)] text-white",
+              ? "bg-primary/15 text-foreground"
+              : "bg-surface text-foreground",
             isError && "bg-danger/5",
           )}
           style={
@@ -462,63 +461,14 @@ export function ChatMessage({
             </div>
           )}
 
-        {/* Bank chart visualization - Button to open in canvas */}
+        {/* Bank chart visualization - Structured response with SQL and Canvas button */}
         {isAssistant && bankChartData && (
-          <div className={cn("mt-3", isUser ? "ml-auto" : "")}>
-            <button
-              data-testid="bank-chart-button"
-              onClick={() => {
-                const artifactId =
-                  (metadata as any)?.artifact_id ||
-                  (metadata as any)?.bank_chart_artifact_id ||
-                  "temp";
-                useCanvasStore
-                  .getState()
-                  .openBankChart(
-                    bankChartData,
-                    artifactId,
-                    id || "unknown",
-                    false,
-                  );
-              }}
-              className="group relative w-full overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5 p-4 text-left transition-all duration-300 hover:border-primary/40 hover:shadow-xl hover:shadow-primary/20 hover:scale-[1.02]"
-              aria-label={`Abrir gráfica de ${bankChartData.metric_name.toUpperCase()} en canvas`}
-            >
-              {/* Background decoration */}
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-
-              {/* Content */}
-              <div className="relative flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/20 transition-colors group-hover:bg-primary/30">
-                  <ChartBarIcon className="h-5 w-5 text-primary" />
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-white">
-                      {bankChartData.metric_name.toUpperCase()}
-                    </span>
-                    <span className="rounded-full bg-primary/20 px-2 py-0.5 text-[10px] font-medium text-primary/80">
-                      {bankChartData.bank_names.length}{" "}
-                      {bankChartData.bank_names.length === 1
-                        ? "banco"
-                        : "bancos"}
-                    </span>
-                  </div>
-                  <p className="text-xs text-white/60 truncate">
-                    {bankChartData.bank_names.join(", ")}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2 text-primary/80 transition-transform group-hover:translate-x-1">
-                  <span className="text-xs font-medium hidden sm:inline">
-                    Abrir en Canvas
-                  </span>
-                  <ArrowsPointingOutIcon className="h-4 w-4" />
-                </div>
-              </div>
-            </button>
-          </div>
+          <BankAdvisorResponse
+            bankChartData={bankChartData}
+            messageId={id || "unknown"}
+            metadata={metadata as any}
+            className={isUser ? "ml-auto" : ""}
+          />
         )}
 
         {/* Artifact cards should appear after the assistant's summary (and audit card) */}
