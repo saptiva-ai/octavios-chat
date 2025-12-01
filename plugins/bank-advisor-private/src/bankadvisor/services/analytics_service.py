@@ -588,9 +588,7 @@ class AnalyticsService:
                     "title": f"Evolución de {display_name}",
                     "xaxis": {"title": "Fecha"},
                     "yaxis": {
-                        "title": "%" if is_ratio else "MDP (Millones de Pesos)",
-                        "tickformat": ".0f",
-                        "ticksuffix": "%" if is_ratio else " MDP"
+                        "title": "%" if is_ratio else "MDP (Millones de Pesos)"
                     }
                 }
             },
@@ -640,9 +638,7 @@ class AnalyticsService:
                     "title": f"Comparación de {display_name}",
                     "xaxis": {"title": "Banco"},
                     "yaxis": {
-                        "title": "%" if is_ratio else "MDP (Millones de Pesos)",
-                        "tickformat": ".0f",
-                        "ticksuffix": "%" if is_ratio else " MDP"
+                        "title": "%" if is_ratio else "MDP (Millones de Pesos)"
                     }
                 }
             },

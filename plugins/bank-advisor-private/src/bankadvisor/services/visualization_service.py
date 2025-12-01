@@ -120,9 +120,7 @@ class VisualizationService:
             "layout": {
                 "title": f"{title} - {month_label}",
                 "yaxis": {
-                    "title": "%" if is_ratio else "MDP (Millones de Pesos)",
-                    "tickformat": ".0f",
-                    "ticksuffix": "%" if is_ratio else " MDP"
+                    "title": "%" if is_ratio else "MDP (Millones de Pesos)"
                 },
                 "margin": {"l": 60, "r": 50, "t": 50, "b": 50},
                 "autosize": True
@@ -188,9 +186,7 @@ class VisualizationService:
                     "title": "Período"
                 },
                 "yaxis": {
-                    "title": "%" if is_ratio else "MDP (Millones de Pesos)",
-                    "tickformat": ".0f",
-                    "ticksuffix": "%" if is_ratio else " MDP"
+                    "title": "%" if is_ratio else "MDP (Millones de Pesos)"
                 },
                 "legend": {"orientation": "h", "y": -0.2},
                 "margin": {"l": 60, "r": 50, "t": 50, "b": 50},
