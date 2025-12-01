@@ -354,9 +354,16 @@ function LegacyChatShell({
   selectedModel,
   onModelChange,
 }: ChatShellProps) {
+  const { resolvedTheme } = useTheme();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = React.useState(false);
   const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] =
     React.useState(false);
+
+  // Theme-aware Saptiva logo
+  const logoSrc =
+    resolvedTheme === "dark"
+      ? "/SaptivaAIlogo_whitebg.PNG" // White logo for dark background
+      : "/SaptivaAIlogo_blackbg.PNG"; // Dark logo for light background
 
   const handleCloseSidebar = React.useCallback(() => {
     setIsMobileSidebarOpen(false);
@@ -477,8 +484,9 @@ function LegacyChatShell({
               )}
             </div>
             <div className="ml-auto flex items-center gap-2">
+              <ModeToggle />
               <Image
-                src="/Saptiva_AI_logo_new.webp"
+                src={logoSrc}
                 alt="Saptiva AI"
                 width={120}
                 height={32}
