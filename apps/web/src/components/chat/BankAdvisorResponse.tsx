@@ -11,10 +11,7 @@
 import React, { useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useCanvasStore } from "@/lib/stores/canvas-store";
-import {
-  ChartBarIcon,
-  ArrowsPointingOutIcon,
-} from "@heroicons/react/24/outline";
+import { ChartBarIcon } from "@heroicons/react/24/outline";
 import type { BankChartData } from "@/lib/types";
 
 interface BankAdvisorResponseProps {
@@ -64,42 +61,43 @@ export function BankAdvisorResponse({
 
   return (
     <div className={cn("mt-4 space-y-3", className)}>
-      {/* Open Canvas Button */}
+      {/* Minimal Open Canvas Button */}
       <button
         data-testid="bank-chart-button"
         onClick={handleOpenCanvas}
-        className="group relative w-full overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5 p-4 text-left transition-all duration-300 hover:border-primary/40 hover:shadow-xl hover:shadow-primary/20 hover:scale-[1.02]"
+        className="group relative w-full overflow-hidden rounded-lg border border-border bg-surface/50 hover:bg-surface px-4 py-3 text-left transition-all duration-200 hover:border-primary/40"
         aria-label={`Abrir gráfica de ${bankChartData.metric_name.toUpperCase()} en canvas`}
       >
-        {/* Background decoration */}
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-
         {/* Content */}
         <div className="relative flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/20 transition-colors group-hover:bg-primary/30">
-            <ChartBarIcon className="h-5 w-5 text-primary" />
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 transition-colors group-hover:bg-primary/20">
+            <ChartBarIcon className="h-4 w-4 text-primary" />
           </div>
 
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-foreground">
-                {bankChartData.metric_name.toUpperCase()}
-              </span>
-              <span className="rounded-full bg-primary/20 px-2 py-0.5 text-[10px] font-medium text-primary">
-                {bankChartData.bank_names.length}{" "}
-                {bankChartData.bank_names.length === 1 ? "banco" : "bancos"}
-              </span>
-            </div>
+            <span className="font-medium text-sm text-foreground">
+              {bankChartData.metric_name.toUpperCase()}
+            </span>
             <p className="text-xs text-muted truncate">
               {bankChartData.bank_names.join(", ")}
             </p>
           </div>
 
-          <div className="flex items-center gap-2 text-primary/80 transition-transform group-hover:translate-x-1">
-            <span className="text-xs font-medium hidden sm:inline">
-              Abrir en Canvas
-            </span>
-            <ArrowsPointingOutIcon className="h-4 w-4" />
+          <div className="flex items-center gap-1.5 text-muted transition-colors group-hover:text-primary">
+            <span className="text-xs font-medium hidden sm:inline">Abrir</span>
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
+              />
+            </svg>
           </div>
         </div>
       </button>

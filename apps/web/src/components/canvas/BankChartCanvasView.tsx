@@ -14,6 +14,7 @@ import dynamic from "next/dynamic";
 import DOMPurify from "dompurify";
 import { BankChartSkeleton } from "./BankChartSkeleton";
 import { BankChartError } from "./BankChartError";
+import { useTheme } from "next-themes";
 
 const Plot = dynamic(() => import("react-plotly.js"), {
   ssr: false,
@@ -41,6 +42,7 @@ export function BankChartCanvasView({
   data,
   className,
 }: BankChartCanvasViewProps) {
+  const { resolvedTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<"visualization" | "data">(
     "visualization",
   );
@@ -67,7 +69,7 @@ export function BankChartCanvasView({
 
   const validationError = validateData();
 
-  // Force re-render of Plotly when container size changes
+  // Force re-render of Plotly when container size changes or theme changes
   useEffect(() => {
     if (!plotContainerRef.current) return;
 
@@ -83,9 +85,25 @@ export function BankChartCanvasView({
     };
   }, []);
 
+  // Force re-render when theme changes
+  useEffect(() => {
+    setPlotKey((prev) => prev + 1);
+  }, [resolvedTheme]);
+
   // Extract enriched metadata
   const sqlQuery = data.metadata?.sql_generated;
   const metricInterpretation = data.metadata?.metric_interpretation;
+
+  // Debug: Log SQL data
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log("[🔍 BankChartCanvasView] SQL Debug:", {
+      has_metadata: !!data.metadata,
+      sql_generated: sqlQuery,
+      sql_length: sqlQuery?.length,
+      metadata_keys: data.metadata ? Object.keys(data.metadata) : [],
+    });
+  }, [data.metadata, sqlQuery]);
 
   // Sanitize user-generated content to prevent XSS attacks
   const sanitizedSQL = useMemo(() => {
@@ -179,8 +197,13 @@ export function BankChartCanvasView({
     }
   };
 
-  // Saptiva Dual Theme: Chart configuration (uses CSS variable colors)
-  // Note: Plotly requires explicit colors, so we use muted teal tones
+  // Saptiva Dual Theme: Chart configuration with dynamic colors
+  // Plotly requires explicit colors, so we compute them based on theme
+  const isDark = resolvedTheme === "dark";
+  const textColor = isDark ? "#ffffff" : "#0a0a0a"; // White in dark, almost black in light
+  const gridColor = isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)";
+  const borderColor = isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.2)";
+
   const plotlyLayout = {
     ...data.plotly_config.layout,
     autosize: true,
@@ -188,23 +211,23 @@ export function BankChartCanvasView({
     margin: { l: 50, r: 15, t: 15, b: 50 },
     paper_bgcolor: "rgba(0,0,0,0)", // Transparent
     plot_bgcolor: "rgba(0,0,0,0)", // Transparent
-    font: { color: "hsl(var(--foreground))", size: 12 }, // White in dark mode
+    font: { color: textColor, size: 12 },
     xaxis: {
       ...data.plotly_config.layout.xaxis,
       showgrid: false, // No vertical grid
-      linecolor: "hsl(var(--border))",
-      tickfont: { color: "hsl(var(--foreground))" }, // White in dark mode
+      linecolor: borderColor,
+      tickfont: { color: textColor },
     },
     yaxis: {
       ...data.plotly_config.layout.yaxis,
-      gridcolor: "hsl(var(--border))",
-      linecolor: "hsl(var(--border))",
-      tickfont: { color: "hsl(var(--foreground))" }, // White in dark mode
+      gridcolor: gridColor,
+      linecolor: borderColor,
+      tickfont: { color: textColor },
     },
     legend: {
       ...data.plotly_config.layout.legend,
       bgcolor: "rgba(0,0,0,0)",
-      font: { color: "hsl(var(--foreground))" }, // White in dark mode
+      font: { color: textColor },
     },
   };
 
@@ -332,16 +355,16 @@ export function BankChartCanvasView({
               />
             </div>
 
-            {/* SQL Query Section - Below Chart */}
-            {sanitizedSQL && (
-              <div className="space-y-3 pt-4 border-t border-border">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm">
-                    <CodeBracketIcon className="h-4 w-4 text-primary" />
-                    <span className="font-medium text-foreground">
-                      Consulta SQL
-                    </span>
-                  </div>
+            {/* SQL Query Section - Below Chart (ALWAYS VISIBLE) */}
+            <div className="space-y-3 pt-4 border-t border-border">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm">
+                  <CodeBracketIcon className="h-4 w-4 text-primary" />
+                  <span className="font-medium text-foreground">
+                    Consulta SQL
+                  </span>
+                </div>
+                {sanitizedSQL && (
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(sanitizedSQL);
@@ -350,12 +373,18 @@ export function BankChartCanvasView({
                   >
                     Copiar
                   </button>
-                </div>
+                )}
+              </div>
+              {sanitizedSQL ? (
                 <pre className="overflow-x-auto bg-surface border border-border p-4 text-xs text-foreground dark:text-white font-mono rounded leading-relaxed">
                   {sanitizedSQL}
                 </pre>
-              </div>
-            )}
+              ) : (
+                <div className="p-4 bg-surface/50 border border-border/50 rounded text-xs text-muted italic">
+                  No hay consulta SQL disponible para esta visualización
+                </div>
+              )}
+            </div>
           </>
         )}
 
