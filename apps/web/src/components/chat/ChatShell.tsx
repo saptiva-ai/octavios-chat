@@ -48,8 +48,8 @@ function GridChatShell({
   // Theme-aware Saptiva logo
   const logoSrc =
     resolvedTheme === "dark"
-      ? "/SaptivaAIlogo_blackbg.PNG" // White logo for dark background
-      : "/SaptivaAIlogo_whitebg.PNG"; // Dark logo for white background
+      ? "/SaptivaAIlogo_whitebg.PNG" // White logo for dark background
+      : "/SaptivaAIlogo_blackbg.PNG"; // Dark logo for light background
 
   // Update body data attribute for CSS variable switching
   React.useEffect(() => {
@@ -267,8 +267,8 @@ function LegacyMobileLayout({
   // Theme-aware Saptiva logo
   const logoSrc =
     resolvedTheme === "dark"
-      ? "/SaptivaAIlogo_blackbg.PNG" // White logo for dark background
-      : "/SaptivaAIlogo_whitebg.PNG"; // Dark logo for white background
+      ? "/SaptivaAIlogo_whitebg.PNG" // White logo for dark background
+      : "/SaptivaAIlogo_blackbg.PNG"; // Dark logo for light background
 
   return (
     <div className="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-background text-foreground">

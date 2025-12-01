@@ -34,14 +34,14 @@ export function ModeToggle() {
   return (
     <button
       onClick={() => setTheme(isDark ? "light" : "dark")}
-      className="p-2 rounded-md hover:bg-surface-2 bg-surface text-foreground transition-colors border border-border"
+      className="p-2 rounded-md hover:bg-surface-2 bg-surface text-foreground transition-all border-2 border-border hover:border-primary/40 shadow-sm"
       aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
       title={`Switch to ${isDark ? "light" : "dark"} mode`}
     >
       {isDark ? (
-        <SunIcon className="h-5 w-5 text-primary" />
+        <SunIcon className="h-5 w-5 text-amber-500" />
       ) : (
-        <MoonIcon className="h-5 w-5 text-muted" />
+        <MoonIcon className="h-5 w-5 text-indigo-600" />
       )}
     </button>
   );
