@@ -568,7 +568,7 @@ export const useChatStore = create<ChatState>()(
           if (!chatId) return false;
           const state = get();
           const hasSeenInSession = state.bankAdvisorHintsSeenByChatId[chatId];
-          const isBankAdvisorEnabled = state.toolsEnabled.bank_advisor;
+          const isBankAdvisorEnabled = state.toolsEnabled["bank-advisor"];
           return isBankAdvisorEnabled && !hasSeenInSession;
         },
       }),
