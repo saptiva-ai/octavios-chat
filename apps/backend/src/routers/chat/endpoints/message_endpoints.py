@@ -25,7 +25,6 @@ from sse_starlette.sse import EventSourceResponse
 from ....core.config import get_settings, Settings
 from ....core.redis_cache import get_redis_cache
 from ....core.telemetry import trace_span, increment_llm_timeout
-from ....core.constants import AUDIT_COMMAND_PREFIX, TOOL_NAME_AUDIT
 from ....schemas.chat import ChatRequest, ChatResponse
 from ....schemas.common import ApiResponse
 from ....services.chat_service import ChatService
@@ -71,37 +70,11 @@ async def send_chat_message(
     # ========================================================================
     # STREAMING PATH
     # ========================================================================
-    # WORKAROUND: Force non-streaming when documents are attached OR audit commands
+    # WORKAROUND: Force non-streaming when documents are attached
     # This ensures document context is properly loaded via SimpleChatStrategy
     # until Qdrant indexing is fully operational for streaming RAG
     file_ids = getattr(request, 'file_ids', None) or []
     has_documents = len(file_ids) > 0
-
-    # Check if message is an audit command
-    is_audit_command = request.message.strip().startswith(AUDIT_COMMAND_PREFIX)
-
-    # DISABLED: AUTO-ENABLE AUDIT TOOL for audit commands
-    # Reason: Creates duplicate audit executions - one via legacy non-streaming MCP tool
-    # and another via streaming handler. The streaming handler already detects audit
-    # commands and executes them properly with real-time progress + artifact rendering.
-    # Keeping this enabled causes two chat messages: one legacy (text-only) and one
-    # modern (with canvas/artifact). Solution: Let streaming handler be the single
-    # source of truth for audit execution.
-    # if is_audit_command:
-    #     if request.tools_enabled is None:
-    #         request.tools_enabled = {}
-    #     request.tools_enabled[TOOL_NAME_AUDIT] = True
-    #     logger.info(f"Auto-enabled {TOOL_NAME_AUDIT} tool for audit command", user_id=user_id)
-
-    # logger.info(
-    #     "🔍 [DOCUMENT DEBUG] Checking for documents",
-    #     stream_requested=getattr(request, 'stream', False),
-    #     has_file_ids_attr=hasattr(request, 'file_ids'),
-    #     file_ids_value=file_ids,
-    #     file_ids_count=len(file_ids),
-    #     has_documents=has_documents,
-    #     user_id=user_id
-    # )
 
     if getattr(request, 'stream', False):
         if has_documents:
@@ -115,7 +88,7 @@ async def send_chat_message(
             )
             request.stream = False
 
-        # Check Accept header for SSE streaming (applies to audit AND regular messages)
+        # Check Accept header for SSE streaming
         accept_header = http_request.headers.get("accept", "")
         if "text/event-stream" in accept_header:
             streaming_handler = StreamingHandler(settings)
@@ -343,16 +316,10 @@ async def send_chat_message(
             decision_metadata = handler_result.metadata.decision_metadata if handler_result.metadata else None
             tool_invocations = decision_metadata.get("tool_invocations", []) if decision_metadata else []
 
-            # Extract validation_report_id from tool results if present
-            validation_report_id = None
+            # Extract bank_chart_artifact from tool results if present
             bank_chart_artifact = None
             if tool_results:
                 for key, result in tool_results.items():
-                    # Check for audit_file result
-                    if "audit_file" in key and isinstance(result, dict):
-                        validation_report_id = result.get("validation_report_id")
-                        if validation_report_id:
-                            break
                     # Check for bank_analytics result (BA-P0-001)
                     if key == "bank_analytics" and isinstance(result, dict):
                         bank_chart_artifact = result
@@ -366,7 +333,6 @@ async def send_chat_message(
                 decision_metadata=decision_metadata,
                 tool_invocations=tool_invocations,
                 has_tool_invocations=len(tool_invocations) > 0,
-                validation_report_id=validation_report_id,
                 has_bank_chart=bank_chart_artifact is not None
             )
 
@@ -376,8 +342,7 @@ async def send_chat_message(
                 "processing_time_ms": handler_result.processing_time_ms,
                 "tokens_used": handler_result.metadata.tokens_used if handler_result.metadata else None,
                 "decision_metadata": decision_metadata,
-                "tool_invocations": tool_invocations,
-                "validation_report_id": validation_report_id
+                "tool_invocations": tool_invocations
             }
 
             # Add bank_chart artifact if present (BA-P0-001)

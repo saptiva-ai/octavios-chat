@@ -12,7 +12,7 @@ These tests measure:
 Tools tested:
 - deep_research
 - extract_document_text
-- audit_file
+- excel_analyzer
 - excel_analyzer
 
 Requirements:

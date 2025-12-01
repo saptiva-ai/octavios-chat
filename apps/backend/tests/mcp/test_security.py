@@ -206,14 +206,14 @@ class TestScopeValidator:
         user_scopes = {MCPScope.TOOLS_AUDIT.value}
 
         # Should not raise
-        assert ScopeValidator.validate_tool_access(user_scopes, "audit_file") is True
+        assert ScopeValidator.validate_tool_access(user_scopes, "excel_analyzer") is True
 
     def test_validate_tool_access_denied(self):
         """Test tool access validation when denied."""
         user_scopes = {MCPScope.TOOLS_VIZ.value}  # Only viz tools
 
         with pytest.raises(PermissionError, match="Missing required scope"):
-            ScopeValidator.validate_tool_access(user_scopes, "audit_file")
+            ScopeValidator.validate_tool_access(user_scopes, "excel_analyzer")
 
     def test_validate_tool_access_no_scope_required(self):
         """Test tool with no scope requirement."""
@@ -224,7 +224,7 @@ class TestScopeValidator:
 
     def test_get_required_scope(self):
         """Test getting required scope for tools."""
-        assert ScopeValidator.get_required_scope("audit_file") == MCPScope.TOOLS_AUDIT
+        assert ScopeValidator.get_required_scope("excel_analyzer") == MCPScope.TOOLS_AUDIT
         assert ScopeValidator.get_required_scope("excel_analyzer") == MCPScope.TOOLS_ANALYTICS
         assert ScopeValidator.get_required_scope("viz_tool") == MCPScope.TOOLS_VIZ
         assert ScopeValidator.get_required_scope("unknown_tool") is None
@@ -400,12 +400,12 @@ class TestSecurityIntegration:
         # 3. Check rate limit
         limiter = RateLimiter(use_redis=False)
         config = RateLimitConfig(calls_per_minute=10, calls_per_hour=100)
-        allowed, _ = await limiter.check_rate_limit("user_123:audit_file", config)
+        allowed, _ = await limiter.check_rate_limit("user_123:excel_analyzer", config)
         assert allowed is True
 
         # 4. Check authorization
         user_scopes = {MCPScope.TOOLS_AUDIT.value}
-        ScopeValidator.validate_tool_access(user_scopes, "audit_file")
+        ScopeValidator.validate_tool_access(user_scopes, "excel_analyzer")
 
     def test_security_defense_in_depth(self):
         """Test multiple security layers catch different issues."""
@@ -424,4 +424,4 @@ class TestSecurityIntegration:
         # Layer 3: Authorization
         user_scopes = {MCPScope.TOOLS_VIZ.value}
         with pytest.raises(PermissionError):
-            ScopeValidator.validate_tool_access(user_scopes, "audit_file")
+            ScopeValidator.validate_tool_access(user_scopes, "excel_analyzer")

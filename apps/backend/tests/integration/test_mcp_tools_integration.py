@@ -5,7 +5,7 @@ These tests use real MongoDB, Redis, and MinIO connections via Docker Compose
 to validate end-to-end behavior of MCP tools:
 - deep_research (Aletheia integration)
 - extract_document_text (multi-tier extraction)
-- audit_file (COPILOTO_414 validation)
+- excel_analyzer (COPILOTO_414 validation)
 - excel_analyzer (Excel data analysis)
 - viz_tool (chart generation)
 
@@ -131,7 +131,7 @@ class TestMCPToolsEndpoints:
 
         # Verify expected tools are present
         tool_names = [tool["name"] for tool in data]
-        assert "audit_file" in tool_names
+        assert "excel_analyzer" in tool_names
         assert "excel_analyzer" in tool_names
         assert "viz_tool" in tool_names
         assert "deep_research" in tool_names
@@ -375,9 +375,9 @@ class TestDocumentExtractionToolIntegration:
 @pytest.mark.integration
 @pytest.mark.asyncio
 class TestAuditFileToolIntegration:
-    """Integration tests for audit_file tool."""
+    """Integration tests for excel_analyzer tool."""
 
-    async def test_audit_file_invoke(
+    async def test_excel_analyzer_invoke(
         self,
         client: AsyncClient,
         test_document_pdf
@@ -422,7 +422,7 @@ class TestAuditFileToolIntegration:
                     mock_storage.return_value = mock_storage_instance
 
                     payload = {
-                        "tool": "audit_file",
+                        "tool": "excel_analyzer",
                         "payload": {
                             "doc_id": doc_id,
                             "policy_id": "auto",
@@ -445,7 +445,7 @@ class TestAuditFileToolIntegration:
                     data = response.json()
 
                     assert data["success"] is True
-                    assert data["tool"] == "audit_file"
+                    assert data["tool"] == "excel_analyzer"
                     assert data["result"]["job_id"] == "job_123"
                     assert data["result"]["status"] == "done"
                     assert data["result"]["summary"]["total_findings"] == 0

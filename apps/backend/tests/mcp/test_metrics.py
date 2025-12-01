@@ -47,7 +47,7 @@ class TestMCPMetricsCollector:
         """Test recording successful tool invocation."""
         # Record metric
         MCPMetricsCollector.record_tool_invocation(
-            tool="audit_file",
+            tool="excel_analyzer",
             version="1.0.0",
             status="success",
             duration_seconds=1.5,
@@ -63,7 +63,7 @@ class TestMCPMetricsCollector:
     def test_record_tool_invocation_error(self):
         """Test recording failed tool invocation."""
         MCPMetricsCollector.record_tool_invocation(
-            tool="audit_file",
+            tool="excel_analyzer",
             version="1.0.0",
             status="error",
             duration_seconds=0.5,
@@ -98,7 +98,7 @@ class TestMCPMetricsCollector:
     def test_record_validation_failure(self):
         """Test recording validation failure."""
         MCPMetricsCollector.record_validation_failure(
-            tool="audit_file",
+            tool="excel_analyzer",
             version="1.0.0",
             error_code="PAYLOAD_TOO_LARGE",
         )
@@ -126,7 +126,7 @@ class TestMCPMetricsCollector:
     def test_record_permission_denied(self):
         """Test recording permission denied."""
         MCPMetricsCollector.record_permission_denied(
-            tool="audit_file",
+            tool="excel_analyzer",
             required_scope="mcp:tools.audit",
         )
 
@@ -209,7 +209,7 @@ class TestMCPMetricsCollector:
     def test_record_version_usage(self):
         """Test recording version usage."""
         MCPMetricsCollector.record_version_usage(
-            tool="audit_file",
+            tool="excel_analyzer",
             version="1.0.0",
             constraint="exact",
             is_deprecated=False,
@@ -220,7 +220,7 @@ class TestMCPMetricsCollector:
     def test_record_version_usage_caret_constraint(self):
         """Test recording version usage with caret constraint."""
         MCPMetricsCollector.record_version_usage(
-            tool="audit_file",
+            tool="excel_analyzer",
             version="1.2.3",
             constraint="^1.2.0",
             is_deprecated=False,
@@ -231,7 +231,7 @@ class TestMCPMetricsCollector:
     def test_record_version_usage_deprecated(self):
         """Test recording deprecated version usage."""
         MCPMetricsCollector.record_version_usage(
-            tool="audit_file",
+            tool="excel_analyzer",
             version="0.9.0",
             constraint="exact",
             is_deprecated=True,
@@ -243,7 +243,7 @@ class TestMCPMetricsCollector:
     def test_record_version_usage_deprecated_no_replacement(self):
         """Test recording deprecated version with no replacement specified."""
         MCPMetricsCollector.record_version_usage(
-            tool="audit_file",
+            tool="excel_analyzer",
             version="0.8.0",
             constraint="exact",
             is_deprecated=True,
@@ -262,7 +262,7 @@ class TestMetricsIntegration:
 
         # 1. Record invocation
         MCPMetricsCollector.record_tool_invocation(
-            tool="audit_file",
+            tool="excel_analyzer",
             version="1.0.0",
             status="success",
             duration_seconds=1.5,
@@ -272,7 +272,7 @@ class TestMetricsIntegration:
 
         # 2. Record version usage
         MCPMetricsCollector.record_version_usage(
-            tool="audit_file",
+            tool="excel_analyzer",
             version="1.0.0",
             constraint="^1.0.0",
         )
@@ -284,14 +284,14 @@ class TestMetricsIntegration:
         """Test tool invocation lifecycle with validation error."""
         # 1. Record validation failure
         MCPMetricsCollector.record_validation_failure(
-            tool="audit_file",
+            tool="excel_analyzer",
             version="1.0.0",
             error_code="PAYLOAD_TOO_LARGE",
         )
 
         # 2. Record failed invocation
         MCPMetricsCollector.record_tool_invocation(
-            tool="audit_file",
+            tool="excel_analyzer",
             version="1.0.0",
             status="error",
             duration_seconds=0.1,
@@ -305,13 +305,13 @@ class TestMetricsIntegration:
         """Test tool invocation lifecycle with permission denied."""
         # 1. Record permission denied
         MCPMetricsCollector.record_permission_denied(
-            tool="audit_file",
+            tool="excel_analyzer",
             required_scope="mcp:tools.audit",
         )
 
         # 2. Record failed invocation
         MCPMetricsCollector.record_tool_invocation(
-            tool="audit_file",
+            tool="excel_analyzer",
             version="1.0.0",
             status="error",
             duration_seconds=0.05,
@@ -436,7 +436,7 @@ class TestMetricsIntegration:
     def test_multiple_concurrent_invocations(self):
         """Test recording metrics for multiple concurrent invocations."""
         tools = [
-            ("audit_file", "1.0.0", 1.5),
+            ("excel_analyzer", "1.0.0", 1.5),
             ("excel_analyzer", "2.0.0", 10.0),
             ("viz_tool", "1.0.0", 3.0),
         ]
@@ -460,7 +460,7 @@ class TestMetricsIntegration:
 
         for i, duration in enumerate(durations):
             MCPMetricsCollector.record_tool_invocation(
-                tool="audit_file",
+                tool="excel_analyzer",
                 version="1.0.0",
                 status="success",
                 duration_seconds=duration,

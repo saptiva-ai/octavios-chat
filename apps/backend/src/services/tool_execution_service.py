@@ -20,7 +20,6 @@ from ..core.redis_cache import get_redis_cache
 from ..domain.chat_context import ChatContext
 from ..mcp import get_mcp_adapter
 from ..core.constants import (
-    TOOL_NAME_AUDIT,
     TOOL_NAME_EXCEL,
     TOOL_NAME_RESEARCH,
     TOOL_NAME_EXTRACT,
@@ -31,7 +30,6 @@ logger = structlog.get_logger(__name__)
 
 # TTL configuration for each tool (in seconds)
 TOOL_CACHE_TTL = {
-    TOOL_NAME_AUDIT: 3600,       # 1 hour (findings don't change)
     TOOL_NAME_EXCEL: 1800,   # 30 min (data might update)
     TOOL_NAME_RESEARCH: 86400,   # 24 hours (research is expensive)
     TOOL_NAME_EXTRACT: 3600,  # 1 hour (text is stable)
@@ -113,46 +111,17 @@ class ToolExecutionService:
                 cache_hit=False
             )
 
-            if tool_name == TOOL_NAME_AUDIT:
-                from ..mcp.tools.audit_file import AuditFileTool
-
-                logger.info(
-                    "⚡ [DIRECT BYPASS] Executing AuditFileTool directly",
-                    doc_id=doc_id,
-                    user_id=user_id
-                )
-                tool_instance = AuditFileTool()
-                result = await tool_instance.execute(
-                    {
-                        "doc_id": str(doc_id),
-                        "user_id": str(user_id),
-                        "policy_id": "auto",
-                        "enable_disclaimer": True,
-                        "enable_format": True,
-                        "enable_logo": True,
-                        "enable_grammar": True,
-                    }
-                )
-                debug_log = structlog.get_logger()
-                debug_log.info(
-                    "⚡ [BYPASS RESULT SPY]",
-                    result_type=str(type(result)),
-                    is_none=result is None,
-                    is_empty=not bool(result),
-                    preview=str(result)[:500]
-                )
-            else:
-                tool_impl = tool_map[tool_name]
-                result = await mcp_adapter._execute_tool_impl(
-                    tool_name=tool_name,
-                    tool_impl=tool_impl,
-                    payload={
-                        "doc_id": str(doc_id),
-                        "user_id": str(user_id),
-                        "policy_id": "auto"
-                    },
-                    context=None
-                )
+            tool_impl = tool_map[tool_name]
+            result = await mcp_adapter._execute_tool_impl(
+                tool_name=tool_name,
+                tool_impl=tool_impl,
+                payload={
+                    "doc_id": str(doc_id),
+                    "user_id": str(user_id),
+                    "policy_id": "auto"
+                },
+                context=None
+            )
 
             # Store in cache
             if cache:
@@ -222,40 +191,11 @@ class ToolExecutionService:
             logger.info(
                 "🔍 [TOOL DEBUG] Checking tool execution conditions",
                 tools_enabled_keys=list(context.tools_enabled.keys()),
-                audit_tool_name=TOOL_NAME_AUDIT,
-                audit_enabled=context.tools_enabled.get(TOOL_NAME_AUDIT, False),
                 tool_map_keys=list(tool_map.keys()),
-                audit_in_map=TOOL_NAME_AUDIT in tool_map,
                 document_ids=context.document_ids
             )
 
-            # 1. Audit File Tool
-            if context.tools_enabled.get(TOOL_NAME_AUDIT, False) and TOOL_NAME_AUDIT in tool_map:
-                for doc_id in context.document_ids:
-                    audit_result = await cls._execute_tool_with_cache(
-                        tool_name=TOOL_NAME_AUDIT,
-                        doc_id=doc_id,
-                        user_id=user_id,
-                        payload={
-                            "doc_id": doc_id,
-                            "policy_id": "auto",
-                            "user_id": user_id  # ✅ FIX: Explicit context injection for programmatic invocation
-                        },
-                        cache_params={"policy_id": "auto"},
-                        tool_map=tool_map,
-                        mcp_adapter=mcp_adapter,
-                        cache=cache
-                    )
-                    
-                    if audit_result:
-                        results[f"{TOOL_NAME_AUDIT}_{doc_id}"] = audit_result
-                        logger.info(
-                            f"{TOOL_NAME_AUDIT} tool succeeded",
-                            doc_id=doc_id,
-                            findings_count=len(audit_result.get("findings", []))
-                        )
-
-            # 2. Excel Analyzer Tool
+            # Excel Analyzer Tool
             if context.tools_enabled.get(TOOL_NAME_EXCEL, False) and TOOL_NAME_EXCEL in tool_map:
                 from ..models.document import Document
                 

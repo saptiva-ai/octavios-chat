@@ -17,7 +17,7 @@ Usage:
     tools = registry.discover_tools()
 
     # Load specific tool only when needed
-    tool = await registry.load_tool("audit_file")
+    tool = await registry.load_tool("excel_analyzer")
 
     # Invoke tool
     result = await tool.invoke(payload, context)
@@ -141,9 +141,9 @@ class LazyToolRegistry:
         Infer class name from tool name.
 
         Examples:
-            audit_file -> AuditFileTool
-            deep_research_tool -> DeepResearchTool
             excel_analyzer -> ExcelAnalyzerTool
+            deep_research_tool -> DeepResearchTool
+            document_extraction_tool -> DocumentExtractionTool
         """
         # Convert snake_case to PascalCase
         parts = tool_name.split("_")
@@ -157,9 +157,7 @@ class LazyToolRegistry:
 
     def _infer_category(self, tool_name: str) -> str:
         """Infer category from tool name (lightweight heuristic)."""
-        if "audit" in tool_name or "validate" in tool_name:
-            return "compliance"
-        elif "excel" in tool_name or "viz" in tool_name:
+        if "excel" in tool_name or "viz" in tool_name:
             return "analytics"
         elif "research" in tool_name:
             return "research"

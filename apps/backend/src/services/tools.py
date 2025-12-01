@@ -259,41 +259,6 @@ DEFAULT_AVAILABLE_TOOLS = {
     },
 
     # === Document Tools (MCP) ===
-    "audit_file": {
-        "name": "audit_file",
-        "description": "Validar documentos PDF contra políticas de compliance COPILOTO_414 (disclaimers, formato, logos, gramática)",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "doc_id": {
-                    "type": "string",
-                    "description": "ID del documento a validar"
-                },
-                "policy_id": {
-                    "type": "string",
-                    "enum": ["auto", "414-std", "414-strict", "banamex", "afore-xxi"],
-                    "default": "auto",
-                    "description": "Política de compliance a aplicar"
-                },
-                "enable_disclaimer": {
-                    "type": "boolean",
-                    "default": True,
-                    "description": "Activar auditor de disclaimers"
-                },
-                "enable_format": {
-                    "type": "boolean",
-                    "default": True,
-                    "description": "Activar auditor de formato"
-                },
-                "enable_logo": {
-                    "type": "boolean",
-                    "default": True,
-                    "description": "Activar auditor de logos"
-                }
-            },
-            "required": ["doc_id"]
-        }
-    },
     "create_artifact": {
         "name": "create_artifact",
         "description": "Guardar un artefacto (markdown, código o grafo) asociado al chat y devolver su ID",
