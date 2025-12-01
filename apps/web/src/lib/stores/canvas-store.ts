@@ -137,7 +137,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   // 🆕 Add chart to history
   addToChartHistory: (sync) =>
     set((state) => ({
-      chartHistory: [...state.chartHistory, sync],
+      chartHistory: [
+        ...state.chartHistory.map((c) => ({ ...c, isActive: false })),
+        sync,
+      ],
     })),
 
   // 🆕 Clear chart history (on session change)

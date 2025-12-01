@@ -8,7 +8,6 @@ import { StreamingMessage } from "./StreamingMessage";
 import { FileReviewMessage } from "./FileReviewMessage";
 import { MessageAuditCard } from "./MessageAuditCard";
 import { BankChartMessage } from "./BankChartMessage";
-import { BankChartPreview } from "./BankChartPreview";
 import { PreviewAttachment } from "./PreviewAttachment";
 import { featureFlags } from "../../lib/feature-flags";
 import type {
@@ -23,6 +22,7 @@ import { ArtifactCard } from "./artifact-card";
 import { parseToolCalls } from "../../lib/tool-parser";
 import { AuditSummaryCard } from "./artifacts/AuditSummaryCard";
 import { useCanvasStore } from "@/lib/stores/canvas-store";
+import { ChartBarIcon, ArrowsPointingOutIcon } from "@heroicons/react/24/outline";
 
 export interface ChatMessageProps {
   id?: string;
@@ -445,14 +445,27 @@ export function ChatMessage({
             </div>
           )}
 
-        {/* Bank chart visualization (BA-P0-002) - 🆕 Phase 2: Preview mode */}
+        {/* Bank chart visualization - Button to open in canvas */}
         {isAssistant && bankChartData && (
-          <BankChartPreview
-            data={bankChartData}
-            artifactId={(metadata as any)?.artifact_id || (metadata as any)?.bank_chart_artifact_id || "temp"}
-            messageId={id || "unknown"}
-            className={cn(isUser ? "ml-auto" : "")}
-          />
+          <button
+            onClick={() => {
+              const artifactId = (metadata as any)?.artifact_id || (metadata as any)?.bank_chart_artifact_id || "temp";
+              useCanvasStore.getState().openBankChart(
+                bankChartData,
+                artifactId,
+                id || "unknown",
+                false
+              );
+            }}
+            className={cn(
+              "mt-3 flex items-center gap-2 rounded-lg border border-primary/30 bg-gradient-to-r from-primary/10 to-primary/5 px-4 py-3 text-sm font-medium text-primary transition-all hover:border-primary/50 hover:from-primary/20 hover:to-primary/10 hover:shadow-lg hover:shadow-primary/20",
+              isUser ? "ml-auto" : ""
+            )}
+          >
+            <ChartBarIcon className="h-5 w-5" />
+            <span>Ver gráfica: {bankChartData.metric_name.toUpperCase()}</span>
+            <ArrowsPointingOutIcon className="h-4 w-4 ml-auto" />
+          </button>
         )}
 
         {/* Artifact cards should appear after the assistant's summary (and audit card) */}
