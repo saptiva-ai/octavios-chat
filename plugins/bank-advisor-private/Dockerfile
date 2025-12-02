@@ -27,6 +27,7 @@ COPY plugins/bank-advisor-private/src/ ./src/
 COPY plugins/bank-advisor-private/data/ ./data/
 COPY plugins/bank-advisor-private/migrations/ ./migrations/
 COPY plugins/bank-advisor-private/config/ ./config/
+COPY plugins/bank-advisor-private/etl/ ./etl/
 
 # Copy and setup entrypoint script for automatic ETL initialization
 # Use sed to fix Windows line endings (CRLF -> LF)

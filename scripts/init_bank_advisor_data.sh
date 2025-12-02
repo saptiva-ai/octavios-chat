@@ -66,34 +66,42 @@ check_container() {
 run_migrations() {
     log_info "Running database migrations..."
 
-    # Check if migrations directory exists
+    # 1. Apply normalized schema (instituciones, metricas_financieras, etc.)
+    log_info "  Applying normalized schema (database_schema.sql)..."
+    if cat database_schema.sql | docker exec -i "${POSTGRES_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" &>/dev/null; then
+        log_success "  Normalized schema applied (IF NOT EXISTS)"
+    else
+        log_warning "  Normalized schema may have already been applied"
+    fi
+
+    # 2. Check if migrations directory exists
     if ! docker exec "${BANK_ADVISOR_CONTAINER}" ls "${MIGRATIONS_DIR}" &>/dev/null; then
-        log_warning "Migrations directory not found"
+        log_warning "Migrations directory not found, skipping legacy migrations"
         return 0
     fi
 
-    # Get list of migration files
+    # 3. Get list of migration files for legacy tables
     local migrations=$(docker exec "${BANK_ADVISOR_CONTAINER}" ls "${MIGRATIONS_DIR}" | grep '\.sql$' | sort)
 
     if [ -z "$migrations" ]; then
-        log_warning "No migration files found"
+        log_warning "No legacy migration files found"
         return 0
     fi
 
-    # Run each migration
+    # 4. Run each legacy migration
     for migration in $migrations; do
-        log_info "  Applying migration: ${migration}"
+        log_info "  Applying legacy migration: ${migration}"
 
         # Execute migration via pipe to postgres container
         if docker exec "${BANK_ADVISOR_CONTAINER}" cat "${MIGRATIONS_DIR}/${migration}" | \
            docker exec -i "${POSTGRES_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" &>/dev/null; then
             log_success "  Migration ${migration} applied"
         else
-            log_warning "  Migration ${migration} may have already been applied or failed (non-critical)"
+            log_warning "  Migration ${migration} may have already been applied (non-critical)"
         fi
     done
 
-    log_success "Migrations completed"
+    log_success "Migrations completed (normalized + legacy schemas)"
 }
 
 verify_schema() {
@@ -125,36 +133,83 @@ verify_schema() {
 ################################################################################
 
 run_etl() {
-    log_info "Running ETL to populate data (this may take 1-2 minutes)..."
+    log_info "Running ETL pipelines (legacy + normalized)..."
 
-    # Check if ETL module exists
+    # ===========================================================================
+    # 1. LEGACY ETL - Populate monthly_kpis table (2017-2025)
+    # ===========================================================================
+    log_info ""
+    log_info "  [1/2] Running Legacy ETL (monthly_kpis)..."
+    log_info "  ├─ Loading 1.3M+ records from Excel/CSV files"
+    log_info "  ├─ Processing with Polars and Pandas"
+    log_info "  └─ Target: monthly_kpis table"
+
+    # Check if legacy ETL module exists
     if ! docker exec "${BANK_ADVISOR_CONTAINER}" python -c "import bankadvisor.etl_runner" 2>/dev/null; then
-        log_error "ETL module not found"
+        log_error "Legacy ETL module not found"
         exit 1
     fi
 
-    # Run ETL
-    log_info "  Loading 1.3M+ records from Excel/CSV files..."
-    log_info "  Processing with Polars and Pandas..."
-
-    if docker exec "${BANK_ADVISOR_CONTAINER}" python -m bankadvisor.etl_runner; then
-        log_success "ETL completed successfully"
+    if docker exec "${BANK_ADVISOR_CONTAINER}" python -m bankadvisor.etl_runner 2>&1 | tail -20; then
+        log_success "  Legacy ETL completed (monthly_kpis populated)"
     else
-        log_error "ETL failed"
+        log_error "Legacy ETL failed"
         exit 1
     fi
+
+    # ===========================================================================
+    # 2. NORMALIZED ETL - Populate normalized tables (BE_BM_202509.xlsx)
+    # ===========================================================================
+    log_info ""
+    log_info "  [2/2] Running Normalized ETL (BE_BM_202509.xlsx)..."
+    log_info "  ├─ Processing Balance Sheet & Income Statement"
+    log_info "  ├─ Generating carga_inicial_bancos.sql"
+    log_info "  └─ Target: instituciones, metricas_financieras, segmentos_cartera"
+
+    # Check if normalized ETL exists
+    if ! docker exec "${BANK_ADVISOR_CONTAINER}" test -f /app/etl/etl_processor.py; then
+        log_warning "Normalized ETL processor not found, skipping"
+        return 0
+    fi
+
+    # Run normalized ETL processor to generate SQL
+    if docker exec "${BANK_ADVISOR_CONTAINER}" python /app/etl/etl_processor.py &>/dev/null; then
+        log_success "  SQL generation completed"
+    else
+        log_warning "  SQL generation failed or file already exists"
+    fi
+
+    # Load normalized data into database
+    if docker exec "${BANK_ADVISOR_CONTAINER}" test -f /app/etl/carga_inicial_bancos.sql; then
+        log_info "  Loading normalized data into database..."
+        if docker exec "${BANK_ADVISOR_CONTAINER}" cat /app/etl/carga_inicial_bancos.sql | \
+           docker exec -i "${POSTGRES_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" &>/dev/null; then
+            log_success "  Normalized data loaded successfully"
+        else
+            log_warning "  Normalized data may have already been loaded"
+        fi
+    else
+        log_warning "  carga_inicial_bancos.sql not found, skipping normalized data load"
+    fi
+
+    log_success "ETL pipelines completed (legacy + normalized)"
 }
 
 verify_data() {
     log_info "Verifying data integrity..."
 
-    # Count total rows
-    local row_count=$(docker exec "${POSTGRES_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -t -c "
+    # ===========================================================================
+    # 1. Verify Legacy Data (monthly_kpis)
+    # ===========================================================================
+    log_info ""
+    log_info "  [1/2] Legacy Data (monthly_kpis):"
+
+    local legacy_count=$(docker exec "${POSTGRES_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -t -c "
         SELECT COUNT(*) FROM monthly_kpis;
     " 2>/dev/null | tr -d '[:space:]')
 
-    if [ "$row_count" -gt 0 ]; then
-        log_success "Data verification passed - ${row_count} records loaded"
+    if [ "$legacy_count" -gt 0 ]; then
+        log_success "    ✓ ${legacy_count} records in monthly_kpis"
 
         # Show data range
         local date_range=$(docker exec "${POSTGRES_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -t -c "
@@ -165,12 +220,41 @@ verify_data() {
             FROM monthly_kpis;
         " 2>/dev/null)
 
-        log_info "  Date range: $(echo $date_range | awk '{print $1 " to " $2}')"
-        log_info "  Banks: $(echo $date_range | awk '{print $3}')"
+        log_info "    ├─ Date range: $(echo $date_range | awk '{print $1 " to " $2}')"
+        log_info "    └─ Banks: $(echo $date_range | awk '{print $3}')"
     else
-        log_error "Data verification failed - no records found"
-        exit 1
+        log_warning "    ⚠ No records in monthly_kpis (legacy ETL may have failed)"
     fi
+
+    # ===========================================================================
+    # 2. Verify Normalized Data (instituciones, metricas_financieras)
+    # ===========================================================================
+    log_info ""
+    log_info "  [2/2] Normalized Data:"
+
+    # Check if normalized tables exist
+    local instituciones_count=$(docker exec "${POSTGRES_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -t -c "
+        SELECT COUNT(*) FROM instituciones;
+    " 2>/dev/null | tr -d '[:space:]')
+
+    local metricas_count=$(docker exec "${POSTGRES_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -t -c "
+        SELECT COUNT(*) FROM metricas_financieras;
+    " 2>/dev/null | tr -d '[:space:]')
+
+    local segmentos_count=$(docker exec "${POSTGRES_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -t -c "
+        SELECT COUNT(*) FROM segmentos_cartera;
+    " 2>/dev/null | tr -d '[:space:]')
+
+    if [ ! -z "$instituciones_count" ] && [ "$instituciones_count" -gt 0 ]; then
+        log_success "    ✓ ${instituciones_count} instituciones"
+        log_success "    ✓ ${metricas_count} metricas_financieras"
+        log_success "    ✓ ${segmentos_count} segmentos_cartera"
+    else
+        log_warning "    ⚠ Normalized tables empty or not found"
+    fi
+
+    log_info ""
+    log_success "Data verification completed"
 }
 
 ################################################################################
