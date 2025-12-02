@@ -10,6 +10,7 @@ normaliza nombres de instituciones y genera statements SQL de insercion.
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -48,7 +49,12 @@ def normalize_bank_name(name: str | float | int | None) -> str:
 
 
 def excel_serial_to_date(serial_val) -> str | None:
-    """Convierte un serial de Excel a ISO date (YYYY-MM-DD)."""
+    """Convierte un serial/fecha de Excel a ISO date (YYYY-MM-DD)."""
+    if pd.isna(serial_val):
+        return None
+    # Si ya viene como datetime/timestamp, solo normalizamos
+    if isinstance(serial_val, (pd.Timestamp, datetime)):
+        return pd.to_datetime(serial_val).date().isoformat()
     try:
         serial_float = float(serial_val)
     except (TypeError, ValueError):
