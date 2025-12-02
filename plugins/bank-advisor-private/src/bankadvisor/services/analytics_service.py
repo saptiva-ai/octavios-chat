@@ -46,12 +46,30 @@ class AnalyticsService:
 
         # Reservas
         "reservas_etapa_todas": MonthlyKPI.reservas_etapa_todas,
+        "reservas_variacion_mm": MonthlyKPI.reservas_variacion_mm,
+
+        # Pérdida Esperada (PE)
+        "pe_total": MonthlyKPI.pe_total,
+        "pe_empresarial": MonthlyKPI.pe_empresarial,
+        "pe_consumo": MonthlyKPI.pe_consumo,
+        "pe_vivienda": MonthlyKPI.pe_vivienda,
+
+        # Etapas de Deterioro
+        "ct_etapa_1": MonthlyKPI.ct_etapa_1,
+        "ct_etapa_2": MonthlyKPI.ct_etapa_2,
+        "ct_etapa_3": MonthlyKPI.ct_etapa_3,
+
+        # Quebrantos Comerciales
+        "quebrantos_cc": MonthlyKPI.quebrantos_cc,
+        "quebrantos_vs_cartera_cc": MonthlyKPI.quebrantos_vs_cartera_cc,
 
         # Tasas (nullable)
         "tasa_mn": MonthlyKPI.tasa_mn,
         "tasa_me": MonthlyKPI.tasa_me,
         "icap_total": MonthlyKPI.icap_total,
         "tda_cartera_total": MonthlyKPI.tda_cartera_total,
+        "tasa_sistema": MonthlyKPI.tasa_sistema,
+        "tasa_invex_consumo": MonthlyKPI.tasa_invex_consumo,
     }
 
     # =========================================================================
@@ -111,7 +129,53 @@ class AnalyticsService:
 
         "tasa_me": "tasa_me",
         "tasa me": "tasa_me",
-        "tasa dolares": "tasa_me"
+        "tasa dolares": "tasa_me",
+
+        # Pérdida Esperada (PE)
+        "pe": "pe_total",
+        "pe total": "pe_total",
+        "perdida esperada": "pe_total",
+        "pérdida esperada": "pe_total",
+        "pe empresarial": "pe_empresarial",
+        "pe consumo": "pe_consumo",
+        "pe vivienda": "pe_vivienda",
+
+        # Variación de Reservas
+        "reservas variacion": "reservas_variacion_mm",
+        "variación reservas": "reservas_variacion_mm",
+        "variacion reservas": "reservas_variacion_mm",
+        "reservas mes a mes": "reservas_variacion_mm",
+
+        # Etapas de Deterioro
+        "etapa 1": "ct_etapa_1",
+        "etapa 2": "ct_etapa_2",
+        "etapa 3": "ct_etapa_3",
+        "ct etapa 1": "ct_etapa_1",
+        "ct etapa 2": "ct_etapa_2",
+        "ct etapa 3": "ct_etapa_3",
+        "deterioro etapa 1": "ct_etapa_1",
+        "deterioro etapa 2": "ct_etapa_2",
+        "deterioro etapa 3": "ct_etapa_3",
+        "cartera etapa 1": "ct_etapa_1",
+        "cartera etapa 2": "ct_etapa_2",
+        "cartera etapa 3": "ct_etapa_3",
+
+        # Quebrantos Comerciales
+        "quebrantos": "quebrantos_cc",
+        "quebrantos comerciales": "quebrantos_cc",
+        "castigos comerciales": "quebrantos_cc",
+        "write-offs": "quebrantos_cc",
+        "quebrantos vs cartera": "quebrantos_vs_cartera_cc",
+        "ratio quebrantos": "quebrantos_vs_cartera_cc",
+
+        # Tasas de Interés Efectiva
+        "te sistema": "tasa_sistema",
+        "tasa efectiva sistema": "tasa_sistema",
+        "tasa sistema": "tasa_sistema",
+        "te invex": "tasa_invex_consumo",
+        "tasa efectiva invex": "tasa_invex_consumo",
+        "tasa invex consumo": "tasa_invex_consumo",
+        "te invex consumo": "tasa_invex_consumo"
     }
 
     @staticmethod
