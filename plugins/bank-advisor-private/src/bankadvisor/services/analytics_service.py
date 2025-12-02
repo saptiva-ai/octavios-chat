@@ -657,6 +657,123 @@ class AnalyticsService:
                 "message": "Error de base de datos. Por favor intente nuevamente."
             }
 
+    async def get_multi_metric_data(
+        session: AsyncSession,
+        metric_ids: List[str],
+        banks: List[str] = None,
+        date_start=None,
+        date_end=None,
+        user_query: str = ""
+    ) -> Dict[str, Any]:
+        """
+        Query multiple metrics simultaneously for stacked visualizations.
+
+        Used for queries like "etapas de deterioro" which need ct_etapa_1, ct_etapa_2, ct_etapa_3.
+
+        Args:
+            session: AsyncSession for database queries
+            metric_ids: List of metric identifiers (e.g., ['ct_etapa_1', 'ct_etapa_2', 'ct_etapa_3'])
+            banks: List of bank names to filter
+            date_start: Start date filter
+            date_end: End date filter
+            user_query: Original user query for context
+
+        Returns:
+            Dict with stacked bar visualization or error
+        """
+        from bankadvisor.config_service import get_config
+        config = get_config()
+
+        # Validate all metrics exist
+        validated_metrics = []
+        for metric_id in metric_ids:
+            column_name = config.get_metric_column(metric_id)
+            if not column_name or column_name not in AnalyticsService.SAFE_METRIC_COLUMNS:
+                logger.warning(
+                    "analytics.multi_metric.invalid_metric",
+                    metric_id=metric_id
+                )
+                continue
+            validated_metrics.append((metric_id, column_name))
+
+        if not validated_metrics:
+            return {
+                "type": "error",
+                "message": "No se encontraron métricas válidas para visualizar"
+            }
+
+        try:
+            # Query all metrics - using UNION ALL to combine results
+            all_rows = []
+
+            for metric_id, column_name in validated_metrics:
+                metric_column = AnalyticsService.SAFE_METRIC_COLUMNS[column_name]
+
+                query = select(
+                    MonthlyKPI.fecha,
+                    MonthlyKPI.banco_norm,
+                    metric_column.label('value')
+                )
+
+                # Apply filters
+                if banks and len(banks) > 0:
+                    query = query.where(MonthlyKPI.banco_norm.in_(banks))
+
+                if date_start:
+                    query = query.where(MonthlyKPI.fecha >= date_start)
+
+                if date_end:
+                    query = query.where(MonthlyKPI.fecha <= date_end)
+
+                query = query.order_by(MonthlyKPI.fecha.desc()).limit(1000)
+
+                result = await session.execute(query)
+                rows = result.fetchall()
+
+                # Add field_name to each row
+                for row in rows:
+                    all_rows.append({
+                        'fecha': row[0],
+                        'banco': row[1],
+                        'field_name': column_name,  # e.g., 'ct_etapa_1'
+                        'value': row[2]
+                    })
+
+            if not all_rows:
+                return {
+                    "type": "empty",
+                    "message": "No hay datos disponibles para las métricas solicitadas"
+                }
+
+            # Convert to format expected by _format_stacked_bar
+            # Need: fecha, banco, field_name, value
+            formatted_rows = [
+                (row['fecha'], row['banco'], row['field_name'], row['value'])
+                for row in all_rows
+            ]
+
+            # Get metric type (should be ratio for stacked percentages)
+            metric_type = config.get_metric_type(validated_metrics[0][0])
+
+            # Use _format_stacked_bar
+            return AnalyticsService._format_stacked_bar(
+                formatted_rows,
+                [m[1] for m in validated_metrics],  # field names
+                config,
+                metric_type
+            )
+
+        except SQLAlchemyError as e:
+            logger.error(
+                "analytics.multi_metric.db_error",
+                metrics=metric_ids,
+                error=str(e)
+            )
+            return {
+                "type": "error",
+                "message": "Error consultando múltiples métricas"
+            }
+
     @staticmethod
     def _detect_visualization_mode(metric_id: str, intent: str, user_query: str, config) -> Optional[str]:
         """

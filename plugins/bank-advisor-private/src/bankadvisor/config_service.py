@@ -191,6 +191,11 @@ class ConfigService:
         return self._config.get("visualizations", {})
 
     @property
+    def multi_metric_queries(self) -> Dict:
+        """Get all multi-metric query configurations."""
+        return self._config.get("multi_metric_queries", {})
+
+    @property
     def ambiguous_terms(self) -> Dict:
         """Get all ambiguous term configurations."""
         return self._config.get("ambiguous_terms", {})
@@ -245,6 +250,46 @@ class ConfigService:
                         "term": term,
                         "message": config.get("message", f"¿Qué tipo de {term} te interesa?"),
                         "options": config.get("options", [])
+                    }
+
+        return None
+
+    def check_multi_metric_query(self, text: str) -> Optional[Dict]:
+        """
+        Check if query matches a multi-metric pattern requiring stacked visualization.
+
+        Multi-metric queries need to fetch multiple metrics simultaneously.
+        Example: "etapas de deterioro" → fetch ct_etapa_1, ct_etapa_2, ct_etapa_3
+
+        Args:
+            text: User query text
+
+        Returns:
+            Dict with multi-metric info if found, None otherwise.
+            Structure: {
+                "query_type": str,         # Type identifier (e.g., "etapas_deterioro")
+                "metrics": List[str],      # Metric IDs to query
+                "visualization": str,      # Visualization type ("stacked_bar")
+                "description": str         # Human description
+            }
+        """
+        text_lower = text.lower()
+
+        for query_type, config in self.multi_metric_queries.items():
+            # Check if any keyword matches
+            for keyword in config.get("keywords", []):
+                if keyword.lower() in text_lower:
+                    logger.info(
+                        "config_service.multi_metric_detected",
+                        query_type=query_type,
+                        keyword=keyword,
+                        query=text
+                    )
+                    return {
+                        "query_type": query_type,
+                        "metrics": config.get("metrics", []),
+                        "visualization": config.get("visualization", "stacked_bar"),
+                        "description": config.get("description", "")
                     }
 
         return None

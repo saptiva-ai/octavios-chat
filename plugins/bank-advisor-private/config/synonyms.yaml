@@ -322,6 +322,42 @@ metrics:
       - "interés invex consumo"
       - "interes invex consumo"
 
+# Multi-metric queries that require querying multiple fields together
+# These trigger special visualization modes like stacked bars
+multi_metric_queries:
+  etapas_deterioro:
+    keywords:
+      - "etapas de deterioro"
+      - "etapas deterioro"
+      - "distribución etapas"
+      - "distribucion etapas"
+      - "etapa 1 2 3"
+      - "stages"
+      - "portfolio stages"
+      - "ifrs 9 stages"
+      - "deterioro ifrs 9"
+    metrics:
+      - "ct_etapa_1"
+      - "ct_etapa_2"
+      - "ct_etapa_3"
+    visualization: "stacked_bar"
+    description: "Distribución de cartera por etapas de deterioro IFRS 9"
+
+  composicion_cartera:
+    keywords:
+      - "composición de cartera"
+      - "composicion de cartera"
+      - "composición cartera"
+      - "distribución de cartera"
+      - "distribucion de cartera"
+      - "desglose cartera"
+    metrics:
+      - "cartera_consumo_total"
+      - "cartera_vivienda_total"
+      - "empresarial_total"
+    visualization: "stacked_bar"
+    description: "Composición de cartera por tipo de crédito"
+
 # Ambiguous terms that require clarification before processing
 # These terms match multiple possible metrics and should trigger user choice
 ambiguous_terms:
