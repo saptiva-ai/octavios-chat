@@ -18,6 +18,71 @@ import structlog
 
 logger = structlog.get_logger(__name__)
 
+# Bank color palette for consistent visualization across charts
+# Uses distinctive colors optimized for dark and light themes
+BANK_COLORS = {
+    "INVEX": "#E45756",          # Red (brand color)
+    "SISTEMA": "#AAB0B3",        # Grey (neutral benchmark)
+    "BBVA": "#004481",           # BBVA Blue
+    "SANTANDER": "#EC0000",      # Santander Red
+    "BANORTE": "#D7282F",        # Banorte Red
+    "HSBC": "#DB0011",           # HSBC Red
+    "SCOTIABANK": "#EC1C24",     # Scotia Red
+    "INBURSA": "#003DA5",        # Inbursa Blue
+    "CITIBANAMEX": "#0065B3",    # Citi Blue
+    "AZTECA": "#00A651",         # Azteca Green
+    "BAJIO": "#00529B",          # Bajio Blue
+    "BANREGIO": "#0033A0",       # Banregio Blue
+    "MIFEL": "#8B0304",          # Mifel Dark Red
+    "AFIRME": "#005EB8",         # Afirme Blue
+    "MULTIVA": "#F58220",        # Multiva Orange
+    "ACTINVER": "#006341",       # Actinver Green
+    "INTERCAM": "#4A90E2",       # Intercam Light Blue
+    "BANSI": "#FF6B35",          # Bansi Orange
+    "BARCLAYS": "#00AEEF",       # Barclays Blue
+    "MONEX": "#E94E1B",          # Monex Orange
+    "VE POR MAS": "#FF8C00",     # Ve por Mas Orange
+    "AMERICAN EXPRESS": "#006FCF", # Amex Blue
+    "CONSUBANCO": "#7030A0",     # Consubanco Purple
+    "BANCO WALMART": "#0071CE",  # Walmart Blue
+    "CIBANCO": "#1B365D",        # Cibanco Navy
+    "COMPARTAMOS": "#78BE20",    # Compartamos Green
+    "BANBAJIO": "#003B5C",       # BanBajio Dark Blue
+    "ICBC": "#C8102E",           # ICBC Red
+    "INMOBILIARIO": "#6D2077",   # Inmobiliario Purple
+    "JP MORGAN": "#117ACA",      # JP Morgan Blue
+    "BANK OF AMERICA": "#E31837", # BofA Red
+    "MUFG": "#D71920",           # MUFG Red
+    "MIZUHO": "#004098",         # Mizuho Blue
+    "DEFAULT": "#4F46E5",        # Indigo (fallback for unknown banks)
+}
+
+
+def get_bank_color(bank_name: str) -> str:
+    """
+    Get consistent color for a bank across all visualizations.
+
+    Args:
+        bank_name: Bank name (e.g., "INVEX", "BBVA", "SISTEMA")
+
+    Returns:
+        Hex color code
+    """
+    # Normalize bank name (uppercase, strip whitespace)
+    normalized = bank_name.strip().upper()
+
+    # Try exact match first
+    if normalized in BANK_COLORS:
+        return BANK_COLORS[normalized]
+
+    # Try partial match (e.g., "BBVA BANCOMER" -> "BBVA")
+    for bank_key in BANK_COLORS:
+        if bank_key in normalized or normalized in bank_key:
+            return BANK_COLORS[bank_key]
+
+    # Fallback to default
+    return BANK_COLORS["DEFAULT"]
+
 
 class AnalyticsService:
 
@@ -553,7 +618,14 @@ class AnalyticsService:
             # Format based on intent
             metric_type = config.get_metric_type(metric_id)
 
-            if intent == "evolution":
+            # Check for special visualization modes based on metric or query
+            viz_mode = AnalyticsService._detect_visualization_mode(metric_id, intent, user_query, config)
+
+            if viz_mode == "variation":
+                return AnalyticsService._format_variation(rows, metric_id, config, metric_type)
+            elif viz_mode == "single_series":
+                return AnalyticsService._format_single_series(rows, metric_id, config, metric_type)
+            elif intent == "evolution":
                 return AnalyticsService._format_evolution(rows, metric_id, config, metric_type)
             elif intent == "comparison":
                 return AnalyticsService._format_comparison(rows, metric_id, config, metric_type)
@@ -584,6 +656,44 @@ class AnalyticsService:
                 "type": "error",
                 "message": "Error de base de datos. Por favor intente nuevamente."
             }
+
+    @staticmethod
+    def _detect_visualization_mode(metric_id: str, intent: str, user_query: str, config) -> Optional[str]:
+        """
+        Detect special visualization modes based on metric type and query keywords.
+
+        Returns:
+            - "variation": Month-over-month variation chart
+            - "single_series": Single series chart (SISTEMA only)
+            - None: Use standard intent-based routing
+        """
+        query_lower = user_query.lower()
+
+        # Check for variation keywords
+        variation_keywords = [
+            "variación", "variacion", "cambio", "diferencia",
+            "mes a mes", "mensual", "delta", "incremento", "decremento"
+        ]
+        if any(keyword in query_lower for keyword in variation_keywords):
+            return "variation"
+
+        # Check if metric is explicitly a variation metric
+        if "variacion" in metric_id or "_mm" in metric_id:
+            return "variation"
+
+        # Check for single-series metrics (SISTEMA only)
+        single_series_metrics = ["tasa_sistema", "tasa_invex_consumo"]
+        if metric_id in single_series_metrics:
+            return "single_series"
+
+        # Check visualization config from sections.yaml
+        viz_config = config.visualizations.get(metric_id, {})
+        viz_mode = viz_config.get("mode")
+
+        if viz_mode == "single_sistema":
+            return "single_series"
+
+        return None
 
     @staticmethod
     def _format_evolution(rows, metric_id: str, config, metric_type: str) -> Dict[str, Any]:
@@ -626,16 +736,26 @@ class AnalyticsService:
             ("Valor: %{y:.2f}%<extra></extra>" if is_ratio else "Valor: %{y:,.2f} MDP<extra></extra>")
         )
 
-        # Group by bank for multi-line chart
+        # Group by bank for multi-line chart with distinctive colors
         traces = []
         for banco in df['banco'].unique():
             bank_data = df[df['banco'] == banco].sort_values('fecha')
+            bank_color = get_bank_color(banco)
+
+            # INVEX gets thicker line, SISTEMA gets dashed, others solid
+            line_config = {"color": bank_color, "width": 2}
+            if banco.upper() == "INVEX":
+                line_config["width"] = 3  # Thicker for emphasis
+            elif banco.upper() == "SISTEMA":
+                line_config["dash"] = "dot"  # Dashed for reference
+
             traces.append({
                 "x": bank_data['fecha'].astype(str).tolist(),
                 "y": bank_data['value'].tolist(),
                 "type": "scatter",
                 "mode": "lines+markers",
                 "name": banco,
+                "line": line_config,
                 "hovertemplate": hover_template
             })
 
@@ -750,6 +870,9 @@ class AnalyticsService:
                     "bank": top_bank['banco']
                 }
 
+        # Assign distinctive colors to each bank
+        bank_colors = [get_bank_color(banco) for banco in latest['banco'].tolist()]
+
         return {
             "type": "data",
             "visualization": "bar_chart",
@@ -764,7 +887,7 @@ class AnalyticsService:
                     "x": latest['banco'].tolist(),
                     "y": latest['value'].tolist(),
                     "type": "bar",
-                    "marker": {"color": "#4F46E5"},
+                    "marker": {"color": bank_colors},  # Use distinctive colors per bank
                     "hovertemplate": hover_template,
                     "text": [f"{v:.2f}%" if is_ratio else f"{v:,.0f} MDP" for v in latest['value'].tolist()],
                     "textposition": "auto"
@@ -805,6 +928,9 @@ class AnalyticsService:
             ("Valor: %{x:.2f}%<extra></extra>" if is_ratio else "Valor: %{x:,.2f} MDP<extra></extra>")
         )
 
+        # Assign distinctive colors to each bank in ranking
+        bank_colors = [get_bank_color(banco) for banco in latest['banco'].tolist()]
+
         return {
             "type": "data",
             "visualization": "ranking",
@@ -825,7 +951,7 @@ class AnalyticsService:
                     "y": latest['banco'].tolist(),
                     "type": "bar",
                     "orientation": "h",
-                    "marker": {"color": "#10B981"},
+                    "marker": {"color": bank_colors},  # Use distinctive colors per bank
                     "hovertemplate": hover_template,
                     "text": [f"{v:.2f}%" if is_ratio else f"{v:,.0f} MDP" for v in latest['value'].tolist()],
                     "textposition": "auto"
@@ -876,4 +1002,276 @@ class AnalyticsService:
                 for _, row in latest.iterrows()
             ],
             "summary": f"Valor actual de {display_name}"
+        }
+
+    @staticmethod
+    def _format_variation(rows, metric_id: str, config, metric_type: str) -> Dict[str, Any]:
+        """
+        Format data for month-over-month variation view.
+
+        Shows percentage change between consecutive months with color coding:
+        - Green bars for positive changes
+        - Red bars for negative changes
+        - Reference line at 0%
+        """
+        import pandas as pd
+
+        df = pd.DataFrame(rows, columns=['fecha', 'banco', 'value'])
+
+        # Convert ratio metrics to percentage, currency already in millions
+        is_ratio = metric_type == "ratio"
+        if is_ratio:
+            df['value'] = df['value'] * 100
+
+        display_name = config.get_metric_display_name(metric_id)
+
+        # Calculate month-over-month variation for each bank
+        traces = []
+        for banco in df['banco'].unique():
+            bank_data = df[df['banco'] == banco].sort_values('fecha')
+
+            if len(bank_data) < 2:
+                continue  # Need at least 2 points to calculate variation
+
+            # Calculate percentage change
+            variations = []
+            dates = []
+            for i in range(1, len(bank_data)):
+                prev_value = bank_data.iloc[i-1]['value']
+                curr_value = bank_data.iloc[i]['value']
+
+                if prev_value and prev_value != 0:
+                    variation_pct = ((curr_value - prev_value) / prev_value) * 100
+                    variations.append(variation_pct)
+                    dates.append(str(bank_data.iloc[i]['fecha']))
+
+            if not variations:
+                continue
+
+            # Color bars based on positive/negative
+            colors = ['#10B981' if v >= 0 else '#EF4444' for v in variations]
+            bank_color = get_bank_color(banco)
+
+            traces.append({
+                "x": dates,
+                "y": variations,
+                "type": "bar",
+                "name": banco,
+                "marker": {"color": colors if banco.upper() == "INVEX" else bank_color},
+                "hovertemplate": f"<b>{banco}</b><br>Fecha: %{{x}}<br>Variación: %{{y:.2f}}%<extra></extra>",
+                "text": [f"{v:+.2f}%" for v in variations],
+                "textposition": "outside"
+            })
+
+        return {
+            "type": "data",
+            "visualization": "variation_chart",
+            "metric_name": display_name,
+            "metric_type": metric_type,
+            "plotly_config": {
+                "data": traces,
+                "layout": {
+                    "title": f"Variación Mensual de {display_name}",
+                    "xaxis": {"title": "Período"},
+                    "yaxis": {
+                        "title": "Variación %",
+                        "zeroline": True,
+                        "zerolinewidth": 2,
+                        "zerolinecolor": "#374151"
+                    },
+                    "barmode": "group",
+                    "hovermode": "x unified"
+                }
+            },
+            "summary": f"Variación mes a mes de {display_name}"
+        }
+
+    @staticmethod
+    def _format_single_series(rows, metric_id: str, config, metric_type: str) -> Dict[str, Any]:
+        """
+        Format data for single series view (typically SISTEMA only).
+
+        Used for metrics that exist only at system level without bank breakdown.
+        Examples: Tasa Efectiva Sistema, benchmarks globales.
+        """
+        import pandas as pd
+
+        df = pd.DataFrame(rows, columns=['fecha', 'banco', 'value'])
+
+        # Filter for SISTEMA only
+        df = df[df['banco'].str.upper() == 'SISTEMA']
+
+        if df.empty:
+            # Fallback: use first bank if SISTEMA not available
+            df = pd.DataFrame(rows, columns=['fecha', 'banco', 'value'])
+            df = df[df['banco'] == df['banco'].iloc[0]]
+
+        # Convert ratio metrics to percentage
+        is_ratio = metric_type == "ratio"
+        if is_ratio:
+            df['value'] = df['value'] * 100
+
+        df = df.sort_values('fecha')
+        display_name = config.get_metric_display_name(metric_id)
+
+        # Build simple line chart
+        hover_template = (
+            "<b>SISTEMA</b><br>" +
+            "Fecha: %{x}<br>" +
+            ("Valor: %{y:.2f}%<extra></extra>" if is_ratio else "Valor: %{y:,.2f} MDP<extra></extra>")
+        )
+
+        return {
+            "type": "data",
+            "visualization": "single_series",
+            "metric_name": display_name,
+            "metric_type": metric_type,
+            "plotly_config": {
+                "data": [{
+                    "x": df['fecha'].astype(str).tolist(),
+                    "y": df['value'].tolist(),
+                    "type": "scatter",
+                    "mode": "lines+markers",
+                    "name": "SISTEMA",
+                    "line": {"color": BANK_COLORS["SISTEMA"], "width": 3},
+                    "marker": {"size": 6},
+                    "hovertemplate": hover_template
+                }],
+                "layout": {
+                    "title": f"Evolución de {display_name}",
+                    "xaxis": {"title": "Período"},
+                    "yaxis": {
+                        "title": "%" if is_ratio else "MDP (Millones de Pesos)"
+                    },
+                    "showlegend": False
+                }
+            },
+            "summary": f"Evolución de {display_name} del sistema bancario"
+        }
+
+    @staticmethod
+    def _format_stacked_bar(rows, fields: List[str], config, metric_type: str) -> Dict[str, Any]:
+        """
+        Format data for stacked bar chart (100%).
+
+        Used for showing portfolio distribution across categories.
+        Examples: IFRS 9 stages (Etapa 1/2/3), Portfolio composition.
+
+        Args:
+            rows: Query results with multiple metric columns
+            fields: List of field names to stack (e.g., ['ct_etapa_1', 'ct_etapa_2', 'ct_etapa_3'])
+            config: Config service
+            metric_type: Should be 'ratio' for percentage-based stacking
+        """
+        import pandas as pd
+
+        # Rows should contain: fecha, banco, field_name, value
+        # Need to pivot to get each field as a separate column
+        df = pd.DataFrame(rows, columns=['fecha', 'banco', 'field_name', 'value'])
+
+        # Convert ratio to percentage
+        is_ratio = metric_type == "ratio"
+        if is_ratio:
+            df['value'] = df['value'] * 100
+
+        # Get latest date data
+        latest_date = df['fecha'].max()
+        latest = df[df['fecha'] == latest_date]
+
+        # Pivot: rows = bancos, columns = fields
+        pivot = latest.pivot(index='banco', columns='field_name', values='value').fillna(0)
+
+        # Define colors for stages (if IFRS 9 etapas)
+        STAGE_COLORS = {
+            'ct_etapa_1': '#2E8B57',  # Green - Performing
+            'ct_etapa_2': '#FFD700',  # Yellow - Watchlist
+            'ct_etapa_3': '#DC143C',  # Red - Non-performing
+        }
+
+        # Create stacked bar traces
+        traces = []
+        for field in fields:
+            if field not in pivot.columns:
+                continue
+
+            field_display = config.get_metric_display_name(field) if hasattr(config, 'get_metric_display_name') else field.replace('_', ' ').title()
+            field_color = STAGE_COLORS.get(field, BANK_COLORS["DEFAULT"])
+
+            traces.append({
+                "x": pivot.index.tolist(),
+                "y": pivot[field].tolist(),
+                "type": "bar",
+                "name": field_display,
+                "marker": {"color": field_color},
+                "hovertemplate": f"<b>{field_display}</b><br>Banco: %{{x}}<br>Valor: %{{y:.2f}}%<extra></extra>",
+                "text": [f"{v:.1f}%" if v > 5 else "" for v in pivot[field].tolist()],
+                "textposition": "inside"
+            })
+
+        return {
+            "type": "data",
+            "visualization": "stacked_bar",
+            "metric_name": "Distribución de Cartera",
+            "metric_type": metric_type,
+            "plotly_config": {
+                "data": traces,
+                "layout": {
+                    "title": "Distribución de Cartera por Etapas",
+                    "xaxis": {"title": "Banco"},
+                    "yaxis": {
+                        "title": "% de Cartera Total",
+                        "range": [0, 100]
+                    },
+                    "barmode": "stack",
+                    "hovermode": "x unified"
+                }
+            },
+            "summary": "Distribución de cartera por etapas de deterioro (IFRS 9)"
+        }
+
+    @staticmethod
+    def _format_multi_month_table(rows, metric_id: str, config, metric_type: str, months: int = 6) -> Dict[str, Any]:
+        """
+        Format data as multi-month table view.
+
+        Shows last N months in tabular format with color coding.
+        Useful for variation metrics where tabular view is clearer.
+        """
+        import pandas as pd
+
+        df = pd.DataFrame(rows, columns=['fecha', 'banco', 'value'])
+
+        # Convert ratio to percentage
+        is_ratio = metric_type == "ratio"
+        if is_ratio:
+            df['value'] = df['value'] * 100
+
+        # Get last N months
+        df = df.sort_values('fecha', ascending=False)
+        unique_dates = df['fecha'].unique()[:months]
+        df = df[df['fecha'].isin(unique_dates)]
+
+        # Pivot: rows = bancos, columns = dates
+        pivot = df.pivot(index='banco', columns='fecha', values='value')
+        pivot = pivot[sorted(pivot.columns, reverse=True)]  # Most recent first
+
+        display_name = config.get_metric_display_name(metric_id)
+
+        # Convert to table format
+        table_data = []
+        for banco in pivot.index:
+            row_data = {"banco": banco}
+            for date in pivot.columns:
+                value = pivot.loc[banco, date]
+                row_data[str(date)] = round(value, 2) if pd.notna(value) else None
+            table_data.append(row_data)
+
+        return {
+            "type": "data",
+            "visualization": "table",
+            "metric_name": display_name,
+            "metric_type": metric_type,
+            "table_data": table_data,
+            "columns": ["banco"] + [str(d) for d in pivot.columns],
+            "summary": f"Últimos {months} meses de {display_name}"
         }
