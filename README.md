@@ -1212,6 +1212,33 @@ make verify
 ```
 Ejecuta health checks de contenedores, API, DB y frontend.
 
+### 5. Inicialización de Bank Advisor (Opcional)
+
+Si estás usando el plugin Bank Advisor para análisis financiero bancario, necesitas inicializar los datos:
+
+```bash
+make init-bank-advisor
+```
+
+Este comando ejecuta automáticamente:
+- **Migraciones de esquema**: Crea tablas normalizadas (`instituciones`, `metricas_financieras`, `segmentos_cartera`) y actualiza tabla legacy (`monthly_kpis`) con columnas adicionales
+- **ETL Legacy**: Carga 3660 registros históricos (2017-2025) desde Excel/CSV, procesa 1.3M+ registros de Corporate Loans con Polars
+- **ETL Normalizado**: Procesa datos de Balance Sheet e Income Statement desde `BE_BM_202509.xlsx`
+- **Verificación**: Valida integridad de datos en ambos esquemas
+
+**Comandos específicos**:
+```bash
+make init-bank-advisor-migrations  # Solo migraciones
+make init-bank-advisor-etl         # Solo ETL (ambos pipelines)
+```
+
+**Datos cargados**:
+- 3660 registros mensuales (enero 2017 - julio 2025)
+- 37 instituciones bancarias
+- Métricas: ICAP, TDA, IMOR, ICOR, Tasas Corporativas (MN/ME), Pérdida Esperada, Etapas de Deterioro
+
+Ver documentación completa en [`plugins/bank-advisor-private/ETL_CONSOLIDATION.md`](plugins/bank-advisor-private/ETL_CONSOLIDATION.md).
+
 ## Flujo de documentos y auditoría
 1. Upload validado en dropzone → FastAPI guarda y envía a MinIO con metadatos en Mongo.
 2. Redis cachea texto; Qdrant guarda embeddings para RAG (`document_processing_service.py`).

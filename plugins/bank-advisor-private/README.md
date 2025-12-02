@@ -30,14 +30,54 @@ User: "IMOR de INVEX en 2024"
 ### Prerequisites
 - Docker & Docker Compose
 - PostgreSQL 15
+- Python 3.11+ (for scripts)
 
-### Run the Service
+### 1. Build and Start Services
 
 ```bash
 # From project root
-docker compose up -d bank-advisor
+make dev-rebuild  # Builds containers with latest changes
+```
 
-# Verify health
+### 2. Initialize Data (Required on First Run)
+
+**Consolidated initialization** (migrations + ETL):
+```bash
+make init-bank-advisor
+```
+
+This single command:
+- ✅ Applies database schema migrations (normalized + legacy)
+- ✅ Runs Legacy ETL → `monthly_kpis` table (3660 records, 2017-2025)
+- ✅ Runs Normalized ETL → `instituciones`, `metricas_financieras`, `segmentos_cartera`
+- ✅ Verifies data integrity across both schemas
+- ✅ Performs health checks
+
+**Alternative commands**:
+```bash
+make init-bank-advisor-migrations  # Only migrations
+make init-bank-advisor-etl         # Only ETL (both pipelines)
+
+# Or use the script directly:
+./scripts/init_bank_advisor_data.sh
+./scripts/init_bank_advisor_data.sh --etl-only
+```
+
+**Expected output**:
+```
+✓ Container verification passed
+✓ Migrations completed (normalized + legacy schemas)
+✓ Schema verification passed
+✓ Legacy ETL completed (3660 records)
+⚠ Normalized ETL completed (or skipped if no BE_BM data)
+✓ Data verification: 2017-01 to 2025-07, 37 banks
+✓ Bank Advisor service is healthy
+```
+
+### 3. Verify Installation
+
+```bash
+# Check service health
 curl http://localhost:8002/health
 
 # Run smoke test (12 queries)
@@ -45,7 +85,7 @@ cd plugins/bank-advisor-private
 python scripts/smoke_demo_bank_analytics.py --port 8002
 ```
 
-### Expected Output
+### Expected Test Output
 
 ```
 🟢 ALL CHECKS PASSED - SAFE TO DEMO
@@ -120,6 +160,7 @@ To add a new client, copy `config/profiles/template.yaml` to `config/profiles/<c
 
 | Document | Purpose |
 |----------|---------|
+| `ETL_CONSOLIDATION.md` | **Dual ETL architecture, consolidation guide** |
 | `docs/ARCHITECTURE.md` | System design, SOLID principles |
 | `docs/DEVELOPER_GUIDE.md` | How to extend (add metrics, intents) |
 | `docs/LIMITATIONS.md` | Known constraints |
@@ -200,18 +241,58 @@ plugins/bank-advisor-private/
 
 ## ETL Operations
 
-ETL runs daily at 2:00 AM via cron.
+### Dual ETL Architecture
+
+Bank Advisor uses **two coexisting ETL pipelines**:
+
+1. **Legacy ETL** → `monthly_kpis` table
+   - 3660 historical records (2017-2025)
+   - Sources: CNBV, ICAP, TDA, Corporate Loans (1.3M+ records processed)
+   - Maintains backward compatibility with existing queries
+
+2. **Normalized ETL** → Relational schema
+   - Tables: `instituciones`, `metricas_financieras`, `segmentos_cartera`, `metricas_cartera_segmentada`
+   - Source: BE_BM_202509.xlsx (Balance Sheet + Income Statement)
+   - Enables advanced NL2SQL queries
+
+See [`ETL_CONSOLIDATION.md`](ETL_CONSOLIDATION.md) for complete architecture documentation.
+
+### Check ETL Status
 
 ```bash
-# Check ETL status
+# Check both ETL statuses
 curl http://localhost:8002/health | jq .etl
 
-# Manual ETL execution
-docker exec bank-advisor-mcp python -m bankadvisor.etl_runner
+# Verify data integrity
+make init-bank-advisor  # Re-runs verification without re-processing
+```
+
+### Manual ETL Execution
+
+```bash
+# Full initialization (migrations + both ETL)
+make init-bank-advisor
+
+# Legacy ETL only (monthly_kpis)
+docker exec octavios-chat-bajaware_invex-bank-advisor python -m bankadvisor.etl_runner
+
+# Normalized ETL only
+docker exec octavios-chat-bajaware_invex-bank-advisor python /app/etl/etl_processor.py
+docker exec octavios-chat-bajaware_invex-bank-advisor cat /app/etl/carga_inicial_bancos.sql | \
+  docker exec -i octavios-chat-bajaware_invex-postgres psql -U octavios -d bankadvisor
 
 # Validate ETL health
 python scripts/ops_validate_etl.py --port 8002
 ```
+
+### Data Loaded
+
+After successful initialization:
+- **3660 monthly records** (enero 2017 - julio 2025)
+- **37 instituciones bancarias**
+- **Métricas**: ICAP (2815), TDA (3660), TASA_MN (2707), TASA_ME (2142)
+- **Segmentos**: Normalized portfolio segments catalog
+- **Balance Sheet**: Sept 2025 data (if BE_BM_202509.xlsx available)
 
 ---
 
