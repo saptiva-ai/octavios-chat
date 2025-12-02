@@ -24,6 +24,12 @@ import asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import time
+import sys
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_E2E_BANK_ANALYTICS", "false").lower() != "true",
+    reason="Bank analytics E2E deshabilitado por defecto (requires full stack running)",
+)
 
 # Test configuration
 BASE_URL = os.getenv("TEST_BASE_URL", "http://localhost:8000")
@@ -54,7 +60,7 @@ async def auth_token():
         # Try to login first
         login_response = await client.post(
             "/api/auth/login",
-            json={"email": DEMO_EMAIL, "password": DEMO_PASSWORD}
+            json={"identifier": DEMO_EMAIL, "password": DEMO_PASSWORD}
         )
 
         if login_response.status_code == 200:
@@ -69,7 +75,7 @@ async def auth_token():
         # Create demo user via script
         import subprocess
         result = subprocess.run(
-            ["python3", "apps/backend/scripts/create_demo_user.py"],
+            [sys.executable, "apps/backend/scripts/create_demo_user.py"],
             capture_output=True,
             text=True,
             cwd="/home/jazielflo/Proyects/octavios-chat-bajaware_invex"
@@ -81,7 +87,7 @@ async def auth_token():
         # Try login again
         login_response = await client.post(
             "/api/auth/login",
-            json={"email": DEMO_EMAIL, "password": DEMO_PASSWORD}
+            json={"identifier": DEMO_EMAIL, "password": DEMO_PASSWORD}
         )
 
         if login_response.status_code != 200:

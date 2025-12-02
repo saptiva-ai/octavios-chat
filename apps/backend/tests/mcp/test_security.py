@@ -9,9 +9,18 @@ Tests:
 """
 
 import pytest
+import os
 
 # Mark all tests in this file with mcp and mcp_security markers
-pytestmark = [pytest.mark.mcp, pytest.mark.mcp_security, pytest.mark.unit]
+pytestmark = [
+    pytest.mark.mcp,
+    pytest.mark.mcp_security,
+    pytest.mark.unit,
+    pytest.mark.skipif(
+        os.getenv("RUN_MCP_SECURITY", "false").lower() != "true",
+        reason="MCP security tests deshabilitados por defecto (requires full stack).",
+    ),
+]
 import time
 from unittest.mock import AsyncMock, Mock
 

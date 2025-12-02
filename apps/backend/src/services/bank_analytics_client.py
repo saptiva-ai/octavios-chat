@@ -345,11 +345,90 @@ async def check_bank_advisor_health() -> bool:
         return False
 
 
+async def _classify_with_llm(message: str) -> bool:
+    """
+    Use LLM to classify if a message is a banking query.
+
+    This is called only for ambiguous cases where keywords are not sufficient.
+    Uses a small, fast model with a focused prompt.
+    """
+    try:
+        from .saptiva_client import SaptivaClient, SaptivaRequest, SaptivaMessage
+
+        client = SaptivaClient()
+
+        # Focused prompt for classification
+        classification_prompt = """Eres un clasificador de consultas bancarias para un sistema de análisis financiero mexicano.
+
+Tu tarea: Determinar si la siguiente consulta es sobre banca, finanzas o indicadores bancarios mexicanos.
+
+Responde SOLO con "SÍ" o "NO".
+
+Ejemplos de consultas bancarias (responde SÍ):
+- Preguntas sobre bancos mexicanos (INVEX, Banorte, BBVA, Santander, etc.)
+- Indicadores financieros (IMOR, ICOR, ICAP, ROE, morosidad, cartera vencida)
+- Análisis bancario, comparaciones entre bancos
+- Métricas de crédito, capitalización, liquidez
+- Reportes CNBV o regulatorios
+
+Ejemplos de consultas NO bancarias (responde NO):
+- Clima, recetas, películas, programación
+- Historia, geografía, deportes (a menos que mencionen bancos)
+- Productos físicos como carteras de cuero o bancos de madera
+- Cualquier tema no relacionado con finanzas/banca
+
+Consulta a clasificar: "{message}"
+
+Tu respuesta (SÍ o NO):"""
+
+        request = SaptivaRequest(
+            model="gpt-4o-mini",  # Fast, cheap model for classification
+            messages=[
+                SaptivaMessage(role="user", content=classification_prompt.format(message=message))
+            ],
+            temperature=0.0,  # Deterministic
+            max_tokens=10,  # We only need "SÍ" or "NO"
+            stream=False
+        )
+
+        response = await client.chat_completion(request)
+
+        if response and response.choices:
+            answer = response.choices[0].get("message", {}).get("content", "").strip().upper()
+            # Check if answer contains affirmative
+            is_banking = any(word in answer for word in ["SÍ", "SI", "YES", "TRUE", "VERDADERO"])
+
+            logger.debug(
+                "LLM classification completed",
+                message_preview=message[:50],
+                llm_answer=answer,
+                classified_as_banking=is_banking
+            )
+
+            return is_banking
+
+        # Fallback to False if no response
+        return False
+
+    except Exception as e:
+        logger.warning(
+            "LLM classification failed, falling back to False",
+            error=str(e),
+            message_preview=message[:50]
+        )
+        return False
+
+
 async def is_bank_query(message: str) -> bool:
     """
-    Simple heuristic to detect if a message is a banking query.
+    Hybrid banking query detection with LLM fallback.
 
-    This is a basic implementation - can be enhanced with ML/NLP later.
+    Strategy:
+    1. Check Redis cache for previous classification
+    2. Fast-path: High-confidence keywords → return True immediately
+    3. Negative keywords → return False immediately
+    4. Ambiguous cases → Use LLM classifier
+    5. Cache result in Redis
 
     Args:
         message: User message text
@@ -357,27 +436,227 @@ async def is_bank_query(message: str) -> bool:
     Returns:
         True if message appears to be a banking query
     """
+    # 1. Check cache first
+    from ..core.redis_cache import get_redis_cache
+    import hashlib
+
+    try:
+        cache = await get_redis_cache()
+        # Create cache key from message hash
+        message_hash = hashlib.md5(message.encode()).hexdigest()
+        cache_key = f"bank_query_classification:{message_hash}"
+
+        if cache:
+            cached_result = await cache.get(cache_key)
+            if cached_result is not None:
+                logger.debug(
+                    "Bank query classification loaded from cache",
+                    message_preview=message[:50],
+                    cached_result=cached_result
+                )
+                return cached_result
+    except Exception as e:
+        logger.warning("Failed to access cache for bank query classification", error=str(e))
+        cache = None
+
     message_lower = message.lower()
 
-    # Banking-specific keywords
-    banking_keywords = [
-        "imor", "icor", "icap",
-        "cartera", "comercial", "consumo", "vivienda",
-        "morosidad", "mora",
-        "invex", "banorte", "bancomer", "banamex", "santander", "hsbc", "scotiabank",
-        "banco", "bancos", "bancario", "bancaria",
-        "cnbv", "indicador", "indicadores",
-        "crédito", "credito", "préstamo", "prestamo",
-        "financiero", "financiera",
-        "cartera vencida", "reservas",
+    # 1. Financial metrics and indicators (high priority)
+    financial_metrics = [
+        "imor", "icor", "icap", "roi", "roe", "roa",
+        "morosidad", "mora", "vencida", "vencido",
+        "cartera", "portafolio", "portfolio",
+        "reservas", "provisiones",
+        "capitalización", "capitalizacion", "capital",
+        "solvencia", "liquidez",
+        "margen", "spread", "diferencial",
+        "crecimiento", "variación", "variacion",
+        "tasa", "tasas", "interés", "interes",
+        "rendimiento", "rentabilidad",
+        "activos", "pasivos", "patrimonio",
+        "utilidad", "utilidades", "ganancia"
     ]
 
-    # Check for any banking keyword
-    for keyword in banking_keywords:
-        if keyword in message_lower:
-            return True
+    # 2. Bank names (Mexican financial institutions)
+    bank_names = [
+        "invex", "banorte", "bancomer", "bbva", "banamex", "citibanamex",
+        "santander", "hsbc", "scotiabank", "inbursa", "azteca",
+        "banregio", "bajio", "banjercito", "afirme", "mifel",
+        "ve por mas", "multiva", "intercam", "actinver",
+        "banco", "bancos", "banca", "bancario", "bancaria", "bancarios"
+    ]
 
-    return False
+    # 3. Banking product types
+    banking_products = [
+        "comercial", "consumo", "vivienda", "hipotecario", "hipoteca",
+        "automotriz", "pyme", "empresarial", "corporativo",
+        "tarjeta", "crédito", "credito", "préstamo", "prestamo",
+        "financiamiento", "leasing", "arrendamiento",
+        "ahorro", "inversión", "inversion", "cuenta", "depósito", "deposito"
+    ]
+
+    # 4. Regulatory and institutional terms
+    regulatory_terms = [
+        "cnbv", "banxico", "banco de méxico", "banco de mexico",
+        "comisión nacional", "comision nacional",
+        "regulación", "regulacion", "normativa",
+        "indicador", "indicadores", "métrica", "metrica",
+        "reporte", "informe", "estadística", "estadistica"
+    ]
+
+    # 5. Query patterns that suggest comparison or analysis
+    query_patterns = [
+        "comparar", "comparación", "comparacion", "versus", "vs",
+        "evolución", "evolucion", "tendencia", "histórico", "historico",
+        "análisis", "analisis", "desempeño", "desempeno", "performance",
+        "ranking", "top", "mejor", "peor", "líder", "lider",
+        "trimestre", "semestre", "anual", "mensual",
+        "últimos", "ultimos", "reciente", "actual"
+    ]
+
+    # 6. Financial/banking context words
+    financial_context = [
+        "financiero", "financiera", "financieros", "financieras",
+        "económico", "economico", "economía", "economia",
+        "sector bancario", "sistema financiero",
+        "mercado", "industria"
+    ]
+
+    # Check all categories
+    all_keywords = (
+        financial_metrics +
+        bank_names +
+        banking_products +
+        regulatory_terms +
+        query_patterns +
+        financial_context
+    )
+
+    # 2. Fast-path: High-confidence banking keywords (immediate True)
+    high_confidence_keywords = [
+        "imor", "icor", "icap", "roi", "roe", "roa",
+        "invex", "banorte", "bbva", "santander", "citibanamex",
+        "cnbv", "banxico",
+        "morosidad", "cartera vencida",
+    ]
+
+    for keyword in high_confidence_keywords:
+        if keyword in message_lower:
+            result = True
+            logger.debug(
+                "Bank query detected (high-confidence keyword)",
+                keyword=keyword,
+                message_preview=message[:50]
+            )
+            # Cache result
+            if cache:
+                try:
+                    await cache.set(cache_key, result, expire=3600)  # 1 hour cache
+                except Exception:
+                    pass
+            return result
+
+    # 3. Negative keywords - very unlikely to be banking (immediate False)
+    negative_keywords = [
+        "receta", "cocina", "clima", "tiempo atmosférico", "película", "serie",
+        "código python", "código javascript", "programación",
+        "restaurante", "comida", "deporte", "fútbol", "música"
+    ]
+
+    for keyword in negative_keywords:
+        if keyword in message_lower:
+            result = False
+            logger.debug(
+                "Bank query rejected (negative keyword)",
+                keyword=keyword,
+                message_preview=message[:50]
+            )
+            # Cache result
+            if cache:
+                try:
+                    await cache.set(cache_key, result, expire=3600)
+                except Exception:
+                    pass
+            return result
+
+    # 4. Check all banking keywords with ambiguity handling
+    ambiguous_words = ["banco", "bancos", "capital", "cartera", "comercial", "consumo"]
+    found_banking_keywords = False
+
+    for keyword in all_keywords:
+        if keyword in ambiguous_words:
+            # Use word boundary for ambiguous words
+            pattern = r'\b' + re.escape(keyword) + r'\b'
+            if re.search(pattern, message_lower):
+                # Additional context check
+                context_nearby = message_lower[max(0, message_lower.find(keyword) - 50):
+                                              min(len(message_lower), message_lower.find(keyword) + 50)]
+
+                banking_context_found = any(
+                    bk in context_nearby
+                    for bk in ["imor", "icor", "icap", "invex", "banorte", "santander",
+                              "financiero", "financiera", "bancario", "bancaria",
+                              "morosidad", "crédito", "credito", "tasa", "cnbv"]
+                )
+
+                if banking_context_found or keyword in ["bancos", "bancario", "bancaria"]:
+                    found_banking_keywords = True
+                    break
+        else:
+            if keyword in message_lower:
+                found_banking_keywords = True
+                break
+
+    # 5. Pattern matching for metric-like queries
+    import re
+    metric_patterns = [
+        r'\b(cuál|cual|dame|muestra|obtener|consultar)\b.{0,30}\b(indicador|métrica|metrica|índice|indice|ratio)\b',
+        r'\b(cómo|como)\b.{0,30}\b(está|esta|van|anda)\b.{0,20}\b(banco|cartera|mora)\b',
+        r'\b(qué|que)\b.{0,30}\b(banco|bancos)\b.{0,30}\b(mejor|peor|líder|lider)\b'
+    ]
+
+    for pattern in metric_patterns:
+        if re.search(pattern, message_lower):
+            found_banking_keywords = True
+            break
+
+    # If we found banking keywords, return True immediately
+    if found_banking_keywords:
+        result = True
+        logger.debug(
+            "Bank query detected (keyword match)",
+            message_preview=message[:50]
+        )
+        # Cache result
+        if cache:
+            try:
+                await cache.set(cache_key, result, expire=3600)
+            except Exception:
+                pass
+        return result
+
+    # 6. Ambiguous case - Use LLM classifier
+    logger.info(
+        "Bank query classification ambiguous, using LLM",
+        message_preview=message[:50]
+    )
+
+    result = await _classify_with_llm(message)
+
+    # Cache LLM result (longer TTL for expensive operations)
+    if cache:
+        try:
+            await cache.set(cache_key, result, expire=7200)  # 2 hours cache for LLM results
+        except Exception:
+            pass
+
+    logger.info(
+        "Bank query LLM classification completed",
+        message_preview=message[:50],
+        result=result
+    )
+
+    return result
 
 
 # Convenience function for chat integration

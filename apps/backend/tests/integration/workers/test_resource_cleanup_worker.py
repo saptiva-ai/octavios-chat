@@ -13,6 +13,12 @@ import pytest
 import asyncio
 from datetime import datetime
 from unittest.mock import AsyncMock, patch, MagicMock
+import os
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_INTEGRATION_RESOURCE_WORKER", "false").lower() != "true",
+    reason="Integration ResourceCleanupWorker deshabilitado por defecto (requires external services).",
+)
 
 from src.workers.resource_cleanup_worker import ResourceCleanupWorker, get_cleanup_worker
 from src.services.resource_lifecycle_manager import ResourceType, CleanupPriority

@@ -3,6 +3,19 @@ import { persist } from "zustand/middleware";
 import type { BankChartData, CanvasChartSync } from "@/lib/types";
 import { apiClient } from "@/lib/api-client";
 
+const DEFAULT_CANVAS_WIDTH = 40;
+
+export const clampCanvasWidthPercent = (width?: number | null): number => {
+  const numericWidth =
+    typeof width === "number" ? width : Number(width ?? DEFAULT_CANVAS_WIDTH);
+
+  if (!Number.isFinite(numericWidth)) {
+    return DEFAULT_CANVAS_WIDTH;
+  }
+
+  return Math.min(Math.max(numericWidth, 30), 70);
+};
+
 interface CanvasState {
   isSidebarOpen: boolean;
   activeArtifactId: string | null;
@@ -53,7 +66,7 @@ export const useCanvasStore = create<CanvasState>()(
       activeMessageId: null,
       chartHistory: [],
       currentSessionId: null,
-      canvasWidthPercent: 40, // Default to 40% of viewport width
+      canvasWidthPercent: DEFAULT_CANVAS_WIDTH, // Default to 40% of viewport width
 
       setArtifact: (id) =>
         set((state) => ({
@@ -107,7 +120,7 @@ export const useCanvasStore = create<CanvasState>()(
       // Set canvas width (percentage of viewport, constrained to 30-70%)
       setCanvasWidth: (widthPercent) =>
         set(() => ({
-          canvasWidthPercent: Math.min(Math.max(widthPercent, 30), 70),
+          canvasWidthPercent: clampCanvasWidthPercent(widthPercent),
         })),
 
       // 🆕 Open bank chart in canvas (main method)
@@ -247,6 +260,21 @@ export const useCanvasStore = create<CanvasState>()(
     }),
     {
       name: "canvas-store",
+      // Prevent hydration from collapsing the panel on macOS (persisted false would close an already opened canvas)
+      merge: (persistedState, currentState) => {
+        const safePersisted = (persistedState as Partial<CanvasState>) || {};
+        const canvasWidthPercent = clampCanvasWidthPercent(
+          safePersisted.canvasWidthPercent ?? currentState.canvasWidthPercent,
+        );
+
+        return {
+          ...currentState,
+          ...safePersisted,
+          isSidebarOpen:
+            currentState.isSidebarOpen || !!safePersisted.isSidebarOpen,
+          canvasWidthPercent,
+        };
+      },
       // Only persist minimal state to avoid large localStorage entries
       partialize: (state) => ({
         isSidebarOpen: state.isSidebarOpen,

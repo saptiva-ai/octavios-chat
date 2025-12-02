@@ -13,6 +13,12 @@ import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from httpx import AsyncClient
 from typing import Dict
+import os
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_INTEGRATION_MCP_CONTEXT", "false").lower() != "true",
+    reason="Integration MCP context deshabilitado por defecto (requires tool stack)",
+)
 
 from src.services.context_manager import ContextManager
 from src.services.saptiva_client import SaptivaResponse

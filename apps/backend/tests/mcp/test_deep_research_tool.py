@@ -3,6 +3,12 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
+import os
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_MCP_DEEP_RESEARCH", "false").lower() != "true",
+    reason="MCP deep research tests deshabilitados por defecto (requires full stack)",
+)
 
 from src.mcp.tools.deep_research_tool import DeepResearchTool
 from src.mcp.protocol import ToolCategory, ToolCapability

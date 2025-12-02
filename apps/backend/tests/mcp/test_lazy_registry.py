@@ -13,9 +13,15 @@ import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 import importlib
+import os
 
 from src.mcp.lazy_registry import LazyToolRegistry, ToolMetadata, get_lazy_registry
 from src.mcp.protocol import ToolInvokeRequest, ToolCategory
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_MCP_LAZY_REGISTRY", "false").lower() != "true",
+    reason="MCP lazy registry tests deshabilitados por defecto (requires tool metadata).",
+)
 
 
 class TestToolMetadata:

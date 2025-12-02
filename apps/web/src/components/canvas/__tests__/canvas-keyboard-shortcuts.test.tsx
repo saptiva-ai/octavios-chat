@@ -41,7 +41,7 @@ describe("CanvasPanel - Keyboard Shortcuts", () => {
     );
   });
 
-  it("should toggle canvas with Cmd+Shift+K on Mac", async () => {
+  it("should ignore Cmd+Shift+K on Mac (shortcuts removed)", async () => {
     const user = userEvent.setup();
     render(<CanvasPanel />);
 
@@ -52,7 +52,7 @@ describe("CanvasPanel - Keyboard Shortcuts", () => {
     expect(mockToggleSidebar).not.toHaveBeenCalled();
   });
 
-  it("should toggle canvas with Ctrl+Shift+K on Windows/Linux", async () => {
+  it("should ignore Ctrl+Shift+K on Windows/Linux (shortcuts removed)", async () => {
     const user = userEvent.setup();
     render(<CanvasPanel />);
 
@@ -63,7 +63,7 @@ describe("CanvasPanel - Keyboard Shortcuts", () => {
     expect(mockToggleSidebar).not.toHaveBeenCalled();
   });
 
-  it("should close canvas with Escape when sidebar is open", async () => {
+  it("should not close canvas with Escape when sidebar is open", async () => {
     (useCanvasStore as unknown as jest.Mock).mockImplementation((selector) =>
       selector({
         activeArtifactId: null,
@@ -82,7 +82,7 @@ describe("CanvasPanel - Keyboard Shortcuts", () => {
     expect(mockToggleSidebar).not.toHaveBeenCalled();
   });
 
-  it("should NOT close canvas with Escape when sidebar is closed", async () => {
+  it("should ignore Escape when sidebar is closed", async () => {
     (useCanvasStore as unknown as jest.Mock).mockImplementation((selector) =>
       selector({
         activeArtifactId: null,

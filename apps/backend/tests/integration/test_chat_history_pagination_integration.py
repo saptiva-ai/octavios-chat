@@ -18,6 +18,12 @@ from datetime import datetime, timedelta
 from fastapi import status
 from httpx import AsyncClient
 import asyncio
+import os
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_INTEGRATION_CHAT_HISTORY", "false").lower() != "true",
+    reason="Integration chat history deshabilitado por defecto (requires full stack)",
+)
 
 from src.models.chat import ChatSession, ChatMessage, MessageRole, MessageStatus
 

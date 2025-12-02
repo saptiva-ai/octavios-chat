@@ -14,11 +14,18 @@ import asyncio
 from pathlib import Path
 from httpx import AsyncClient
 from datetime import datetime, timedelta
+import os
 
 from src.main import create_app
 from src.models.user import User
 from src.models.document import Document, DocumentStatus
 from src.core.database import Database
+from src.services.auth_service import _hash_password
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_E2E_RESOURCES", "false").lower() != "true",
+    reason="Resource E2E deshabilitado por defecto (requiere stack completa)",
+)
 
 
 class TestResourceAPIE2E:
@@ -44,9 +51,9 @@ class TestResourceAPIE2E:
         user = User(
             email="test@example.com",
             username="testuser",
-            full_name="Test User"
+            full_name="Test User",
+            password_hash=_hash_password("TestPassword123"),
         )
-        user.set_password("TestPassword123")
         await user.insert()
 
         yield user

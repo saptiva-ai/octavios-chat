@@ -2,7 +2,10 @@
 
 import * as React from "react";
 import { apiClient } from "@/lib/api-client";
-import { useCanvasStore } from "@/lib/stores/canvas-store";
+import {
+  clampCanvasWidthPercent,
+  useCanvasStore,
+} from "@/lib/stores/canvas-store";
 import { cn } from "@/lib/utils";
 import type { ArtifactRecord } from "@/lib/types";
 import { MarkdownRenderer } from "./markdown-renderer";
@@ -56,6 +59,7 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
   );
   const setCanvasWidth = useCanvasStore((state) => state.setCanvasWidth);
   const cacheRef = React.useRef(new Map<string, ArtifactRecord>());
+  const safeCanvasWidth = clampCanvasWidthPercent(canvasWidthPercent);
 
   const [artifact, setArtifact] = React.useState<ArtifactRecord | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -255,7 +259,7 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
           isSidebarOpen &&
           typeof window !== "undefined" &&
           window.innerWidth >= 768
-            ? { width: `${canvasWidthPercent}vw` }
+            ? { width: `${safeCanvasWidth}vw` }
             : undefined
         }
         className={cn(

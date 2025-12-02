@@ -34,6 +34,7 @@ Usage:
     pytest tests/performance/test_mcp_performance.py --benchmark-compare=baseline
 """
 
+import os
 import pytest
 import asyncio
 import time
@@ -42,6 +43,11 @@ from httpx import AsyncClient
 from unittest.mock import AsyncMock, MagicMock, patch
 from pathlib import Path
 import statistics
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_MCP_PERFORMANCE", "false").lower() != "true",
+    reason="Pruebas de performance MCP deshabilitadas por defecto (RUN_MCP_PERFORMANCE=true para habilitar).",
+)
 
 from src.models.document import Document, DocumentStatus
 from src.models.research_task import ResearchTask, TaskStatus

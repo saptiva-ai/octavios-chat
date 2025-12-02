@@ -580,12 +580,12 @@ def calculate_dynamic_max_tokens(
     optimal_tokens = max(min_tokens, min(available_tokens, max_tokens))
 
     logger.debug(
-        "Calculated dynamic max_tokens",
-        prompt_chars=total_chars,
-        estimated_prompt_tokens=estimated_prompt_tokens,
-        available_tokens=available_tokens,
-        optimal_max_tokens=optimal_tokens,
-        model_limit=model_limit
+        "Calculated dynamic max_tokens | prompt_chars=%s estimated_prompt_tokens=%s available_tokens=%s optimal_max_tokens=%s model_limit=%s",
+        total_chars,
+        estimated_prompt_tokens,
+        available_tokens,
+        optimal_tokens,
+        model_limit,
     )
 
     return optimal_tokens
@@ -823,37 +823,32 @@ class StreamingHandler:
             )
 
             # BA-P0-004: Check for bank analytics query BEFORE streaming
-            # Only invoke if bank-advisor tool is explicitly enabled by user
+            # GLOBAL MODE: Bank Advisor is always active and automatically detects relevant queries
+            # The is_bank_query() function determines if the message is banking-related
             bank_chart_data = None
-            bank_advisor_enabled = context.tools_enabled.get("bank-advisor", False) or context.tools_enabled.get("bank_analytics", False)
+            from ....services.tool_execution_service import ToolExecutionService
 
-            if bank_advisor_enabled:
-                from ....services.tool_execution_service import ToolExecutionService
+            logger.debug(
+                "Bank advisor global mode - checking for bank analytics query",
+                message_preview=context.message[:100],
+                request_id=context.request_id
+            )
+
+            bank_chart_data = await ToolExecutionService.invoke_bank_analytics(
+                message=context.message,
+                user_id=user_id
+            )
+
+            # Note: bank_chart_data will be passed to _stream_chat_response
+            if bank_chart_data:
                 logger.info(
-                    "Bank advisor enabled - checking for bank analytics query",
-                    message_preview=context.message[:100],
+                    "Bank analytics result detected and will be streamed",
+                    metric=bank_chart_data.get("metric_name"),
                     request_id=context.request_id
                 )
-                bank_chart_data = await ToolExecutionService.invoke_bank_analytics(
-                    message=context.message,
-                    user_id=user_id
-                )
-                # Note: bank_chart_data will be passed to _stream_chat_response
-                if bank_chart_data:
-                    logger.info(
-                        "Bank analytics result will be streamed",
-                        metric=bank_chart_data.get("metric_name"),
-                        request_id=context.request_id
-                    )
-                else:
-                    logger.info(
-                        "No bank analytics data returned",
-                        request_id=context.request_id
-                    )
             else:
                 logger.debug(
-                    "Bank advisor not enabled - skipping bank analytics check",
-                    tools_enabled=list(context.tools_enabled.keys()),
+                    "No bank analytics data returned (message not banking-related)",
                     request_id=context.request_id
                 )
 
@@ -1765,21 +1760,21 @@ Escribe la respuesta de forma fluida y profesional, como un analista financiero.
                     estimated_prompt_tokens = total_prompt_chars // 4
 
                     logger.info(
-                        "Token budget calculation",
-                        prompt_chars=total_prompt_chars,
-                        estimated_prompt_tokens=estimated_prompt_tokens,
-                        dynamic_max_tokens=dynamic_max_tokens,
-                        total_estimated=estimated_prompt_tokens + dynamic_max_tokens,
-                        model_limit=8192,
-                        will_exceed=estimated_prompt_tokens + dynamic_max_tokens > 8192
+                        "Token budget calculation | prompt_chars=%s estimated_prompt_tokens=%s dynamic_max_tokens=%s total_estimated=%s model_limit=%s will_exceed=%s",
+                        total_prompt_chars,
+                        estimated_prompt_tokens,
+                        dynamic_max_tokens,
+                        estimated_prompt_tokens + dynamic_max_tokens,
+                        8192,
+                        estimated_prompt_tokens + dynamic_max_tokens > 8192,
                     )
 
                     # If prompt is too large, reject or truncate
                     if estimated_prompt_tokens > 7500:
                         logger.error(
-                            "⚠️ Prompt exceeds safe token limit - request will likely fail",
-                            estimated_prompt_tokens=estimated_prompt_tokens,
-                            model_limit=8192
+                            "⚠️ Prompt exceeds safe token limit - request will likely fail | estimated_prompt_tokens=%s model_limit=%s",
+                            estimated_prompt_tokens,
+                            8192,
                         )
 
                     # Use non-streaming for RAG to avoid RemoteProtocolError

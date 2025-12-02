@@ -189,26 +189,25 @@ async def send_chat_message(
         tool_results = await ToolExecutionService.invoke_relevant_tools(context, user_id)
 
         # 4.6. Check for bank analytics query (BA-P0-001)
-        # Only invoke if bank-advisor tool is explicitly enabled by user
+        # GLOBAL MODE: Bank Advisor is always active and automatically detects relevant queries
+        # The is_bank_query() function determines if the message is banking-related
         bank_chart_data = None
-        bank_advisor_enabled = context.tools_enabled.get("bank-advisor", False) or context.tools_enabled.get("bank_analytics", False)
 
-        if bank_advisor_enabled:
-            bank_chart_data = await ToolExecutionService.invoke_bank_analytics(
-                message=context.message,
-                user_id=user_id
+        bank_chart_data = await ToolExecutionService.invoke_bank_analytics(
+            message=context.message,
+            user_id=user_id
+        )
+
+        if bank_chart_data:
+            tool_results["bank_analytics"] = bank_chart_data
+            logger.info(
+                "Bank analytics result detected and added",
+                metric=bank_chart_data.get("metric_name"),
+                request_id=context.request_id
             )
-            if bank_chart_data:
-                tool_results["bank_analytics"] = bank_chart_data
-                logger.info(
-                    "Bank analytics result added",
-                    metric=bank_chart_data.get("metric_name"),
-                    request_id=context.request_id
-                )
         else:
             logger.debug(
-                "Bank advisor not enabled - skipping bank analytics check",
-                tools_enabled=list(context.tools_enabled.keys()),
+                "No bank analytics data returned (message not banking-related)",
                 request_id=context.request_id
             )
 

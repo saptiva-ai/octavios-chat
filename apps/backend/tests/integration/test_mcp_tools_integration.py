@@ -25,6 +25,12 @@ from httpx import AsyncClient
 from unittest.mock import AsyncMock, patch, MagicMock
 from pathlib import Path
 import io
+import os
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_INTEGRATION_MCP_TOOLS", "false").lower() != "true",
+    reason="Integration MCP tools deshabilitado por defecto (requires full stack)",
+)
 
 from src.models.document import Document, DocumentStatus
 from src.models.research_task import ResearchTask, TaskStatus

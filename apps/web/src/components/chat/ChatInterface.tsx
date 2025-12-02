@@ -9,10 +9,6 @@ import { ChatHero } from "./ChatHero";
 import { ChatSkeleton } from "./ChatSkeleton";
 import { LoadingSpinner, Modal } from "../ui";
 import { ReportPreviewModal } from "../research/ReportPreviewModal";
-import {
-  BankAdvisorHints,
-  DEFAULT_BANK_ADVISOR_QUESTIONS,
-} from "./BankAdvisorHints";
 import { cn } from "../../lib/utils";
 import type { ToolId } from "@/types/tools";
 import { useAuthStore } from "@/lib/auth-store";
@@ -187,72 +183,10 @@ export function ChatInterface({
   // React Query: Optimistic updates for message sending
   const sendMessage = useSendMessage(currentChatId ?? null);
 
-  // BankAdvisor hints state
-  const bankAdvisorHintsVisible = useChatStore(
-    (state) => state.bankAdvisorHintsVisible,
-  );
-  const setBankAdvisorHintsVisible = useChatStore(
-    (state) => state.setBankAdvisorHintsVisible,
-  );
-  const markBankAdvisorHintsSeen = useChatStore(
-    (state) => state.markBankAdvisorHintsSeen,
-  );
-  const shouldShowBankAdvisorHints = useChatStore(
-    (state) => state.shouldShowBankAdvisorHints,
-  );
-
-  // Check if BankAdvisor is enabled
-  const isBankAdvisorEnabled = selectedTools?.includes("bank-advisor");
-
-  // DEBUG: Log state for troubleshooting
-  React.useEffect(() => {
-    logDebug("[BankAdvisorHints DEBUG]", {
-      selectedTools,
-      isBankAdvisorEnabled,
-      currentChatId,
-      bankAdvisorHintsVisible,
-      shouldShow: currentChatId
-        ? shouldShowBankAdvisorHints(currentChatId)
-        : null,
-    });
-  }, [
-    selectedTools,
-    isBankAdvisorEnabled,
-    currentChatId,
-    bankAdvisorHintsVisible,
-    shouldShowBankAdvisorHints,
-  ]);
-
-  // Show hints when BankAdvisor is activated for the first time in this conversation
-  React.useEffect(() => {
-    if (isBankAdvisorEnabled && currentChatId) {
-      const shouldShow = shouldShowBankAdvisorHints(currentChatId);
-      logDebug("[BankAdvisorHints] Checking if should show", {
-        isBankAdvisorEnabled,
-        currentChatId,
-        shouldShow,
-        bankAdvisorHintsVisible,
-      });
-      if (shouldShow && !bankAdvisorHintsVisible) {
-        logDebug("[BankAdvisorHints] ✅ Showing hints!");
-        setBankAdvisorHintsVisible(true);
-      }
-    } else {
-      // Hide hints when BankAdvisor is deactivated
-      if (bankAdvisorHintsVisible) {
-        logDebug(
-          "[BankAdvisorHints] ❌ Hiding hints (BankAdvisor deactivated)",
-        );
-        setBankAdvisorHintsVisible(false);
-      }
-    }
-  }, [
-    isBankAdvisorEnabled,
-    currentChatId,
-    bankAdvisorHintsVisible,
-    shouldShowBankAdvisorHints,
-    setBankAdvisorHintsVisible,
-  ]);
+  // GLOBAL MODE: BankAdvisor hints are now disabled since Bank Advisor is always active
+  // The tool automatically detects banking queries without manual activation
+  // Legacy hint code kept for reference but disabled
+  const bankAdvisorHintsVisible = false; // Always false in global mode
 
   React.useEffect(() => {
     if (!toolVisibilityLoaded) {
@@ -396,22 +330,7 @@ export function ChatInterface({
       });
   }, [selectedTools, toolsEnabled, toolVisibility]);
 
-  // BankAdvisor hints handlers
-  const handleSelectQuestion = React.useCallback((question: string) => {
-    setInputValue(question);
-    // Don't mark as seen yet - only when user actually sends the message
-  }, []);
-
-  const handleCloseHints = React.useCallback(() => {
-    if (currentChatId) {
-      markBankAdvisorHintsSeen(currentChatId);
-    }
-  }, [
-    currentChatId,
-    markBankAdvisorHintsSeen,
-    bankAdvisorHintsVisible,
-    isBankAdvisorEnabled,
-  ]);
+  // GLOBAL MODE: BankAdvisor hint handlers removed (hints are disabled)
 
   const handleSend = React.useCallback(async () => {
     const trimmed = inputValue.trim();
@@ -430,11 +349,6 @@ export function ChatInterface({
 
     // Mark submit intent (triggers hero → chat transition)
     setSubmitIntent(true);
-
-    // BankAdvisor hints: Mark as seen when first message is sent with BankAdvisor active
-    if (isBankAdvisorEnabled && currentChatId && bankAdvisorHintsVisible) {
-      markBankAdvisorHintsSeen(currentChatId);
-    }
 
     // MVP-LOCK: Skip review command detection, go straight to chat
     if (!REVIEW_FLOW_DISABLED) {
@@ -661,13 +575,7 @@ export function ChatInterface({
               </div>
             </section>
 
-            {/* BankAdvisor hints - Show above composer when BankAdvisor is active for first time */}
-            <BankAdvisorHints
-              visible={bankAdvisorHintsVisible}
-              questions={DEFAULT_BANK_ADVISOR_QUESTIONS}
-              onSelectQuestion={handleSelectQuestion}
-              onClose={handleCloseHints}
-            />
+            {/* GLOBAL MODE: BankAdvisor hints removed - Bank Advisor is now always active */}
 
             {/* Composer at bottom in chat mode */}
             <CompactChatComposer
