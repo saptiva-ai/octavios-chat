@@ -88,7 +88,7 @@ class SaptivaLlmClient:
             # Map model name to SAPTIVA format (spaces, not underscores)
             saptiva_model = self.model.replace("_", " ")
 
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=True) as client:
                 response = await client.post(
                     f"{self.base_url}/v1/chat/completions",
                     headers={

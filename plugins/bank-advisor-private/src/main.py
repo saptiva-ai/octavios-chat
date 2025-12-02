@@ -228,6 +228,120 @@ async def _try_hu3_nlp_pipeline(
 
     async with AsyncSessionLocal() as session:
         try:
+            # =========================================================================
+            # OPCIÓN B: Early detection of IMOR/ICOR + segment patterns
+            # =========================================================================
+            # This prevents entity_service from confusing "IMOR consumo" with "cartera_consumo_total"
+            # by intercepting the pattern before entity extraction
+
+            query_lower = user_query.lower()
+
+            # Detect if query has IMOR or ICOR
+            has_imor = 'imor' in query_lower or 'morosidad' in query_lower
+            has_icor = 'icor' in query_lower or 'cobertura' in query_lower
+            metric_detected = None
+
+            if has_imor:
+                metric_detected = 'imor'
+            elif has_icor:
+                metric_detected = 'icor'
+
+            # Detect if query has a segment keyword
+            segment_keywords = {
+                'consumo': 'CONSUMO_TOTAL',
+                'automotriz': 'CONSUMO_AUTOMOTRIZ',
+                'tarjeta': 'CONSUMO_TARJETA',
+                'tarjetas': 'CONSUMO_TARJETA',
+                'nomina': 'CONSUMO_NOMINA',
+                'nómina': 'CONSUMO_NOMINA',
+                'personales': 'CONSUMO_PERSONALES',
+                'empresas': 'EMPRESAS',
+                'empresarial': 'EMPRESAS',
+                'vivienda': 'VIVIENDA',
+                'hipotecario': 'VIVIENDA',
+                'hipoteca': 'VIVIENDA'
+            }
+
+            segment_detected = None
+            segment_code = None
+
+            for keyword, code in segment_keywords.items():
+                if keyword in query_lower:
+                    segment_detected = keyword
+                    segment_code = code
+                    break
+
+            # If both metric and segment detected, handle directly
+            if metric_detected and segment_code:
+                logger.info(
+                    "hu3_nlp.early_pattern_detected",
+                    metric=metric_detected,
+                    segment=segment_code,
+                    pattern="imor_icor_segment"
+                )
+
+                # Check if it's a ranking query
+                is_ranking = any(kw in query_lower for kw in ['top', 'ranking', 'por banco', 'mejores', 'peores'])
+
+                # Extract dates if present (simple extraction)
+                from datetime import datetime, timedelta
+                import re
+
+                date_start = None
+                date_end = datetime.now().date()
+                years = 3  # Default
+
+                # Try to extract "últimos X meses/años"
+                match_months = re.search(r'[úu]ltimos?\s+(\d+)\s+mes', query_lower)
+                match_years = re.search(r'[úu]ltimos?\s+(\d+)\s+a[ñn]o', query_lower)
+                match_trimestre = re.search(r'[úu]ltimo?\s+trimestre', query_lower)
+
+                if match_months:
+                    months = int(match_months.group(1))
+                    date_start = (datetime.now() - timedelta(days=months * 30)).date()
+                    years = max(1, months // 12)
+                elif match_years:
+                    years = int(match_years.group(1))
+                elif match_trimestre:
+                    date_start = (datetime.now() - timedelta(days=90)).date()
+                    years = 1
+
+                # Route to appropriate handler
+                if is_ranking:
+                    data = await AnalyticsService.get_segment_ranking(
+                        session,
+                        segment_code=segment_code,
+                        metric_column=metric_detected,
+                        top_n=5
+                    )
+                else:
+                    data = await AnalyticsService.get_segment_evolution(
+                        session,
+                        segment_code=segment_code,
+                        metric_column=metric_detected,
+                        years=years
+                    )
+
+                if data and data.get("type") != "empty":
+                    logger.info(
+                        "hu3_nlp.early_pattern_success",
+                        metric=metric_detected,
+                        segment=segment_code,
+                        result_type=data.get("type")
+                    )
+                    return data
+                else:
+                    logger.warning(
+                        "hu3_nlp.early_pattern_empty",
+                        metric=metric_detected,
+                        segment=segment_code
+                    )
+                    # Fall through to normal pipeline
+
+            # =========================================================================
+            # END OPCIÓN B
+            # =========================================================================
+
             # Step 1: Extract entities
             entities = await EntityService.extract(user_query, session)
             config = get_config()
@@ -481,15 +595,137 @@ async def _try_hu3_nlp_pipeline(
                     }
                 }
 
-            # Step 5: Execute query with high confidence
-            data = await AnalyticsService.get_filtered_data(
-                session,
-                metric_id=entities.metric_id,
-                banks=entities.banks if entities.banks else None,
-                date_start=entities.date_start,
-                date_end=entities.date_end,
-                intent=intent_result.intent.value
-            )
+            # =========================================================================
+            # NEW: QUESTION-SPECIFIC HANDLERS (5 Business Questions)
+            # =========================================================================
+            # These handlers execute BEFORE the generic fallback for specific patterns
+
+            query_lower = user_query.lower()
+
+            # Question 1: Comparative ratio (IMOR INVEX vs Sistema)
+            if (entities.metric_id in ['imor', 'icor'] and
+                len(entities.banks) >= 2 and
+                ('vs' in query_lower or 'contra' in query_lower or 'compara' in query_lower)):
+
+                logger.info(
+                    "hu3_nlp.question_specific.comparative_ratio",
+                    metric=entities.metric_id,
+                    banks=entities.banks
+                )
+
+                data = await AnalyticsService.get_comparative_ratio_data(
+                    session,
+                    metric_column=entities.metric_id,
+                    primary_bank=entities.banks[0] if entities.banks else "INVEX",
+                    comparison_bank=entities.banks[1] if len(entities.banks) > 1 else "SISTEMA",
+                    date_start=str(entities.date_start) if entities.date_start else None,
+                    date_end=str(entities.date_end) if entities.date_end else None
+                )
+
+            # Question 2: Market share evolution
+            elif ('market share' in query_lower or 'participación de mercado' in query_lower or
+                  'participacion de mercado' in query_lower):
+
+                logger.info(
+                    "hu3_nlp.question_specific.market_share",
+                    banks=entities.banks
+                )
+
+                data = await AnalyticsService.get_market_share_data(
+                    session,
+                    primary_bank=entities.banks[0] if entities.banks else "INVEX",
+                    years=3  # Default 3 years
+                )
+
+            # Question 3: Segment evolution (IMOR automotriz, tarjetas, etc.)
+            elif ('automotriz' in query_lower or 'empresas' in query_lower or
+                  'consumo' in query_lower or 'vivienda' in query_lower or
+                  'tarjeta' in query_lower or 'nomina' in query_lower or
+                  'nómina' in query_lower or 'personales' in query_lower or
+                  'hipotecario' in query_lower) and \
+                 entities.metric_id in ['imor', 'icor']:
+
+                # Determine segment from query (match DB codes)
+                segment_code = None
+                if 'automotriz' in query_lower:
+                    segment_code = 'CONSUMO_AUTOMOTRIZ'
+                elif 'tarjeta' in query_lower or 'tarjetas' in query_lower:
+                    segment_code = 'CONSUMO_TARJETA'
+                elif 'nomina' in query_lower or 'nómina' in query_lower:
+                    segment_code = 'CONSUMO_NOMINA'
+                elif 'personales' in query_lower:
+                    segment_code = 'CONSUMO_PERSONALES'
+                elif 'empresas' in query_lower or 'empresarial' in query_lower:
+                    segment_code = 'EMPRESAS'
+                elif 'vivienda' in query_lower or 'hipotecario' in query_lower:
+                    segment_code = 'VIVIENDA'
+                elif 'consumo' in query_lower and not any(x in query_lower for x in ['automotriz', 'tarjeta', 'nomina', 'personales']):
+                    segment_code = 'CONSUMO_TOTAL'
+
+                if segment_code:
+                    logger.info(
+                        "hu3_nlp.question_specific.segment_evolution",
+                        segment=segment_code,
+                        metric=entities.metric_id
+                    )
+
+                    # Check if it's a ranking query (Top N, ranking, por banco)
+                    is_ranking = any(kw in query_lower for kw in ['top', 'ranking', 'por banco', 'mejores', 'peores'])
+
+                    if is_ranking:
+                        data = await AnalyticsService.get_segment_ranking(
+                            session,
+                            segment_code=segment_code,
+                            metric_column=entities.metric_id,
+                            top_n=5  # Default top 5
+                        )
+                    else:
+                        data = await AnalyticsService.get_segment_evolution(
+                            session,
+                            segment_code=segment_code,
+                            metric_column=entities.metric_id,
+                            years=3  # Default 3 years
+                        )
+                else:
+                    # Fallback to generic query
+                    data = None
+
+            # Question 5: Institution ranking by assets
+            elif ('ranking' in query_lower and
+                  ('activo' in query_lower or 'activos' in query_lower or
+                   'grande' in query_lower or 'tamaño' in query_lower)):
+
+                logger.info(
+                    "hu3_nlp.question_specific.institution_ranking",
+                    metric="activo_total"
+                )
+
+                data = await AnalyticsService.get_institution_ranking(
+                    session,
+                    metric_column="activo_total",
+                    top_n=10,  # Default top 10
+                    ascending=False  # Largest first
+                )
+
+            # FALLBACK: Generic query execution
+            else:
+                data = None
+
+            # If no specific handler matched, use generic pipeline
+            if data is None:
+                # Step 5: Execute query with high confidence
+                data = await AnalyticsService.get_filtered_data(
+                    session,
+                    metric_id=entities.metric_id,
+                    banks=entities.banks if entities.banks else None,
+                    date_start=entities.date_start,
+                    date_end=entities.date_end,
+                    intent=intent_result.intent.value
+                )
+
+            # =========================================================================
+            # END QUESTION-SPECIFIC HANDLERS
+            # =========================================================================
 
             # Check for errors from analytics service
             if data.get("type") == "error":
@@ -543,15 +779,22 @@ FROM monthly_kpis{bank_filter}{date_filter}
 ORDER BY fecha ASC;"""
 
             # Add metadata with sql_generated and metric_type
+            # IMPORTANT: Only add if metadata doesn't already exist (preserve segment query metadata)
             metric_type = config.get_metric_type(entities.metric_id)
-            data["metadata"] = {
-                "metric": entities.metric_id,
-                "metric_type": metric_type,
-                "data_as_of": data.get("data_as_of", ""),
-                "title": f"{entities.metric_display}",
-                "pipeline": "hu3_nlp",
-                "sql_generated": sql_generated
-            }
+            if "metadata" not in data:
+                data["metadata"] = {
+                    "metric": entities.metric_id,
+                    "metric_type": metric_type,
+                    "data_as_of": data.get("data_as_of", ""),
+                    "title": f"{entities.metric_display}",
+                    "pipeline": "hu3_nlp",
+                    "sql_generated": sql_generated
+                }
+            else:
+                # Metadata already exists (from segment queries), just ensure these fields are present
+                data["metadata"].setdefault("metric", entities.metric_id)
+                data["metadata"].setdefault("metric_type", metric_type)
+                data["metadata"].setdefault("title", f"{entities.metric_display}")
 
             data["query_info"] = {
                 "original_query": user_query,

@@ -1409,3 +1409,733 @@ class AnalyticsService:
             "columns": ["banco"] + [str(d) for d in pivot.columns],
             "summary": f"Últimos {months} meses de {display_name}"
         }
+
+    # =========================================================================
+    # NEW METHODS FOR 5 BUSINESS QUESTIONS INTEGRATION
+    # =========================================================================
+
+    @staticmethod
+    async def get_comparative_ratio_data(
+        session: AsyncSession,
+        metric_column: str,
+        primary_bank: str = "INVEX",
+        comparison_bank: str = "SISTEMA",
+        date_start: Optional[str] = None,
+        date_end: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Get comparative ratio data for IMOR, ICOR, etc.
+
+        Used for questions like:
+        - "IMOR de INVEX vs Sistema"
+        - "Compara ICOR de INVEX contra el promedio del mercado"
+
+        Args:
+            session: AsyncSession for database queries
+            metric_column: Column name (e.g., 'imor', 'icor')
+            primary_bank: Primary bank to compare (default: INVEX)
+            comparison_bank: Comparison bank (default: SISTEMA)
+            date_start: Optional start date filter (YYYY-MM-DD)
+            date_end: Optional end date filter (YYYY-MM-DD)
+
+        Returns:
+            Dict with comparative evolution data and Plotly config
+        """
+        from bankadvisor.config_service import get_config
+        from datetime import datetime
+
+        config = get_config()
+
+        # Validate metric column
+        if metric_column not in AnalyticsService.SAFE_METRIC_COLUMNS:
+            logger.warning(
+                "analytics.comparative_ratio.invalid_metric",
+                metric=metric_column
+            )
+            return {
+                "type": "error",
+                "message": f"Métrica '{metric_column}' no válida"
+            }
+
+        safe_column = AnalyticsService.SAFE_METRIC_COLUMNS[metric_column]
+
+        try:
+            # Build query for both banks
+            query = select(
+                MonthlyKPI.fecha,
+                MonthlyKPI.banco_norm,
+                (safe_column * 100).label('value')  # Convert to percentage
+            ).where(
+                MonthlyKPI.banco_norm.in_([primary_bank, comparison_bank])
+            )
+
+            # Apply date filters
+            if date_start:
+                query = query.where(MonthlyKPI.fecha >= datetime.strptime(date_start, '%Y-%m-%d').date())
+            if date_end:
+                query = query.where(MonthlyKPI.fecha <= datetime.strptime(date_end, '%Y-%m-%d').date())
+
+            query = query.order_by(MonthlyKPI.fecha.asc())
+
+            result = await session.execute(query)
+            rows = result.fetchall()
+
+            if not rows:
+                return {
+                    "type": "empty",
+                    "message": f"No hay datos de {metric_column} para comparar"
+                }
+
+            # Format as evolution with 2 traces
+            import pandas as pd
+            df = pd.DataFrame(rows, columns=['fecha', 'banco', 'value'])
+
+            traces = []
+            for banco in [primary_bank, comparison_bank]:
+                bank_data = df[df['banco'] == banco].sort_values('fecha')
+                bank_color = get_bank_color(banco)
+
+                line_config = {"color": bank_color, "width": 3 if banco == primary_bank else 2}
+                if banco.upper() == "SISTEMA":
+                    line_config["dash"] = "dot"
+
+                traces.append({
+                    "x": bank_data['fecha'].astype(str).tolist(),
+                    "y": bank_data['value'].tolist(),
+                    "type": "scatter",
+                    "mode": "lines+markers",
+                    "name": banco,
+                    "line": line_config,
+                    "hovertemplate": f"<b>{banco}</b><br>Fecha: %{{x}}<br>Valor: %{{y:.2f}}%<extra></extra>"
+                })
+
+            # Calculate difference (spread)
+            primary_data = df[df['banco'] == primary_bank].sort_values('fecha')
+            comparison_data = df[df['banco'] == comparison_bank].sort_values('fecha')
+
+            if len(primary_data) > 0 and len(comparison_data) > 0:
+                latest_primary = primary_data.iloc[-1]['value']
+                latest_comparison = comparison_data.iloc[-1]['value']
+                spread = latest_primary - latest_comparison
+            else:
+                spread = None
+
+            display_name = config.get_metric_display_name(metric_column)
+
+            # Extract bank names and time range for frontend compatibility
+            unique_banks = [str(b) for b in df['banco'].unique().tolist()]
+            min_date = str(df['fecha'].min())
+            max_date = str(df['fecha'].max())
+
+            return {
+                "type": "data",
+                "visualization": "comparative_line",
+                "metric_name": display_name,
+                "metric_type": "ratio",
+                "bank_names": unique_banks,  # Required by frontend BankChartData interface
+                "time_range": {  # Required by frontend BankChartData interface
+                    "start": min_date,
+                    "end": max_date
+                },
+                "plotly_config": {
+                    "data": traces,
+                    "layout": {
+                        "title": f"Comparación de {display_name}: {primary_bank} vs {comparison_bank}",
+                        "xaxis": {"title": "Fecha"},
+                        "yaxis": {"title": "%", "tickformat": ".2f"}
+                    }
+                },
+                "summary": {
+                    "primary_bank": primary_bank,
+                    "comparison_bank": comparison_bank,
+                    "latest_primary": float(latest_primary) if len(primary_data) > 0 else None,
+                    "latest_comparison": float(latest_comparison) if len(comparison_data) > 0 else None,
+                    "spread": float(spread) if spread is not None else None,
+                    "spread_description": f"{primary_bank} {'mejor' if spread < 0 else 'peor'} que {comparison_bank} por {abs(spread):.2f}pp" if spread is not None else None
+                }
+            }
+
+        except Exception as e:
+            logger.error(
+                "analytics.comparative_ratio.error",
+                metric=metric_column,
+                error=str(e)
+            )
+            return {
+                "type": "error",
+                "message": f"Error al comparar {metric_column}"
+            }
+
+    @staticmethod
+    async def get_market_share_data(
+        session: AsyncSession,
+        primary_bank: str = "INVEX",
+        years: int = 3
+    ) -> Dict[str, Any]:
+        """
+        Get market share evolution for a bank over time.
+
+        Used for questions like:
+        - "Market share de INVEX en los últimos 3 años"
+        - "Participación de mercado de INVEX"
+
+        Args:
+            session: AsyncSession for database queries
+            primary_bank: Bank to analyze (default: INVEX)
+            years: Number of years to analyze (default: 3)
+
+        Returns:
+            Dict with market share evolution and Plotly config
+        """
+        from bankadvisor.config_service import get_config
+        from datetime import datetime, timedelta
+
+        config = get_config()
+
+        try:
+            # Calculate date range
+            end_date = datetime.now().date()
+            start_date = end_date - timedelta(days=years * 365)
+
+            # Query cartera_total for bank and total system
+            query = select(
+                MonthlyKPI.fecha,
+                MonthlyKPI.banco_norm,
+                MonthlyKPI.cartera_total
+            ).where(
+                MonthlyKPI.fecha >= start_date,
+                MonthlyKPI.fecha <= end_date
+            ).order_by(MonthlyKPI.fecha.asc())
+
+            result = await session.execute(query)
+            rows = result.fetchall()
+
+            if not rows:
+                return {
+                    "type": "empty",
+                    "message": f"No hay datos de market share para {primary_bank}"
+                }
+
+            # Calculate market share
+            import pandas as pd
+            df = pd.DataFrame(rows, columns=['fecha', 'banco', 'cartera_total'])
+
+            # Group by month and calculate total
+            monthly_totals = df.groupby('fecha')['cartera_total'].sum().reset_index()
+            monthly_totals.columns = ['fecha', 'total_sistema']
+
+            # Get bank data
+            bank_data = df[df['banco'] == primary_bank].copy()
+
+            # Merge and calculate share
+            bank_data = bank_data.merge(monthly_totals, on='fecha')
+            bank_data['market_share'] = (bank_data['cartera_total'] / bank_data['total_sistema']) * 100
+
+            if len(bank_data) == 0:
+                return {
+                    "type": "empty",
+                    "message": f"No hay datos de {primary_bank}"
+                }
+
+            # Build Plotly line chart
+            traces = [{
+                "x": bank_data['fecha'].astype(str).tolist(),
+                "y": bank_data['market_share'].tolist(),
+                "type": "scatter",
+                "mode": "lines+markers",
+                "name": f"Market Share {primary_bank}",
+                "line": {"color": get_bank_color(primary_bank), "width": 3},
+                "hovertemplate": f"<b>{primary_bank}</b><br>Fecha: %{{x}}<br>Market Share: %{{y:.2f}}%<extra></extra>"
+            }]
+
+            # Extract bank names and time range for frontend compatibility
+            min_date = str(bank_data['fecha'].min())
+            max_date = str(bank_data['fecha'].max())
+
+            return {
+                "type": "data",
+                "visualization": "market_share_evolution",
+                "metric_name": f"Market Share {primary_bank}",
+                "metric_type": "ratio",
+                "bank_names": [primary_bank],  # Required by frontend BankChartData interface
+                "time_range": {  # Required by frontend BankChartData interface
+                    "start": min_date,
+                    "end": max_date
+                },
+                "plotly_config": {
+                    "data": traces,
+                    "layout": {
+                        "title": f"Evolución de Market Share - {primary_bank}",
+                        "xaxis": {"title": "Fecha"},
+                        "yaxis": {"title": "% del Sistema", "tickformat": ".2f"}
+                    }
+                },
+                "summary": {
+                    "bank": primary_bank,
+                    "latest_share": float(bank_data.iloc[-1]['market_share']),
+                    "avg_share": float(bank_data['market_share'].mean()),
+                    "period_start": str(bank_data.iloc[0]['fecha']),
+                    "period_end": str(bank_data.iloc[-1]['fecha'])
+                }
+            }
+
+        except Exception as e:
+            logger.error(
+                "analytics.market_share.error",
+                bank=primary_bank,
+                error=str(e)
+            )
+            return {
+                "type": "error",
+                "message": f"Error al calcular market share de {primary_bank}"
+            }
+
+    @staticmethod
+    async def get_segment_evolution(
+        session: AsyncSession,
+        segment_code: str,
+        metric_column: str = "imor",
+        years: int = 3,
+        bank_filter: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Get evolution of a specific metric for a portfolio segment.
+
+        Used for questions like:
+        - "IMOR automotriz últimos 3 años"
+        - "Evolución de ICOR en consumo"
+
+        Args:
+            session: AsyncSession for database queries
+            segment_code: Segment code (e.g., 'AUTOMOTRIZ', 'EMPRESAS', 'CONSUMO')
+            metric_column: Metric to analyze (default: 'imor')
+            years: Number of years to analyze (default: 3)
+            bank_filter: Optional bank name filter
+
+        Returns:
+            Dict with segment evolution data and Plotly config
+        """
+        from bankadvisor.config_service import get_config
+        from bankadvisor.models.normalized import MetricaCarteraSegmentada, SegmentoCartera, Institucion
+        from datetime import datetime, timedelta
+
+        config = get_config()
+
+        try:
+            # Calculate date range
+            end_date = datetime.now().date()
+            start_date = end_date - timedelta(days=years * 365)
+
+            # Query segmented data
+            query = select(
+                MetricaCarteraSegmentada.fecha_corte,
+                Institucion.nombre_corto,
+                getattr(MetricaCarteraSegmentada, metric_column)
+            ).join(
+                SegmentoCartera,
+                MetricaCarteraSegmentada.segmento_id == SegmentoCartera.id
+            ).join(
+                Institucion,
+                MetricaCarteraSegmentada.institucion_id == Institucion.id
+            ).where(
+                SegmentoCartera.codigo == segment_code.upper(),
+                MetricaCarteraSegmentada.fecha_corte >= start_date,
+                MetricaCarteraSegmentada.fecha_corte <= end_date
+            )
+
+            if bank_filter:
+                query = query.where(Institucion.nombre_corto == bank_filter)
+
+            query = query.order_by(MetricaCarteraSegmentada.fecha_corte.asc())
+
+            result = await session.execute(query)
+            rows = result.fetchall()
+
+            if not rows:
+                return {
+                    "type": "empty",
+                    "message": f"No hay datos de {metric_column} para el segmento {segment_code}"
+                }
+
+            # Format as evolution chart
+            import pandas as pd
+            df = pd.DataFrame(rows, columns=['fecha', 'banco', 'value'])
+
+            # Ensure Decimal is converted to float
+            # NOTE: Values in metricas_cartera_segmentada are ALREADY in percentage form (3.77 = 3.77%)
+            # Unlike monthly_kpis where they're decimals (0.0377 = 3.77%)
+            df['value'] = df['value'].astype(float)
+
+            traces = []
+            for banco in df['banco'].unique():
+                bank_data = df[df['banco'] == banco].sort_values('fecha')
+                bank_color = get_bank_color(banco)
+
+                traces.append({
+                    "x": bank_data['fecha'].astype(str).tolist(),
+                    "y": [float(v) for v in bank_data['value'].tolist()],
+                    "type": "scatter",
+                    "mode": "lines+markers",
+                    "name": str(banco),
+                    "line": {"color": bank_color, "width": 2},
+                    "hovertemplate": f"<b>{banco}</b><br>Fecha: %{{x}}<br>{metric_column.upper()}: %{{y:.2f}}%<extra></extra>"
+                })
+
+            # Extract bank names and time range for frontend compatibility
+            unique_banks = [str(b) for b in df['banco'].unique().tolist()]
+            min_date = str(df['fecha'].min())
+            max_date = str(df['fecha'].max())
+
+            return {
+                "type": "data",
+                "visualization": "segment_evolution",
+                "metric_name": f"{metric_column.upper()} - {segment_code.title()}",
+                "metric_type": "ratio",
+                "bank_names": unique_banks,  # Required by frontend BankChartData interface
+                "time_range": {  # Required by frontend BankChartData interface
+                    "start": min_date,
+                    "end": max_date
+                },
+                "plotly_config": {
+                    "data": traces,
+                    "layout": {
+                        "title": f"Evolución de {metric_column.upper()} - Segmento {segment_code.title()}",
+                        "xaxis": {"title": "Fecha"},
+                        "yaxis": {"title": "%", "tickformat": ".2f"},
+                        "autosize": True,
+                        "margin": {"l": 80, "r": 20, "t": 60, "b": 60}
+                    }
+                },
+                "summary": {
+                    "segment": segment_code,
+                    "metric": metric_column,
+                    "banks_count": len(df['banco'].unique()),
+                    "period_start": min_date,
+                    "period_end": max_date
+                },
+                "metadata": {
+                    "sql_generated": f"SELECT mcs.fecha_corte, i.nombre_corto, mcs.{metric_column}\nFROM metricas_cartera_segmentada mcs\nJOIN segmentos_cartera sc ON mcs.segmento_id = sc.id\nJOIN instituciones i ON mcs.institucion_id = i.id\nWHERE sc.codigo = '{segment_code}'\n  AND mcs.fecha_corte >= '{start_date}'\n  AND mcs.fecha_corte <= '{end_date}'\nORDER BY mcs.fecha_corte ASC;",
+                    "pipeline": "segment_evolution",
+                    "data_source": "metricas_cartera_segmentada"
+                }
+            }
+
+        except Exception as e:
+            logger.error(
+                "analytics.segment_evolution.error",
+                segment=segment_code,
+                metric=metric_column,
+                error=str(e)
+            )
+            return {
+                "type": "error",
+                "message": f"Error al consultar evolución de {segment_code}"
+            }
+
+    @staticmethod
+    async def get_segment_ranking(
+        session: AsyncSession,
+        segment_code: str,
+        metric_column: str = "imor",
+        top_n: int = 5
+    ) -> Dict[str, Any]:
+        """
+        Get ranking of institutions by metric for a specific segment.
+
+        Used for questions like:
+        - "IMOR automotriz por banco (Top 5)"
+        - "Top 10 bancos con mejor ICOR en consumo"
+
+        Args:
+            session: AsyncSession for database queries
+            segment_code: Segment code (e.g., 'AUTOMOTRIZ', 'EMPRESAS')
+            metric_column: Metric to rank by (default: 'imor')
+            top_n: Number of top institutions to return (default: 5)
+
+        Returns:
+            Dict with ranking data and Plotly config
+        """
+        from bankadvisor.config_service import get_config
+        from bankadvisor.models.normalized import MetricaCarteraSegmentada, SegmentoCartera, Institucion
+
+        config = get_config()
+
+        try:
+            # Get latest date
+            latest_date_query = select(func.max(MetricaCarteraSegmentada.fecha_corte))
+            result = await session.execute(latest_date_query)
+            latest_date = result.scalar()
+
+            if not latest_date:
+                return {
+                    "type": "empty",
+                    "message": "No hay datos disponibles"
+                }
+
+            # Query latest values for segment
+            query = select(
+                Institucion.nombre_corto,
+                getattr(MetricaCarteraSegmentada, metric_column)
+            ).join(
+                SegmentoCartera,
+                MetricaCarteraSegmentada.segmento_id == SegmentoCartera.id
+            ).join(
+                Institucion,
+                MetricaCarteraSegmentada.institucion_id == Institucion.id
+            ).where(
+                SegmentoCartera.codigo == segment_code.upper(),
+                MetricaCarteraSegmentada.fecha_corte == latest_date,
+                Institucion.es_sistema == False  # Exclude SISTEMA aggregate
+            ).order_by(
+                getattr(MetricaCarteraSegmentada, metric_column).asc()  # Lower is better for IMOR
+            ).limit(top_n)
+
+            result = await session.execute(query)
+            rows = result.fetchall()
+
+            if not rows:
+                return {
+                    "type": "empty",
+                    "message": f"No hay datos de {metric_column} para el segmento {segment_code}"
+                }
+
+            # Format as ranking
+            import pandas as pd
+            df = pd.DataFrame(rows, columns=['banco', 'value'])
+            # Ensure Decimal is converted to float
+            # NOTE: Values in metricas_cartera_segmentada are ALREADY in percentage form
+            df['value'] = df['value'].astype(float)
+
+            # Assign colors to each bank
+            bank_colors = [get_bank_color(banco) for banco in df['banco'].tolist()]
+
+            # Get smart visualization recommendation
+            from bankadvisor.services.viz_recommender import VizRecommender
+            viz_rec = VizRecommender.recommend(
+                data={},
+                intent="ranking",
+                metric_type="ratio",
+                banks_count=len(df),
+                time_points=0,
+                is_ranking=True,
+                is_comparison=False
+            )
+
+            # Build base layout
+            base_layout = {
+                "title": f"Top {top_n} - {metric_column.upper()} en {segment_code.title()}",
+                "xaxis": {"title": "%", "tickformat": ".2f"},
+                "yaxis": {"title": "Banco"}
+            }
+
+            # Enhance layout with smart recommendations
+            enhanced_layout = VizRecommender.enhance_layout(
+                base_layout,
+                chart_type=viz_rec["chart_type"],
+                banks_count=len(df),
+                metric_type="ratio"
+            )
+
+            # Extract bank names and time range for frontend compatibility
+            unique_banks = [str(b) for b in df['banco'].tolist()]
+
+            return {
+                "type": "data",
+                "visualization": "segment_ranking",
+                "metric_name": f"{metric_column.upper()} - {segment_code.title()}",
+                "metric_type": "ratio",
+                "bank_names": unique_banks,  # Required by frontend BankChartData interface
+                "time_range": {  # Required by frontend BankChartData interface
+                    "start": str(latest_date),
+                    "end": str(latest_date)
+                },
+                "ranking": [
+                    {
+                        "position": i + 1,
+                        "banco": str(row['banco']),
+                        "value": float(round(row['value'], 2)),
+                        "unit": "%"
+                    }
+                    for i, (_, row) in enumerate(df.iterrows())
+                ],
+                "plotly_config": {
+                    "data": [{
+                        "x": [float(v) for v in df['value'].tolist()],
+                        "y": [str(b) for b in df['banco'].tolist()],
+                        "type": viz_rec["chart_type"],
+                        "orientation": viz_rec.get("orientation"),
+                        "marker": {"color": bank_colors},
+                        "hovertemplate": "<b>%{y}</b><br>Valor: %{x:.2f}%<extra></extra>",
+                        "text": [f"{float(v):.2f}%" for v in df['value'].tolist()],
+                        "textposition": "auto"
+                    }],
+                    "layout": enhanced_layout
+                },
+                "viz_recommendation": viz_rec,  # Include recommendation for debugging/transparency
+                "summary": {
+                    "segment": segment_code,
+                    "metric": metric_column,
+                    "top_n": top_n,
+                    "data_as_of": str(latest_date)
+                },
+                "metadata": {
+                    "sql_generated": f"SELECT i.nombre_corto, mcs.{metric_column}\nFROM metricas_cartera_segmentada mcs\nJOIN segmentos_cartera sc ON mcs.segmento_id = sc.id\nJOIN instituciones i ON mcs.institucion_id = i.id\nWHERE sc.codigo = '{segment_code}'\n  AND mcs.fecha_corte = '{latest_date}'\n  AND i.es_sistema = FALSE\nORDER BY mcs.{metric_column} ASC\nLIMIT {top_n};",
+                    "pipeline": "segment_ranking",
+                    "data_source": "metricas_cartera_segmentada"
+                }
+            }
+
+        except Exception as e:
+            logger.error(
+                "analytics.segment_ranking.error",
+                segment=segment_code,
+                metric=metric_column,
+                error=str(e)
+            )
+            return {
+                "type": "error",
+                "message": f"Error al generar ranking de {segment_code}"
+            }
+
+    @staticmethod
+    async def get_institution_ranking(
+        session: AsyncSession,
+        metric_column: str = "activo_total",
+        top_n: int = 10,
+        ascending: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Get ranking of institutions by financial metric.
+
+        Used for questions like:
+        - "Ranking de bancos por activo total"
+        - "Top 10 bancos más grandes"
+        - "Bancos con mayor ROE"
+
+        Args:
+            session: AsyncSession for database queries
+            metric_column: Metric to rank by (default: 'activo_total')
+            top_n: Number of top institutions to return (default: 10)
+            ascending: Sort order (False = descending/largest first)
+
+        Returns:
+            Dict with ranking data and Plotly config
+        """
+        from bankadvisor.config_service import get_config
+        from bankadvisor.models.normalized import MetricaFinanciera, Institucion
+
+        config = get_config()
+
+        try:
+            # Get latest date
+            latest_date_query = select(func.max(MetricaFinanciera.fecha_corte))
+            result = await session.execute(latest_date_query)
+            latest_date = result.scalar()
+
+            if not latest_date:
+                return {
+                    "type": "empty",
+                    "message": "No hay datos financieros disponibles"
+                }
+
+            # Query latest values
+            order_column = getattr(MetricaFinanciera, metric_column)
+            if ascending:
+                order_clause = order_column.asc()
+            else:
+                order_clause = order_column.desc()
+
+            query = select(
+                Institucion.nombre_corto,
+                getattr(MetricaFinanciera, metric_column)
+            ).join(
+                Institucion,
+                MetricaFinanciera.institucion_id == Institucion.id
+            ).where(
+                MetricaFinanciera.fecha_corte == latest_date,
+                Institucion.es_sistema == False  # Exclude SISTEMA aggregate
+            ).order_by(order_clause).limit(top_n)
+
+            result = await session.execute(query)
+            rows = result.fetchall()
+
+            if not rows:
+                return {
+                    "type": "empty",
+                    "message": f"No hay datos de {metric_column}"
+                }
+
+            # Format as ranking
+            import pandas as pd
+            df = pd.DataFrame(rows, columns=['banco', 'value'])
+
+            # Determine if ratio or currency
+            is_ratio = metric_column in ['imor', 'icor', 'roa_12m', 'roe_12m', 'perdida_esperada']
+            # Ensure Decimal is converted to float
+            df['value'] = df['value'].astype(float)
+            if is_ratio:
+                df['value'] = df['value'] * 100  # Convert to percentage
+
+            # Assign colors to each bank
+            bank_colors = [get_bank_color(banco) for banco in df['banco'].tolist()]
+
+            metric_display = config.get_metric_display_name(metric_column) if hasattr(config, 'get_metric_display_name') else metric_column.replace('_', ' ').title()
+
+            # Extract bank names and time range for frontend compatibility
+            unique_banks = [str(b) for b in df['banco'].tolist()]
+
+            return {
+                "type": "data",
+                "visualization": "institution_ranking",
+                "metric_name": metric_display,
+                "metric_type": "ratio" if is_ratio else "currency",
+                "bank_names": unique_banks,  # Required by frontend BankChartData interface
+                "time_range": {  # Required by frontend BankChartData interface
+                    "start": str(latest_date),
+                    "end": str(latest_date)
+                },
+                "ranking": [
+                    {
+                        "position": i + 1,
+                        "banco": str(row['banco']),
+                        "value": float(round(row['value'], 2)),
+                        "unit": "%" if is_ratio else "MDP"
+                    }
+                    for i, (_, row) in enumerate(df.iterrows())
+                ],
+                "plotly_config": {
+                    "data": [{
+                        "x": [float(v) for v in df['value'].tolist()],
+                        "y": [str(b) for b in df['banco'].tolist()],
+                        "type": "bar",
+                        "orientation": "h",
+                        "marker": {"color": bank_colors},
+                        "hovertemplate": "<b>%{y}</b><br>Valor: " + ("%{x:.2f}%<extra></extra>" if is_ratio else "%{x:,.0f} MDP<extra></extra>"),
+                        "text": [f"{float(v):.2f}%" if is_ratio else f"{float(v):,.0f} MDP" for v in df['value'].tolist()],
+                        "textposition": "auto"
+                    }],
+                    "layout": {
+                        "title": f"Ranking - {metric_display}",
+                        "xaxis": {"title": "%" if is_ratio else "MDP (Millones de Pesos)", "tickformat": ".0f"},
+                        "yaxis": {"title": "Institución", "autorange": "reversed"}
+                    }
+                },
+                "summary": {
+                    "metric": metric_column,
+                    "top_n": top_n,
+                    "data_as_of": str(latest_date),
+                    "leader": df.iloc[0]['banco'],
+                    "leader_value": float(df.iloc[0]['value'])
+                }
+            }
+
+        except Exception as e:
+            logger.error(
+                "analytics.institution_ranking.error",
+                metric=metric_column,
+                error=str(e)
+            )
+            return {
+                "type": "error",
+                "message": f"Error al generar ranking por {metric_column}"
+            }
