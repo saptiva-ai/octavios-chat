@@ -1,0 +1,27 @@
+# ============================================================================
+# DOCKER COMPOSE - REGISTRY OVERRIDE
+# ============================================================================
+# Este archivo override usa imágenes pre-construidas desde Docker Hub
+# en lugar de construir localmente.
+#
+# Uso:
+#   docker compose -f docker-compose.yml -f docker-compose.production.yml -f docker-compose.registry.yml up -d
+#
+# ============================================================================
+
+services:
+  backend:
+    image: jazielflores1998/octavios-invex-backend:0.1.2
+    build: null  # Desactiva el build
+
+  web:
+    image: jazielflores1998/octavios-invex-web:0.1.2
+    build: null  # Desactiva el build
+
+  file-manager:
+    image: jazielflores1998/octavios-invex-file-manager:0.1.2
+    build: null  # Desactiva el build
+
+  bank-advisor:
+    image: jazielflores1998/octavios-invex-bank-advisor:0.1.2
+    build: null  # Desactiva el build
