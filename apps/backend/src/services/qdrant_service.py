@@ -372,8 +372,8 @@ class QdrantService:
         self,
         session_id: str,
         query_vector: List[float],
-        top_k: int = 3,
-        score_threshold: float = 0.7,
+        top_k: int = 10,
+        score_threshold: float = 0.60,
     ) -> List[Dict[str, Any]]:
         """
         Semantic search for relevant chunks within a session.
@@ -383,8 +383,8 @@ class QdrantService:
         Args:
             session_id: Conversation UUID (MANDATORY)
             query_vector: Embedding of user's question (384-dim)
-            top_k: Maximum number of results (default: 3)
-            score_threshold: Minimum similarity score (default: 0.7)
+            top_k: Maximum number of results (default: 10)
+            score_threshold: Minimum similarity score (default: 0.60)
 
         Returns:
             List of dicts:
@@ -444,12 +444,19 @@ class QdrantService:
                     "metadata": hit.payload.get("metadata", {}),
                 })
 
+            # Log detailed retrieval info for debugging RAG
+            retrieval_details = [
+                f"doc={r['document_id']} chunk={r['chunk_id']} score={r['score']:.4f}"
+                for r in results
+            ]
+
             logger.info(
                 "Qdrant search completed",
                 session_id=session_id,
                 results_count=len(results),
                 top_k=top_k,
                 score_threshold=score_threshold,
+                retrieved_items=retrieval_details,
                 avg_score=sum(r["score"] for r in results) / len(results) if results else 0,
             )
 

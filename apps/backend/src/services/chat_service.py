@@ -185,10 +185,10 @@ class ChatService:
                     "content": ctx_msg.get("content", "")
                 })
         else:
-            # Get recent messages from session
+            # Get recent messages from session (increased to 20 to fix context amnesia)
             recent_messages = await ChatMessageModel.find(
                 ChatMessageModel.chat_id == chat_session.id
-            ).sort(-ChatMessageModel.created_at).limit(10).to_list()
+            ).sort(-ChatMessageModel.created_at).limit(20).to_list()
 
             # Reverse to chronological order
             for msg in reversed(recent_messages):
@@ -280,10 +280,16 @@ class ChatService:
                         f"Usa toda esta información para responder las preguntas:\n\n{document_context}"
                     )
                 else:
-                    # Only PDFs - original prompt
+                    # Only PDFs - enhanced prompt for robustness
                     system_prompt = (
                         f"El usuario ha adjuntado documentos para tu referencia. "
-                        f"Usa esta información para responder sus preguntas:\n\n{document_context}"
+                        f"Usa esta información para responder sus preguntas.\n"
+                        f"INSTRUCCIONES:\n"
+                        f"1. Si encuentras la respuesta en el contexto, cítala.\n"
+                        f"2. Si la información es parcial, úsala y menciona qué falta.\n"
+                        f"3. Si no encuentras NADA relevante, dilo explícitamente, pero no digas 'el documento no lo menciona' a menos que estés seguro.\n"
+                        f"4. Normaliza fechas (ej: Q1 = Primer Trimestre, 2T = Segundo Trimestre) al interpretar el texto.\n\n"
+                        f"CONTEXTO DEL DOCUMENTO:\n{document_context}"
                     )
 
                 system_message = {
@@ -322,20 +328,32 @@ class ChatService:
 
             # Spy log to confirm tool/document context is reaching the LLM payload
             try:
-                messages_dump = json.dumps(
-                    payload_data["messages"],
-                    default=str
-                )
+                # Generate detailed message summary for debugging context issues
+                msg_summary = []
+                for m in payload_data.get("messages", []):
+                    content_preview = str(m.get("content", ""))[:80].replace("\n", "\\n")
+                    msg_summary.append(f"{m.get('role')}: {content_preview}...")
+
+                # Check for injected date in system prompt
+                injected_date = "Not found"
+                if payload_data.get("messages") and payload_data["messages"][0]["role"] == "system":
+                    sys_content = payload_data["messages"][0]["content"]
+                    # Simple heuristic to find date-like strings or "Hoy es"
+                    import re
+                    date_match = re.search(r'(\d{4}-\d{2}-\d{2}|Hoy es [^\n]+)', sys_content)
+                    if date_match:
+                        injected_date = date_match.group(0)
+
                 logger.info(
                     "🕵️ [LLM PROMPT SPY]",
-                    contains_findings="findings" in messages_dump,
-                    contains_analysis="Analysis Results" in messages_dump,
-                    contains_audit="audit" in messages_dump.lower(),
-                    prompt_length=len(messages_dump),
-                    tool_results_keys=list((user_context or {}).get("tool_results", {}).keys()) if user_context else []
+                    chat_id=chat_id,
+                    message_count=len(payload_data.get("messages", [])),
+                    injected_date=injected_date,
+                    messages_preview=msg_summary,
+                    tools_enabled=list(tools_enabled.keys()) if tools_enabled else [],
                 )
-            except Exception:
-                logger.warning("Failed to emit LLM prompt spy log")
+            except Exception as spy_exc:
+                logger.warning("Failed to emit LLM prompt spy log", error=str(spy_exc))
 
             # Call Saptiva
             start_time = time.time()
