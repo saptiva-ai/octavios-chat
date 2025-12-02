@@ -35,6 +35,10 @@ Additional Docker Compose configurations for specific environments can be found 
 - `docs/setup/docker-compose.staging.yml` - Staging environment blueprint
 - `docs/setup/docker-compose.fast.yml` - Fast development setup
 
+Archived/legacy variants (no longer maintained):
+- `infra/archive/docker-compose-deprecated/docker-compose.resources.yml`
+- `infra/archive/docker-compose-deprecated/docker-compose.override.yml.disabled`
+
 ## Clean Architecture
 
 We maintain a clean, minimal approach:

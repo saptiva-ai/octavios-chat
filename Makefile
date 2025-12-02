@@ -5,17 +5,38 @@
 # Original: 2624 lines → Consolidated: ~150 lines (94% reduction)
 # ============================================================================ 
 
-.PHONY: help setup dev dev-rebuild dev-no-build dev-reset stop stop-all restart restart-dev clean logs logs-follow shell test deploy db health install install-web env-check env-info env-strict status ps
+.PHONY: help setup dev dev-rebuild dev-no-build dev-reset stop stop-all restart restart-dev clean logs logs-follow shell test deploy db health install install-web env-check env-info env-strict status ps preflight-prod wait-healthy prod
 
 # --- CONFIGURATION ---
-ifneq (,$(wildcard envs/.env))
-    include envs/.env
+ENV ?=
+ENV_CANDIDATE := $(if $(ENV),envs/.env.$(ENV),envs/.env)
+ENV_FILE := $(if $(wildcard $(ENV_CANDIDATE)),$(ENV_CANDIDATE),envs/.env)
+
+ifneq (,$(wildcard $(ENV_FILE)))
+    include $(ENV_FILE)
     export
 endif
 
 PROJECT_NAME := octavios-chat-bajaware_invex
-COMPOSE := docker compose -f infra/docker-compose.yml
-COMPOSE_DEV := docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml
+COMPOSE_BASE_FILE := infra/docker-compose.yml
+COMPOSE_DEV_FILE := infra/docker-compose.dev.yml
+COMPOSE_PROD_FILE := infra/docker-compose.production.yml
+COMPOSE_REGISTRY_FILE := infra/docker-compose.registry.yml
+
+# Compose builders (REGISTRY=1 adds registry override for prod targets)
+define compose_cmd
+docker compose -f $(COMPOSE_BASE_FILE) $(if $(1),-f $(1),)
+endef
+
+define compose_prod_cmd
+docker compose --env-file $(ENV_FILE) -f $(COMPOSE_BASE_FILE) -f $(COMPOSE_PROD_FILE) $(if $(REGISTRY),-f $(COMPOSE_REGISTRY_FILE),)
+endef
+
+COMPOSE := $(call compose_cmd,)
+COMPOSE_DEV := $(call compose_cmd,$(COMPOSE_DEV_FILE))
+COMPOSE_PROD := $(call compose_prod_cmd)
+HEALTH_TIMEOUT ?= 120
+HEALTH_INTERVAL ?= 5
 
 # Colors
 GREEN  := \033[0;32m
@@ -55,6 +76,8 @@ help:
 	@echo "  $(YELLOW)make shell S=backend$(NC)    - Open shell in container (backend, web, db)"
 	@echo "  $(YELLOW)make health$(NC)             - Check all services health status"
 	@echo "  $(YELLOW)make reload-env S=backend$(NC) - Reload environment variables for service"
+	@echo "  $(YELLOW)Flags: ENV=prod|demo$(NC)    - Select env file (envs/.env.<ENV>); default envs/.env"
+	@echo "  $(YELLOW)       REGISTRY=1$(NC)       - Use Docker Hub images for prod targets (registry override)"
 	@echo ""
 	@echo "$(CYAN)🧪 Testing:$(NC)"
 	@echo "  $(YELLOW)make test$(NC)               - Run all tests"
@@ -78,6 +101,8 @@ help:
 	@echo "$(CYAN)🚀 Deployment:$(NC)"
 	@echo "  $(YELLOW)make deploy ENV=demo$(NC)    - Deploy to demo (modes: fast, safe, tar)"
 	@echo "  $(YELLOW)make deploy ENV=prod$(NC)    - Deploy to production"
+	@echo "  $(YELLOW)make prod$(NC)               - Preflight + build/pull + up + wait-healthy + status"
+	@echo "  $(YELLOW)REGISTRY=1 make prod-up$(NC) - Use registry images (infra/docker-compose.registry.yml) instead of local build"
 	@echo ""
 	@echo "$(CYAN)🧹 Cleanup:$(NC)"
 	@echo "  $(YELLOW)make clean$(NC)              - Remove containers and cache"
@@ -413,43 +438,81 @@ endif
 	@./scripts/deploy-manager.sh $(ENV) $(MODE)
 
 # Production deployment helpers
+preflight-prod:
+	@echo "$(YELLOW)🔍 Preflight checks for production (ENV_FILE=$(ENV_FILE))...$(NC)"
+	@test -f "$(ENV_FILE)" || { echo "$(RED)❌ Env file $(ENV_FILE) not found$(NC)"; exit 1; }
+	@sk=$$(grep '^SECRET_KEY=' $(ENV_FILE) | cut -d= -f2-); \
+	  if [ -z "$$sk" ] || [ $${#sk} -lt 32 ]; then \
+	    echo "$(RED)❌ SECRET_KEY missing or too short in $(ENV_FILE)$(NC)"; exit 1; \
+	  fi
+	@jk=$$(grep '^JWT_SECRET_KEY=' $(ENV_FILE) | cut -d= -f2-); \
+	  if [ -z "$$jk" ] || [ $${#jk} -lt 32 ]; then \
+	    echo "$(RED)❌ JWT_SECRET_KEY missing or too short in $(ENV_FILE)$(NC)"; exit 1; \
+	  fi
+	@docker compose version >/dev/null 2>&1 || { echo "$(RED)❌ docker compose not available$(NC)"; exit 1; }
+	@docker ps >/dev/null 2>&1 || { echo "$(RED)❌ Docker daemon not running$(NC)"; exit 1; }
+	@echo "$(GREEN)✅ Preflight passed$(NC)"
+
+wait-healthy:
+	@echo "$(YELLOW)⏱ Waiting up to $(HEALTH_TIMEOUT)s for core services...$(NC)"
+	@end_time=$$((SECONDS+$(HEALTH_TIMEOUT))); \
+	while [ $$SECONDS -lt $$end_time ]; do \
+	  ok=1; \
+	  curl -sf http://localhost:8000/api/health >/dev/null 2>&1 || ok=0; \
+	  curl -sf http://localhost:8001/health >/dev/null 2>&1 || ok=0; \
+	  curl -sf http://localhost:8002/health >/dev/null 2>&1 || ok=0; \
+	  curl -sf http://localhost:3000 >/dev/null 2>&1 || ok=0; \
+	  if [ $$ok -eq 1 ]; then \
+	    echo "$(GREEN)✅ All core services responded healthy$(NC)"; exit 0; \
+	  fi; \
+	  sleep $(HEALTH_INTERVAL); \
+	done; \
+	echo "$(RED)❌ Services not healthy after $(HEALTH_TIMEOUT)s$(NC)"; exit 1
+
 prod-prepare:
 	@echo "$(YELLOW)🔧 Preparing for production deployment...$(NC)"
 	@echo "$(YELLOW)  ↳ Cleaning local .env files that may interfere...$(NC)"
 	@rm -f apps/backend/.env apps/web/.env plugins/public/bank-advisor/.env plugins/public/file-manager/.env
 	@echo "$(YELLOW)  ↳ Copying production environment...$(NC)"
-	@cp envs/.env.prod envs/.env
-	@echo "$(GREEN)✅ Production environment prepared$(NC)"
+	@test -f "$(ENV_FILE)" || { echo "$(RED)❌ Env file $(ENV_FILE) not found$(NC)"; exit 1; }
+	@cp "$(ENV_FILE)" envs/.env
+	@echo "$(GREEN)✅ Production environment prepared from $(ENV_FILE)$(NC)"
 
 prod-build:
 	@echo "$(YELLOW)🔨 Building production images...$(NC)"
-	@cd infra && docker compose --env-file ../envs/.env build backend web bank-advisor file-manager
+ifdef REGISTRY
+	@echo "$(YELLOW)ℹ️  REGISTRY=1 detected: pulling pre-built images instead of building$(NC)"
+	@$(COMPOSE_PROD) pull backend web bank-advisor file-manager
+	@echo "$(GREEN)✅ Registry images pulled$(NC)"
+else
+	@$(COMPOSE_PROD) build --no-cache backend web bank-advisor file-manager
 	@echo "$(GREEN)✅ Production images built$(NC)"
+endif
 
 prod-up:
 	@echo "$(YELLOW)🚀 Starting production containers...$(NC)"
-	@cd infra && docker compose --env-file ../envs/.env up -d
+	@$(COMPOSE_PROD) up -d
 	@echo "$(GREEN)✅ Production containers started$(NC)"
 	@echo "$(YELLOW)🟡 Waiting for services to be healthy...$(NC)"
 	@sleep 10
-	@cd infra && docker compose ps
+	@$(COMPOSE_PROD) ps
 
 prod-restart:
 ifdef S
 	@echo "$(YELLOW)♻️  Restarting production service: $(S)...$(NC)"
-	@cd infra && docker compose --env-file ../envs/.env restart $(S)
+	@$(COMPOSE_PROD) restart $(S)
 	@echo "$(GREEN)✅ Service $(S) restarted$(NC)"
 else
 	@echo "$(YELLOW)♻️  Restarting all production services...$(NC)"
-	@cd infra && docker compose --env-file ../envs/.env restart
+	@$(COMPOSE_PROD) restart
 	@echo "$(GREEN)✅ All services restarted$(NC)"
 endif
 
 prod-logs:
 ifdef S
-	@cd infra && docker compose --env-file ../envs/.env logs --tail=100 $(S)
+	@$(COMPOSE_PROD) logs --tail=100 $(S)
 else
-	@cd infra && docker compose --env-file ../envs/.env logs --tail=100
+	@$(COMPOSE_PROD) logs --tail=100
 endif
 
 prod-status:
@@ -457,8 +520,10 @@ prod-status:
 	@echo "$(BLUE)🔵 Production Container Status $(NC)"
 	@echo "$(BLUE)🔵━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
 	@echo ""
-	@cd infra && docker compose --env-file ../envs/.env ps
+	@$(COMPOSE_PROD) ps
 	@echo ""
+
+prod: preflight-prod prod-build prod-up wait-healthy prod-status
 
 prod-deploy: prod-prepare prod-build prod-up
 	@echo ""
