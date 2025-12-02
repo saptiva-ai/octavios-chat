@@ -117,6 +117,31 @@ async def is_bank_query_hybrid(message: str, cache: MockCache) -> Tuple[bool, st
             elapsed_ms = (time.time() - start_time) * 1000
             return result, "fast_path_negative", elapsed_ms
 
+    # 3.5. Special filtering for ambiguous banking terms in non-banking contexts
+    # Filter "histórico" when used for general history
+    if "histórico" in message_lower or "historia" in message_lower:
+        history_topics = [
+            "revolución", "guerra", "conquista", "época", "siglo",
+            "prehispánico", "colonial", "independencia", "antigua"
+        ]
+        if any(topic in message_lower for topic in history_topics):
+            result = False
+            await cache.set(cache_key, result, expire=3600)
+            elapsed_ms = (time.time() - start_time) * 1000
+            return result, "special_filter_history", elapsed_ms
+
+    # Filter "hipotecario" when used as street/place name
+    if "hipotecario" in message_lower:
+        place_indicators = [
+            "nombre de", "calle", "avenida", "boulevard", "colonia",
+            "ubicado en", "dirección", "zona"
+        ]
+        if any(indicator in message_lower for indicator in place_indicators):
+            result = False
+            await cache.set(cache_key, result, expire=3600)
+            elapsed_ms = (time.time() - start_time) * 1000
+            return result, "special_filter_place", elapsed_ms
+
     # 4. Banking keywords with ambiguity handling
     financial_metrics = [
         "morosidad", "mora", "vencida", "vencido",
@@ -259,14 +284,14 @@ async def test_hybrid_bank_query_detection():
         ("Resumen de la película Inception", False, "Negative keyword (película)", "fast_path_negative"),
         ("Consejos para hacer ejercicio", False, "Non-banking (health)", "llm"),
 
-        # Ambiguous cases (should use LLM)
-        ("Capital de Francia", False, "LLM (geographic capital)", "llm"),
+        # Ambiguous cases (should use LLM or special filters)
+        ("Capital de Francia", False, "Special filter (geographic capital)", "llm"),
         ("Cartera de mano de cuero", False, "LLM (wallet product)", "llm"),
         ("Consumo de energía eléctrica", False, "LLM (energy consumption)", "llm"),
         ("Comercial de televisión", False, "LLM (TV commercial)", "llm"),
-        ("Hipotecario el nombre de una calle", False, "LLM (street name)", "llm"),
+        ("Hipotecario el nombre de una calle", False, "Special filter (street name)", "special_filter_place"),
         ("Banco de madera para jardín", False, "LLM (wooden bench)", "llm"),
-        ("Historia de la revolución mexicana", False, "LLM (history)", "llm"),
+        ("Historia de la revolución mexicana", False, "Special filter (history)", "special_filter_history"),
         ("Mejores restaurantes en CDMX", False, "Negative keyword (restaurantes)", "fast_path_negative"),
     ]
 
@@ -278,7 +303,15 @@ async def test_hybrid_bank_query_detection():
     passed = 0
     failed = 0
     failures = []
-    method_counts = {"cache": 0, "fast_path_positive": 0, "fast_path_negative": 0, "keywords": 0, "llm": 0}
+    method_counts = {
+        "cache": 0,
+        "fast_path_positive": 0,
+        "fast_path_negative": 0,
+        "special_filter_history": 0,
+        "special_filter_place": 0,
+        "keywords": 0,
+        "llm": 0
+    }
     total_time = 0
 
     for message, expected, description, expected_method in test_cases:
@@ -298,6 +331,8 @@ async def test_hybrid_bank_query_detection():
             "cache": "⚡",
             "fast_path_positive": "🎯",
             "fast_path_negative": "🚫",
+            "special_filter_history": "📜",
+            "special_filter_place": "🗺️",
             "keywords": "📋",
             "llm": "🤖"
         }.get(method, "❓")
@@ -342,10 +377,13 @@ async def test_hybrid_bank_query_detection():
             "cache": "⚡",
             "fast_path_positive": "🎯",
             "fast_path_negative": "🚫",
+            "special_filter_history": "📜",
+            "special_filter_place": "🗺️",
             "keywords": "📋",
             "llm": "🤖"
         }.get(method, "❓")
-        print(f"  {icon} {method:20}: {count:2} queries ({percentage:5.1f}%)")
+        if count > 0:  # Only show methods that were actually used
+            print(f"  {icon} {method:25}: {count:2} queries ({percentage:5.1f}%)")
 
     avg_time = total_time / len(test_cases)
     print(f"\n  ⏱️  Average time: {avg_time:.2f}ms per query")

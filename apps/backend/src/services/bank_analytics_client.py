@@ -569,9 +569,53 @@ async def is_bank_query(message: str) -> bool:
 
     # 3. Negative keywords - very unlikely to be banking (immediate False)
     negative_keywords = [
-        "receta", "cocina", "clima", "tiempo atmosférico", "película", "serie",
-        "código python", "código javascript", "programación",
-        "restaurante", "comida", "deporte", "fútbol", "música"
+        # Food & Cooking
+        "receta", "cocina", "cocinar", "ingredientes", "menú",
+        "restaurante", "comida", "platillo", "bebida",
+
+        # Weather & Nature
+        "clima", "tiempo atmosférico", "lluvia", "temperatura", "pronóstico",
+
+        # Entertainment
+        "película", "serie", "música", "canción", "artista", "actor",
+        "videojuego", "juego", "película", "documental", "anime",
+
+        # Programming & Tech
+        "código python", "código javascript", "programación", "código",
+        "función python", "script", "algoritmo", "debugear",
+        "variable", "sintaxis", "compilar",
+
+        # Sports
+        "deporte", "fútbol", "basketball", "tenis", "partido",
+        "jugador", "equipo deportivo", "gol",
+
+        # History (general, non-banking)
+        "historia de la revolución", "guerra mundial", "época prehispánica",
+        "conquista española", "independencia de méxico",
+
+        # Geography
+        "capital de", "país de", "ciudad de", "ubicado en",
+        "geografía", "continente", "océano",
+
+        # Health & Fitness
+        "salud", "ejercicio", "dieta", "médico", "enfermedad",
+        "hospital", "síntoma", "tratamiento",
+
+        # Education (non-financial)
+        "escuela", "universidad", "curso de", "aprender",
+        "estudiar", "examen", "tarea",
+
+        # Physical Products
+        "de cuero", "de madera", "de metal", "de plástico",
+        "mueble", "decoración", "jardín",
+
+        # Street/Place Names
+        "nombre de una calle", "ubicación de", "dirección de",
+        "colonia", "avenida", "boulevard",
+
+        # General Non-Banking
+        "hora en", "traducir", "significado de", "sinónimo",
+        "horario de", "cómo llegar", "distancia entre"
     ]
 
     for keyword in negative_keywords:
@@ -583,6 +627,47 @@ async def is_bank_query(message: str) -> bool:
                 message_preview=message[:50]
             )
             # Cache result
+            if cache:
+                try:
+                    await cache.set(cache_key, result, expire=3600)
+                except Exception:
+                    pass
+            return result
+
+    # 3.5. Special filtering for ambiguous banking terms in non-banking contexts
+    # Filter "histórico" when used for general history (not banking history)
+    if "histórico" in message_lower or "historia" in message_lower:
+        # If it's about general history topics, reject
+        history_topics = [
+            "revolución", "guerra", "conquista", "época", "siglo",
+            "prehispánico", "colonial", "independencia", "antigua",
+            "medieval", "romano", "griego"
+        ]
+        if any(topic in message_lower for topic in history_topics):
+            result = False
+            logger.debug(
+                "Bank query rejected (general history context)",
+                message_preview=message[:50]
+            )
+            if cache:
+                try:
+                    await cache.set(cache_key, result, expire=3600)
+                except Exception:
+                    pass
+            return result
+
+    # Filter "hipotecario" when used as street/place name
+    if "hipotecario" in message_lower:
+        place_indicators = [
+            "nombre de", "calle", "avenida", "boulevard", "colonia",
+            "ubicado en", "dirección", "zona", "fraccionamiento"
+        ]
+        if any(indicator in message_lower for indicator in place_indicators):
+            result = False
+            logger.debug(
+                "Bank query rejected (hipotecario as place name)",
+                message_preview=message[:50]
+            )
             if cache:
                 try:
                     await cache.set(cache_key, result, expire=3600)
