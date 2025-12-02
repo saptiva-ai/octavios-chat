@@ -357,27 +357,38 @@ async def _classify_with_llm(message: str) -> bool:
 
         client = SaptivaClient()
 
-        # Focused prompt for classification
-        classification_prompt = """Eres un clasificador de consultas bancarias para un sistema de análisis financiero mexicano.
+        # Focused prompt for classification with edge case handling
+        classification_prompt = """Eres un clasificador especializado de consultas bancarias y financieras mexicanas.
 
-Tu tarea: Determinar si la siguiente consulta es sobre banca, finanzas o indicadores bancarios mexicanos.
+Tu tarea: Determinar si la consulta es sobre BANCA, FINANZAS o INDICADORES BANCARIOS.
 
 Responde SOLO con "SÍ" o "NO".
 
 Ejemplos de consultas bancarias (responde SÍ):
-- Preguntas sobre bancos mexicanos (INVEX, Banorte, BBVA, Santander, etc.)
-- Indicadores financieros (IMOR, ICOR, ICAP, ROE, morosidad, cartera vencida)
-- Análisis bancario, comparaciones entre bancos
-- Métricas de crédito, capitalización, liquidez
-- Reportes CNBV o regulatorios
+- Indicadores: IMOR, ICOR, ICAP, ROE, ROA, morosidad, cartera vencida
+- Bancos: INVEX, Banorte, BBVA, Santander, Banamex, HSBC, Scotiabank
+- Métricas: capitalización, liquidez, solvencia, reservas, provisiones
+- Productos: créditos, hipotecas, tarjetas (en contexto bancario)
+- Reguladores: CNBV, Banxico, reportes financieros
+- Análisis: comparaciones de bancos, evolución de indicadores
 
 Ejemplos de consultas NO bancarias (responde NO):
-- Clima, recetas, películas, programación
-- Historia, geografía, deportes (a menos que mencionen bancos)
-- Productos físicos como carteras de cuero o bancos de madera
-- Cualquier tema no relacionado con finanzas/banca
+1. HISTORIA GENERAL: "Historia de la revolución mexicana" → NO (aunque tenga "histórico")
+2. GEOGRAFÍA: "Capital de Francia" → NO (capital geográfico, no financiero)
+3. NOMBRES DE CALLES: "Hipotecario el nombre de una calle" → NO (nombre de lugar, no producto)
+4. PRODUCTOS FÍSICOS: "Cartera de mano de cuero", "Banco de madera" → NO
+5. OTROS TEMAS: Clima, recetas, películas, programación, deportes, salud
+
+REGLAS CRÍTICAS:
+- "Histórico/historia" en contexto general → NO (solo SÍ si es historia bancaria)
+- "Capital" en contexto geográfico → NO (solo SÍ si es capital financiero)
+- "Hipotecario" como nombre de lugar → NO (solo SÍ si es producto bancario)
+- "Banco" como mueble/estructura → NO (solo SÍ si es institución financiera)
+- "Cartera" como bolso/accesorio → NO (solo SÍ si es cartera de crédito)
 
 Consulta a clasificar: "{message}"
+
+Responde SÍ solo si es claramente sobre banca/finanzas. En duda, responde NO.
 
 Tu respuesta (SÍ o NO):"""
 

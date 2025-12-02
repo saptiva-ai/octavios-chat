@@ -68,7 +68,7 @@ async def mock_classify_with_llm(message: str) -> bool:
     return False
 
 
-async def is_bank_query_hybrid(message: str, cache: MockCache) -> tuple[bool, str, float]:
+async def is_bank_query_hybrid(message: str, cache: MockCache) -> Tuple[bool, str, float]:
     """
     Hybrid banking query detection with mock LLM.
     Returns (result, detection_method, time_ms)
