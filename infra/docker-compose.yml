@@ -263,10 +263,7 @@ services:
     ports:
       - "${API_PORT:-8000}:8000"
 
-    # Volume mount for hot reload in development
-    # Source code is mounted to enable immediate reflection of changes
-    volumes:
-      - ../apps/backend/src:/app/src
+    # No volumes in base - added in docker-compose.dev.yml for development hot reload
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
@@ -451,9 +448,8 @@ services:
     ports:
       - "${BANK_ADVISOR_PORT:-8002}:8002"
     volumes:
-      # Hot reload in development
-      - ../plugins/bank-advisor-private/src:/app/src
-      - ../plugins/bank-advisor-private/data:/app/data
+      # Data directory (needed in production) - src volume added in docker-compose.dev.yml
+      - ../plugins/bank-advisor-private/data:/app/data:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -490,9 +486,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:
       - "${FILE_MANAGER_PORT:-8001}:8001"
-    volumes:
-      # Hot reload in development
-      - ../plugins/public/file-manager/src:/app/src
+    # No volumes in base - src volume added in docker-compose.dev.yml for development hot reload
     depends_on:
       minio:
         condition: service_healthy

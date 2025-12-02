@@ -57,6 +57,11 @@ services:
       # Mount backend source for shared SAPTIVA client import (BA-P0-001)
       - ../apps/backend/src:/backend_shared/src:ro
 
+  file-manager:
+    volumes:
+      # Mount source code for hot reload
+      - ../plugins/public/file-manager/src:/app/src
+
 volumes:
   web_node_modules:
     driver: local

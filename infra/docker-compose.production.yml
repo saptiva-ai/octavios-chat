@@ -1,0 +1,71 @@
+# ========================================
+# PRODUCTION OVERRIDE - COPILOT OS
+# ========================================
+# Use with: docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
+# Purpose: Explicitly disable development features for production deployments
+# - Removes hot reload volumes (no source code mounts)
+# - Ensures production build targets
+# - Disables development-only services
+# ========================================
+
+services:
+  # ========================================
+  # BACKEND - Production Mode
+  # ========================================
+  backend:
+    build:
+      target: production  # Explicitly use production build stage
+    environment:
+      - NODE_ENV=production
+      - DEBUG=false
+      - LOG_LEVEL=info
+      - RATE_LIMIT_ENABLED=true
+      - DEEP_RESEARCH_KILL_SWITCH=true
+      - DEEP_RESEARCH_ENABLED=false
+    # No volumes needed - base has no hot reload mounts
+    # Production runs as container user (not host UID/GID for better security)
+    user: ""
+
+  # ========================================
+  # FRONTEND - Production Mode
+  # ========================================
+  web:
+    build:
+      target: runner  # Next.js production build stage
+    environment:
+      - NODE_ENV=production
+      - DEEP_RESEARCH_ENABLED=false
+    # No volumes needed - base has no hot reload mounts
+    user: "${UID:-1000}:${GID:-1000}"  # Keep user for file permissions
+    command: []  # Use default CMD from Dockerfile (node server.js)
+
+  # ========================================
+  # BANK ADVISOR - Production Mode
+  # ========================================
+  bank-advisor:
+    environment:
+      - LOG_LEVEL=INFO
+    # Data volume is in base, no src volume (added in dev override only)
+    user: ""
+
+  # ========================================
+  # FILE MANAGER - Production Mode
+  # ========================================
+  file-manager:
+    environment:
+      - LOG_LEVEL=INFO
+    # No volumes needed - base has no hot reload mounts
+    user: ""
+
+  # ========================================
+  # QDRANT - Production Mode
+  # ========================================
+  qdrant:
+    environment:
+      - QDRANT__LOG_LEVEL=INFO
+
+  # ========================================
+  # NGINX - Production Edge (enabled)
+  # ========================================
+  # Note: nginx profile is already set to "production" in base docker-compose.yml
+  # It will automatically be included when using --profile production
