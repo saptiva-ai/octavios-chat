@@ -68,7 +68,7 @@ run_migrations() {
 
     # 1. Apply normalized schema (instituciones, metricas_financieras, etc.)
     log_info "  Applying normalized schema (database_schema.sql)..."
-    if cat database_schema.sql | docker exec -i "${POSTGRES_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" &>/dev/null; then
+    if cat plugins/bank-advisor-private/database_schema.sql | docker exec -i "${POSTGRES_CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" &>/dev/null; then
         log_success "  Normalized schema applied (IF NOT EXISTS)"
     else
         log_warning "  Normalized schema may have already been applied"
