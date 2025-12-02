@@ -39,6 +39,20 @@ CREATE TABLE metricas_financieras (
     CONSTRAINT uk_banco_fecha UNIQUE (institucion_id, fecha_corte)
 );
 
+-- 3. Tabla de Cartera Segmentada
+-- Métricas IMOR/ICOR por segmento (consumo, empresas, tarjetas, automotriz, etc.)
+CREATE TABLE IF NOT EXISTS metricas_cartera_segmentada (
+    id SERIAL PRIMARY KEY,
+    institucion_id INT REFERENCES instituciones(id) ON DELETE CASCADE,
+    segmento VARCHAR(50) NOT NULL,
+    fecha_corte DATE NOT NULL,
+    cartera_total NUMERIC(20, 2),
+    imor NUMERIC(10, 4),
+    icor NUMERIC(10, 4),
+    perdida_esperada NUMERIC(10, 4),
+    CONSTRAINT uk_banco_segmento_fecha UNIQUE (institucion_id, segmento, fecha_corte)
+);
+
 -- Metadatos para NL2SQL
 COMMENT ON TABLE metricas_financieras IS 'Tabla mensual de bancos mexicanos con balance, rentabilidad y calidad de cartera.';
 COMMENT ON COLUMN metricas_financieras.activo_total IS 'Activos totales (MDP).';

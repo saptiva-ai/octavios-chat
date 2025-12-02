@@ -118,8 +118,61 @@ def parse_sheet(
     return pd.DataFrame.from_records(records)
 
 
-def load_all_sheets(excel_path: Path) -> pd.DataFrame:
-    """Orquesta la lectura de Pm2, Indicadores y CCT."""
+def find_date_row(df: pd.DataFrame, date_cols: List[int]) -> Tuple[int, List[str]]:
+    """Localiza la fila con fechas (datetime o serial) y devuelve fechas ISO."""
+    for idx in range(min(len(df), 12)):
+        row = df.iloc[idx]
+        dates = [excel_serial_to_date(row.iloc[c]) for c in date_cols if c < len(row)]
+        if all(dates):
+            return idx, dates
+    raise ValueError("No se encontro fila de fechas.")
+
+
+def parse_segment_sheet(df: pd.DataFrame, segment_name: str) -> pd.DataFrame:
+    """
+    Parsea hojas de cartera segmentada (CCE, CCEF, CCCT, etc.).
+
+    Estructura esperada:
+    - Col 1: Banco
+    - Cols 2-4: cartera total (tres cortes)
+    - Cols 5-7: IMOR
+    - Cols 8-10: ICOR
+    - Cols 11-13: Perdida esperada (cuando exista)
+    """
+    date_row_idx, fechas = find_date_row(df, [2, 3, 4])
+    data_rows = df.iloc[date_row_idx + 1 :]
+
+    records: List[Dict[str, object]] = []
+    for _, row in data_rows.iterrows():
+        bank = normalize_bank_name(row.iloc[1] if len(row) > 1 else None)
+        if not bank:
+            continue
+        for i, fecha in enumerate(fechas):
+            if not fecha:
+                continue
+
+            def get_val(idx: int):
+                if idx >= len(row):
+                    return None
+                return clean_numeric(row.iloc[idx])
+
+            records.append(
+                {
+                    "segmento": segment_name,
+                    "institucion": bank,
+                    "fecha_corte": fecha,
+                    "cartera_total": get_val(2 + i),
+                    "imor": get_val(5 + i),
+                    "icor": get_val(8 + i),
+                    "perdida_esperada": get_val(11 + i),
+                }
+            )
+
+    return pd.DataFrame.from_records(records)
+
+
+def load_all_sheets(excel_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Orquesta la lectura de Pm2, Indicadores, CCT y cartera segmentada."""
     if not excel_path.exists():
         raise FileNotFoundError(f"No se encontro el archivo {excel_path}")
 
@@ -178,11 +231,42 @@ def load_all_sheets(excel_path: Path) -> pd.DataFrame:
     # Normalizacion final de nombres
     master["institucion"] = master["institucion"].apply(normalize_bank_name)
 
-    return master
+    # ---------------- Cartera segmentada (hojas adicionales) ----------------
+    segment_sheets = [
+        "CCE",
+        "CCEF",
+        "CCGT",
+        "CCG EyM",
+        "CCG OG",
+        "CCCT",
+        "CCCTC",
+        "CCCN",
+        "CCCnrP",
+        "CCCAut",
+        "CCCAdq BiMu",
+        "CCOAC",
+        "CCCMicro",
+        "CCCnrO",
+        "CCV",
+    ]
+
+    segment_frames: List[pd.DataFrame] = []
+    for sheet_name in segment_sheets:
+        try:
+            seg_raw = pd.read_excel(excel_path, sheet_name=sheet_name, header=None, dtype=object, engine="openpyxl")
+            df_seg = parse_segment_sheet(seg_raw, segment_name=sheet_name)
+            if not df_seg.empty:
+                segment_frames.append(df_seg)
+        except Exception as exc:  # pragma: no cover - defensive
+            print(f"[WARN] No se pudo parsear hoja {sheet_name}: {exc}")
+
+    segment_df = pd.concat(segment_frames, ignore_index=True) if segment_frames else pd.DataFrame()
+
+    return master, segment_df
 
 
-def generate_sql(df: pd.DataFrame) -> str:
-    """Genera statements SQL para catalogo e inserts."""
+def generate_sql(df: pd.DataFrame, segment_df: pd.DataFrame | None = None) -> str:
+    """Genera statements SQL para catalogo, métricas principales y segmentadas."""
     statements: List[str] = []
 
     statements.append("-- Catalogo de instituciones")
@@ -235,13 +319,43 @@ def generate_sql(df: pd.DataFrame) -> str:
             "    perdida_esperada = EXCLUDED.perdida_esperada;"
         )
 
+    # ---------------- Inserts para cartera segmentada ----------------
+    if segment_df is not None and not segment_df.empty:
+        statements.append("\n-- Cartera segmentada (IMOR/ICOR por segmento)")
+        for _, row in segment_df.iterrows():
+            banco = str(row["institucion"]).replace("'", "''")
+            if not banco or banco.lower() == "nan":
+                continue
+
+            def fmt(val):
+                return "NULL" if pd.isna(val) else str(val)
+
+            statements.append(
+                "INSERT INTO metricas_cartera_segmentada (\n"
+                "    institucion_id, segmento, fecha_corte,\n"
+                "    cartera_total, imor, icor, perdida_esperada\n"
+                ")\n"
+                "VALUES (\n"
+                f"    (SELECT id FROM instituciones WHERE nombre_oficial = '{banco}' LIMIT 1),\n"
+                f"    '{row['segmento']}',\n"
+                f"    '{row['fecha_corte']}',\n"
+                f"    {fmt(row.get('cartera_total'))}, {fmt(row.get('imor'))}, {fmt(row.get('icor'))}, {fmt(row.get('perdida_esperada'))}\n"
+                ")\n"
+                "ON CONFLICT (institucion_id, segmento, fecha_corte) DO UPDATE SET\n"
+                "    cartera_total = EXCLUDED.cartera_total,\n"
+                "    imor = EXCLUDED.imor,\n"
+                "    icor = EXCLUDED.icor,\n"
+                "    perdida_esperada = EXCLUDED.perdida_esperada;"
+            )
+
     return "\n\n".join(statements)
 
 
 def main():
-    df = load_all_sheets(EXCEL_PATH)
-    print(f"Registros totales: {len(df)}")
-    sql_script = generate_sql(df)
+    df_main, df_segment = load_all_sheets(EXCEL_PATH)
+    print(f"Registros totales (métricas principales): {len(df_main)}")
+    print(f"Registros totales (cartera segmentada): {len(df_segment)}")
+    sql_script = generate_sql(df_main, df_segment)
     OUTPUT_SQL.write_text(sql_script, encoding="utf-8")
     print(f"Archivo generado: {OUTPUT_SQL}")
 
