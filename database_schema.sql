@@ -2,13 +2,8 @@
 -- ESQUEMA DE BASE DE DATOS PARA ANALISIS FINANCIERO BANCARIO (NL2SQL READY)
 -- ----------------------------------------------------------------------------
 
-DROP TABLE IF EXISTS metricas_cartera_segmentada;
-DROP TABLE IF EXISTS metricas_financieras;
-DROP TABLE IF EXISTS segmentos_cartera;
-DROP TABLE IF EXISTS instituciones;
-
 -- Catalogo de instituciones
-CREATE TABLE instituciones (
+CREATE TABLE IF NOT EXISTS instituciones (
     id SERIAL PRIMARY KEY,
     nombre_oficial VARCHAR(255) UNIQUE NOT NULL,
     nombre_corto VARCHAR(100),
@@ -16,7 +11,7 @@ CREATE TABLE instituciones (
 );
 
 -- Hechos consolidados (Pm2 + Indicadores + CCT)
-CREATE TABLE metricas_financieras (
+CREATE TABLE IF NOT EXISTS metricas_financieras (
     id SERIAL PRIMARY KEY,
     institucion_id INT REFERENCES instituciones(id) ON DELETE CASCADE,
     fecha_corte DATE NOT NULL,
@@ -42,7 +37,7 @@ CREATE TABLE metricas_financieras (
 );
 
 -- Catalogo de segmentos (normalizado)
-CREATE TABLE segmentos_cartera (
+CREATE TABLE IF NOT EXISTS segmentos_cartera (
     id SERIAL PRIMARY KEY,
     codigo VARCHAR(50) UNIQUE NOT NULL,
     nombre VARCHAR(100) NOT NULL,
