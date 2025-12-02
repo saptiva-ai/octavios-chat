@@ -2,7 +2,9 @@
 -- ESQUEMA DE BASE DE DATOS PARA ANALISIS FINANCIERO BANCARIO (NL2SQL READY)
 -- ----------------------------------------------------------------------------
 
+DROP TABLE IF EXISTS metricas_cartera_segmentada;
 DROP TABLE IF EXISTS metricas_financieras;
+DROP TABLE IF EXISTS segmentos_cartera;
 DROP TABLE IF EXISTS instituciones;
 
 -- Catalogo de instituciones
@@ -39,18 +41,26 @@ CREATE TABLE metricas_financieras (
     CONSTRAINT uk_banco_fecha UNIQUE (institucion_id, fecha_corte)
 );
 
+-- Catalogo de segmentos (normalizado)
+CREATE TABLE segmentos_cartera (
+    id SERIAL PRIMARY KEY,
+    codigo VARCHAR(50) UNIQUE NOT NULL,
+    nombre VARCHAR(100) NOT NULL,
+    descripcion TEXT
+);
+
 -- 3. Tabla de Cartera Segmentada
 -- Métricas IMOR/ICOR por segmento (consumo, empresas, tarjetas, automotriz, etc.)
 CREATE TABLE IF NOT EXISTS metricas_cartera_segmentada (
     id SERIAL PRIMARY KEY,
     institucion_id INT REFERENCES instituciones(id) ON DELETE CASCADE,
-    segmento VARCHAR(50) NOT NULL,
+    segmento_id INT REFERENCES segmentos_cartera(id) ON DELETE CASCADE,
     fecha_corte DATE NOT NULL,
     cartera_total NUMERIC(20, 2),
     imor NUMERIC(10, 4),
     icor NUMERIC(10, 4),
     perdida_esperada NUMERIC(10, 4),
-    CONSTRAINT uk_banco_segmento_fecha UNIQUE (institucion_id, segmento, fecha_corte)
+    CONSTRAINT uk_banco_segmento_fecha UNIQUE (institucion_id, segmento_id, fecha_corte)
 );
 
 -- Metadatos para NL2SQL
@@ -62,3 +72,5 @@ COMMENT ON COLUMN metricas_financieras.roa_12m IS 'Retorno sobre activos (%).';
 COMMENT ON COLUMN metricas_financieras.roe_12m IS 'Retorno sobre capital (%).';
 COMMENT ON COLUMN metricas_financieras.imor IS 'Indice de morosidad (%).';
 COMMENT ON COLUMN metricas_financieras.icor IS 'Indice de cobertura (%).';
+COMMENT ON TABLE segmentos_cartera IS 'Catálogo normalizado de segmentos de cartera para evitar literales en métricas segmentadas.';
+COMMENT ON COLUMN segmentos_cartera.codigo IS 'Código corto: EMPRESAS, VIVIENDA, CONSUMO_TARJETA, etc.';

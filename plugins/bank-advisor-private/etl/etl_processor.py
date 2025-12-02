@@ -16,10 +16,13 @@ from typing import Dict, List, Tuple
 
 import pandas as pd
 
+# Directorios base
+ETL_DIR = Path(__file__).resolve().parent
+PLUGIN_ROOT = ETL_DIR.parent
+REPO_ROOT = PLUGIN_ROOT.parent.parent
 
-BASE_DIR = Path(__file__).resolve().parent
-EXCEL_PATH = BASE_DIR / "plugins" / "bank-advisor-private" / "data" / "raw" / "BE_BM_202509.xlsx"
-OUTPUT_SQL = BASE_DIR / "carga_inicial_bancos.sql"
+EXCEL_PATH = PLUGIN_ROOT / "data" / "raw" / "BE_BM_202509.xlsx"
+OUTPUT_SQL = ETL_DIR / "carga_inicial_bancos.sql"
 
 
 def clean_numeric(value):
@@ -128,7 +131,7 @@ def find_date_row(df: pd.DataFrame, date_cols: List[int]) -> Tuple[int, List[str
     raise ValueError("No se encontro fila de fechas.")
 
 
-def parse_segment_sheet(df: pd.DataFrame, segment_name: str) -> pd.DataFrame:
+def parse_segment_sheet(df: pd.DataFrame, segment_code: str, segment_name: str) -> pd.DataFrame:
     """
     Parsea hojas de cartera segmentada (CCE, CCEF, CCCT, etc.).
 
@@ -158,7 +161,8 @@ def parse_segment_sheet(df: pd.DataFrame, segment_name: str) -> pd.DataFrame:
 
             records.append(
                 {
-                    "segmento": segment_name,
+                    "segmento_codigo": segment_code,
+                    "segmento_nombre": segment_name,
                     "institucion": bank,
                     "fecha_corte": fecha,
                     "cartera_total": get_val(2 + i),
@@ -232,29 +236,29 @@ def load_all_sheets(excel_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
     master["institucion"] = master["institucion"].apply(normalize_bank_name)
 
     # ---------------- Cartera segmentada (hojas adicionales) ----------------
-    segment_sheets = [
-        "CCE",
-        "CCEF",
-        "CCGT",
-        "CCG EyM",
-        "CCG OG",
-        "CCCT",
-        "CCCTC",
-        "CCCN",
-        "CCCnrP",
-        "CCCAut",
-        "CCCAdq BiMu",
-        "CCOAC",
-        "CCCMicro",
-        "CCCnrO",
-        "CCV",
-    ]
+    segment_map: Dict[str, Tuple[str, str]] = {
+        "CCE": ("EMPRESAS", "Crédito a empresas"),
+        "CCEF": ("ENTIDADES_FINANCIERAS", "Crédito a entidades financieras"),
+        "CCGT": ("GUBERNAMENTAL_TOTAL", "Crédito gubernamental total"),
+        "CCG EyM": ("GUB_ESTADOS_MUN", "Gobiernos estatales y municipales"),
+        "CCG OG": ("GUB_OTRAS", "Otras entidades gubernamentales"),
+        "CCCT": ("CONSUMO_TOTAL", "Consumo total"),
+        "CCCTC": ("CONSUMO_TARJETA", "Tarjetas de crédito"),
+        "CCCN": ("CONSUMO_NOMINA", "Crédito de nómina"),
+        "CCCnrP": ("CONSUMO_PERSONALES", "Préstamos personales"),
+        "CCCAut": ("CONSUMO_AUTOMOTRIZ", "Crédito automotriz"),
+        "CCCAdq BiMu": ("CONSUMO_BIENES_MUEBLES", "Bienes muebles"),
+        "CCOAC": ("CONSUMO_ARRENDAMIENTO", "Arrendamiento"),
+        "CCCMicro": ("CONSUMO_MICROCREDITOS", "Microcréditos"),
+        "CCCnrO": ("CONSUMO_OTROS", "Otros créditos de consumo"),
+        "CCV": ("VIVIENDA", "Crédito a la vivienda"),
+    }
 
     segment_frames: List[pd.DataFrame] = []
-    for sheet_name in segment_sheets:
+    for sheet_name, (seg_code, seg_name) in segment_map.items():
         try:
             seg_raw = pd.read_excel(excel_path, sheet_name=sheet_name, header=None, dtype=object, engine="openpyxl")
-            df_seg = parse_segment_sheet(seg_raw, segment_name=sheet_name)
+            df_seg = parse_segment_sheet(seg_raw, segment_code=seg_code, segment_name=seg_name)
             if not df_seg.empty:
                 segment_frames.append(df_seg)
         except Exception as exc:  # pragma: no cover - defensive
@@ -269,6 +273,16 @@ def generate_sql(df: pd.DataFrame, segment_df: pd.DataFrame | None = None) -> st
     """Genera statements SQL para catalogo, métricas principales y segmentadas."""
     statements: List[str] = []
 
+    # Catalogo de segmentos
+    segment_catalog: List[Tuple[str, str, str]] = []
+    if segment_df is not None and not segment_df.empty:
+        segment_catalog = sorted(
+            {
+                (row["segmento_codigo"], row["segmento_nombre"], "")
+                for _, row in segment_df[["segmento_codigo", "segmento_nombre"]].drop_duplicates().iterrows()
+            }
+        )
+
     statements.append("-- Catalogo de instituciones")
     bancos_unicos = sorted(b for b in df["institucion"].dropna().unique() if str(b).strip())
     for banco in bancos_unicos:
@@ -280,6 +294,18 @@ def generate_sql(df: pd.DataFrame, segment_df: pd.DataFrame | None = None) -> st
             f"VALUES ('{nombre}', '{nombre_corto}', {es_sistema})\n"
             f"ON CONFLICT (nombre_oficial) DO NOTHING;"
         )
+
+    if segment_catalog:
+        statements.append("\n-- Catalogo de segmentos de cartera")
+        for code, name, desc in segment_catalog:
+            code_sql = code.replace("'", "''")
+            name_sql = name.replace("'", "''")
+            desc_sql = desc.replace("'", "''") if desc else ""
+            statements.append(
+                "INSERT INTO segmentos_cartera (codigo, nombre, descripcion)\n"
+                f"VALUES ('{code_sql}', '{name_sql}', '{desc_sql}')\n"
+                "ON CONFLICT (codigo) DO NOTHING;"
+            )
 
     statements.append("\n-- Metricas financieras")
     for _, row in df.iterrows():
@@ -330,18 +356,20 @@ def generate_sql(df: pd.DataFrame, segment_df: pd.DataFrame | None = None) -> st
             def fmt(val):
                 return "NULL" if pd.isna(val) else str(val)
 
+            seg_code = str(row.get("segmento_codigo", "")).replace("'", "''")
+
             statements.append(
                 "INSERT INTO metricas_cartera_segmentada (\n"
-                "    institucion_id, segmento, fecha_corte,\n"
+                "    institucion_id, segmento_id, fecha_corte,\n"
                 "    cartera_total, imor, icor, perdida_esperada\n"
                 ")\n"
                 "VALUES (\n"
                 f"    (SELECT id FROM instituciones WHERE nombre_oficial = '{banco}' LIMIT 1),\n"
-                f"    '{row['segmento']}',\n"
+                f"    (SELECT id FROM segmentos_cartera WHERE codigo = '{seg_code}' LIMIT 1),\n"
                 f"    '{row['fecha_corte']}',\n"
                 f"    {fmt(row.get('cartera_total'))}, {fmt(row.get('imor'))}, {fmt(row.get('icor'))}, {fmt(row.get('perdida_esperada'))}\n"
                 ")\n"
-                "ON CONFLICT (institucion_id, segmento, fecha_corte) DO UPDATE SET\n"
+                "ON CONFLICT (institucion_id, segmento_id, fecha_corte) DO UPDATE SET\n"
                 "    cartera_total = EXCLUDED.cartera_total,\n"
                 "    imor = EXCLUDED.imor,\n"
                 "    icor = EXCLUDED.icor,\n"
