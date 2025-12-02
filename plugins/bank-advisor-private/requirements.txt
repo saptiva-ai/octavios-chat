@@ -11,6 +11,8 @@ psycopg2-binary>=2.9.9
 
 # Data Processing
 pandas>=2.0.0
+polars>=0.20.0  # High-performance dataframe library for ETL
+pyarrow>=12.0.0  # Apache Arrow for Polars/Pandas interop
 openpyxl>=3.1.0
 numpy>=1.24.0
 

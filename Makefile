@@ -70,6 +70,11 @@ help:
 	@echo "  $(YELLOW)make db CMD=stats$(NC)       - Show database statistics"
 	@echo "  $(YELLOW)make db CMD=shell$(NC)       - Open MongoDB shell"
 	@echo ""
+	@echo "$(CYAN)🏦 Bank Advisor Data:$(NC)"
+	@echo "  $(YELLOW)make init-bank-advisor$(NC)  - Initialize Bank Advisor (migrations + ETL)"
+	@echo "  $(YELLOW)make init-bank-advisor-migrations$(NC) - Run migrations only"
+	@echo "  $(YELLOW)make init-bank-advisor-etl$(NC) - Run ETL only"
+	@echo ""
 	@echo "$(CYAN)🚀 Deployment:$(NC)"
 	@echo "  $(YELLOW)make deploy ENV=demo$(NC)    - Deploy to demo (modes: fast, safe, tar)"
 	@echo "  $(YELLOW)make deploy ENV=prod$(NC)    - Deploy to production"
@@ -367,7 +372,7 @@ endif
 
 # ============================================================================ 
 # DATABASE MANAGEMENT
-# ============================================================================ 
+# ============================================================================
 
 db:
 ifndef CMD
@@ -377,6 +382,22 @@ ifndef CMD
 endif
 	@chmod +x scripts/db-manager.sh
 	@./scripts/db-manager.sh $(CMD) $(PROJECT_NAME)
+
+# Bank Advisor Data Initialization
+init-bank-advisor:
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@echo "$(BLUE)🏦 Initializing Bank Advisor Data$(NC)"
+	@echo "$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"
+	@chmod +x scripts/init_bank_advisor_data.sh
+	@./scripts/init_bank_advisor_data.sh
+
+init-bank-advisor-migrations:
+	@chmod +x scripts/init_bank_advisor_data.sh
+	@./scripts/init_bank_advisor_data.sh --migrations-only
+
+init-bank-advisor-etl:
+	@chmod +x scripts/init_bank_advisor_data.sh
+	@./scripts/init_bank_advisor_data.sh --etl-only
 
 # ============================================================================
 # DEPLOYMENT
