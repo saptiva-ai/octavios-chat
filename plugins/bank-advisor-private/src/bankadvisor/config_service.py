@@ -35,9 +35,9 @@ class ConfigService:
             ConfigService._initialized = True
 
     def _load_config(self):
-        """Load synonyms.yaml at startup."""
-        # Try multiple paths for different environments
-        possible_paths = [
+        """Load synonyms.yaml and sections.yaml at startup."""
+        # Load synonyms.yaml
+        synonyms_paths = [
             # Development - relative to this file
             Path(__file__).parent.parent.parent / "config" / "synonyms.yaml",
             # Docker container path
@@ -47,18 +47,18 @@ class ConfigService:
         ]
 
         config_path = None
-        for path in possible_paths:
+        for path in synonyms_paths:
             if path.exists():
                 config_path = path
                 break
 
         if config_path is None:
             logger.error(
-                "config_service.file_not_found",
-                tried_paths=[str(p) for p in possible_paths]
+                "config_service.synonyms_not_found",
+                tried_paths=[str(p) for p in synonyms_paths]
             )
             # Initialize with empty config to avoid crashes
-            self._config = {"metrics": {}, "intents": {}}
+            self._config = {"metrics": {}, "intents": {}, "visualizations": {}}
             return
 
         try:
@@ -66,14 +66,61 @@ class ConfigService:
                 self._config = yaml.safe_load(f)
 
             logger.info(
-                "config_service.loaded",
+                "config_service.synonyms_loaded",
                 path=str(config_path),
                 metrics_count=len(self._config.get("metrics", {})),
                 intents_count=len(self._config.get("intents", {}))
             )
         except Exception as e:
-            logger.error("config_service.load_error", error=str(e))
-            self._config = {"metrics": {}, "intents": {}}
+            logger.error("config_service.synonyms_load_error", error=str(e))
+            self._config = {"metrics": {}, "intents": {}, "visualizations": {}}
+
+        # Load sections.yaml for visualization configs
+        sections_paths = [
+            # Development - relative to config_service.py
+            Path(__file__).parent / "config" / "sections.yaml",
+            # Docker container path
+            Path("/app/config/sections.yaml"),
+            # Alternative container path
+            Path("/app/plugins/bank-advisor-private/src/bankadvisor/config/sections.yaml"),
+        ]
+
+        sections_path = None
+        for path in sections_paths:
+            if path.exists():
+                sections_path = path
+                break
+
+        if sections_path is None:
+            logger.warning(
+                "config_service.sections_not_found",
+                tried_paths=[str(p) for p in sections_paths]
+            )
+            self._config["visualizations"] = {}
+            return
+
+        try:
+            with open(sections_path, 'r', encoding='utf-8') as f:
+                sections_data = yaml.safe_load(f)
+
+            # Convert sections array to dict keyed by field name for easy lookup
+            visualizations = {}
+            for section in sections_data.get("sections", []):
+                field = section.get("field")
+                if field:
+                    # Store section config by field name (e.g., "imor", "cartera_total")
+                    visualizations[field] = section
+
+            self._config["visualizations"] = visualizations
+
+            logger.info(
+                "config_service.sections_loaded",
+                path=str(sections_path),
+                visualizations_count=len(visualizations)
+            )
+        except Exception as e:
+            logger.error("config_service.sections_load_error", error=str(e))
+            self._config["visualizations"] = {}
 
     @property
     def metrics(self) -> Dict:
@@ -137,6 +184,11 @@ class ConfigService:
             {"id": metric_id, "label": config.get("display_name", metric_id.upper())}
             for metric_id, config in self.metrics.items()
         ]
+
+    @property
+    def visualizations(self) -> Dict:
+        """Get all visualization configurations from sections.yaml."""
+        return self._config.get("visualizations", {})
 
     @property
     def ambiguous_terms(self) -> Dict:

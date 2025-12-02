@@ -187,6 +187,141 @@ metrics:
       - "interés dólares"
       - "interes dolares"
 
+  pe_total:
+    display_name: "Pérdida Esperada Total"
+    column: "pe_total"
+    type: "ratio"
+    aliases:
+      - "pe total"
+      - "pérdida esperada total"
+      - "perdida esperada total"
+      - "pe"
+      - "expected loss"
+      - "ratio reservas cartera"
+
+  pe_empresarial:
+    display_name: "Pérdida Esperada Empresarial"
+    column: "pe_empresarial"
+    type: "ratio"
+    aliases:
+      - "pe empresarial"
+      - "pérdida esperada empresarial"
+      - "perdida esperada empresarial"
+      - "pe corporativo"
+      - "pe comercial"
+
+  pe_consumo:
+    display_name: "Pérdida Esperada Consumo"
+    column: "pe_consumo"
+    type: "ratio"
+    aliases:
+      - "pe consumo"
+      - "pérdida esperada consumo"
+      - "perdida esperada consumo"
+
+  pe_vivienda:
+    display_name: "Pérdida Esperada Vivienda"
+    column: "pe_vivienda"
+    type: "ratio"
+    aliases:
+      - "pe vivienda"
+      - "pérdida esperada vivienda"
+      - "perdida esperada vivienda"
+      - "pe hipotecario"
+
+  reservas_variacion_mm:
+    display_name: "Variación Mensual Reservas"
+    column: "reservas_variacion_mm"
+    type: "ratio"
+    aliases:
+      - "variación reservas"
+      - "variacion reservas"
+      - "cambio reservas"
+      - "reservas mes a mes"
+      - "reservas mm"
+      - "variacion mensual reservas"
+
+  ct_etapa_1:
+    display_name: "Cartera Etapa 1"
+    column: "ct_etapa_1"
+    type: "ratio"
+    aliases:
+      - "etapa 1"
+      - "cartera etapa 1"
+      - "stage 1"
+      - "performing"
+      - "etapa uno"
+
+  ct_etapa_2:
+    display_name: "Cartera Etapa 2"
+    column: "ct_etapa_2"
+    type: "ratio"
+    aliases:
+      - "etapa 2"
+      - "cartera etapa 2"
+      - "stage 2"
+      - "watchlist"
+      - "etapa dos"
+
+  ct_etapa_3:
+    display_name: "Cartera Etapa 3"
+    column: "ct_etapa_3"
+    type: "ratio"
+    aliases:
+      - "etapa 3"
+      - "cartera etapa 3"
+      - "stage 3"
+      - "non-performing"
+      - "etapa tres"
+      - "impaired"
+
+  quebrantos_cc:
+    display_name: "Quebrantos Comerciales"
+    column: "quebrantos_cc"
+    type: "currency"
+    aliases:
+      - "quebrantos"
+      - "quebrantos comerciales"
+      - "write-offs"
+      - "castigos"
+      - "quitas"
+      - "pérdidas definitivas"
+      - "perdidas definitivas"
+
+  quebrantos_vs_cartera_cc:
+    display_name: "Ratio Quebrantos vs Cartera"
+    column: "quebrantos_vs_cartera_cc"
+    type: "ratio"
+    aliases:
+      - "quebrantos vs cartera"
+      - "ratio quebrantos"
+      - "quebrantos ratio"
+      - "tasa quebrantos"
+
+  tasa_sistema:
+    display_name: "Tasa Efectiva Sistema"
+    column: "tasa_sistema"
+    type: "ratio"
+    aliases:
+      - "tasa sistema"
+      - "te sistema"
+      - "tasa efectiva sistema"
+      - "tasa bancaria sistema"
+      - "interés sistema"
+      - "interes sistema"
+
+  tasa_invex_consumo:
+    display_name: "Tasa Efectiva INVEX Consumo"
+    column: "tasa_invex_consumo"
+    type: "ratio"
+    aliases:
+      - "tasa invex consumo"
+      - "te invex"
+      - "tasa efectiva invex"
+      - "tasa invex"
+      - "interés invex consumo"
+      - "interes invex consumo"
+
 # Ambiguous terms that require clarification before processing
 # These terms match multiple possible metrics and should trigger user choice
 ambiguous_terms:
@@ -231,3 +366,38 @@ ambiguous_terms:
       - id: "tasa_me"
         label: "Tasa Moneda Extranjera"
         description: "Tasa de interés en dólares"
+      - id: "tasa_sistema"
+        label: "Tasa Efectiva Sistema"
+        description: "Tasa efectiva del sistema bancario"
+      - id: "tasa_invex_consumo"
+        label: "Tasa Efectiva INVEX Consumo"
+        description: "Tasa efectiva de INVEX para consumo"
+
+  etapa:
+    message: "¿Qué etapa de deterioro te interesa?"
+    options:
+      - id: "ct_etapa_1"
+        label: "Etapa 1 (Performing)"
+        description: "Cartera en buen estado crediticio"
+      - id: "ct_etapa_2"
+        label: "Etapa 2 (Watchlist)"
+        description: "Cartera con deterioro significativo"
+      - id: "ct_etapa_3"
+        label: "Etapa 3 (Non-performing)"
+        description: "Cartera deteriorada (impaired)"
+
+  perdida:
+    message: "¿Qué tipo de pérdida esperada te interesa?"
+    options:
+      - id: "pe_total"
+        label: "PE Total"
+        description: "Pérdida esperada de toda la cartera"
+      - id: "pe_empresarial"
+        label: "PE Empresarial"
+        description: "Pérdida esperada de cartera empresarial"
+      - id: "pe_consumo"
+        label: "PE Consumo"
+        description: "Pérdida esperada de cartera de consumo"
+      - id: "pe_vivienda"
+        label: "PE Vivienda"
+        description: "Pérdida esperada de cartera hipotecaria"
