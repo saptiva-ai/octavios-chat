@@ -621,7 +621,9 @@ class AnalyticsService:
             # Check for special visualization modes based on metric or query
             viz_mode = AnalyticsService._detect_visualization_mode(metric_id, intent, user_query, config)
 
-            if viz_mode == "variation":
+            if viz_mode == "table":
+                return AnalyticsService._format_multi_month_table(rows, metric_id, config, metric_type)
+            elif viz_mode == "variation":
                 return AnalyticsService._format_variation(rows, metric_id, config, metric_type)
             elif viz_mode == "single_series":
                 return AnalyticsService._format_single_series(rows, metric_id, config, metric_type)
@@ -782,9 +784,22 @@ class AnalyticsService:
         Returns:
             - "variation": Month-over-month variation chart
             - "single_series": Single series chart (SISTEMA only)
+            - "table": Multi-month table view
             - None: Use standard intent-based routing
         """
         query_lower = user_query.lower()
+
+        # Check for table/tabular view keywords
+        table_keywords = [
+            "tabla", "tabular", "table",
+            "últimos", "ultimos",
+            "últimos 3 meses", "últimos 6 meses", "últimos 12 meses",
+            "last 3 months", "last 6 months"
+        ]
+        if any(keyword in query_lower for keyword in table_keywords):
+            # Only use table for specific metrics or if explicitly requested
+            if "tabla" in query_lower or "table" in query_lower:
+                return "table"
 
         # Check for variation keywords
         variation_keywords = [
@@ -809,6 +824,8 @@ class AnalyticsService:
 
         if viz_mode == "single_sistema":
             return "single_series"
+        elif viz_mode == "multi_month_table_b":
+            return "table"
 
         return None
 

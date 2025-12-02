@@ -232,6 +232,48 @@ async def _try_hu3_nlp_pipeline(
             entities = await EntityService.extract(user_query, session)
             config = get_config()
 
+            # Step 1.3: Check for multi-metric query patterns (e.g., "etapas de deterioro")
+            # These patterns require querying multiple metrics simultaneously for stacked visualizations
+            multi_metric_info = config.check_multi_metric_query(user_query)
+            if multi_metric_info:
+                logger.info(
+                    "hu3_nlp.multi_metric_query_detected",
+                    query=user_query,
+                    query_type=multi_metric_info["query_type"],
+                    metrics=multi_metric_info["metrics"],
+                    visualization=multi_metric_info["visualization"]
+                )
+
+                # Execute multi-metric query
+                data = await AnalyticsService.get_multi_metric_data(
+                    session,
+                    metric_ids=multi_metric_info["metrics"],
+                    banks=entities.banks if entities.banks else None,
+                    date_start=entities.date_start,
+                    date_end=entities.date_end,
+                    user_query=user_query
+                )
+
+                # Check for errors
+                if data.get("type") == "error":
+                    logger.warning(
+                        "hu3_nlp.multi_metric_error",
+                        query=user_query,
+                        error=data.get("message")
+                    )
+                    return data
+
+                # Generate Plotly visualization for multi-metric data
+                if data.get("type") == "data" and "plotly_config" in data:
+                    # Already formatted with visualization by get_multi_metric_data
+                    logger.info(
+                        "hu3_nlp.multi_metric_success",
+                        query=user_query,
+                        metrics_count=len(multi_metric_info["metrics"]),
+                        visualization=multi_metric_info["visualization"]
+                    )
+                    return data
+
             # Step 1.5: Check for ambiguous terms BEFORE metric resolution
             # This catches cases like "cartera de INVEX" where "cartera" is ambiguous
             ambiguity = config.check_ambiguous_term(user_query)
