@@ -1741,11 +1741,32 @@ Escribe la respuesta de forma fluida y profesional, como un analista financiero.
                     # FIX-001: Use resolved system_prompt (not hardcoded system_message)
                     # Use model_params for temperature/max_tokens (registry overrides context)
 
-                    # Prepare messages for token calculation
-                    messages_for_api = [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": context.message}
-                    ]
+                    # FIX-002: Obtener historial de conversacion para memoria del chat
+                    # Sin esto, el LLM no recuerda mensajes anteriores (ej: "mi nombre es Juan")
+                    message_history = await chat_service.build_message_context(
+                        chat_session=chat_session,
+                        current_message=context.message,
+                        provided_context=None  # Obtener del DB
+                    )
+
+                    # Construir mensajes con system prompt + historial
+                    messages_for_api = [{"role": "system", "content": system_prompt}]
+
+                    # Agregar historial (excluye el mensaje actual que ya viene en message_history)
+                    # message_history incluye mensajes previos + mensaje actual al final
+                    for msg in message_history[:-1]:  # Todos menos el ultimo (mensaje actual)
+                        messages_for_api.append(msg)
+
+                    # Agregar mensaje actual del usuario
+                    messages_for_api.append({"role": "user", "content": context.message})
+
+                    # Log para debugging de memoria
+                    logger.info(
+                        "Historial de chat incluido en contexto",
+                        history_count=len(message_history) - 1,
+                        total_messages=len(messages_for_api),
+                        session_id=str(chat_session.id)
+                    )
 
                     # Calculate dynamic max_tokens based on actual prompt size
                     dynamic_max_tokens = calculate_dynamic_max_tokens(
@@ -1769,7 +1790,27 @@ Escribe la respuesta de forma fluida y profesional, como un analista financiero.
                         estimated_prompt_tokens + dynamic_max_tokens > 8192,
                     )
 
-                    # If prompt is too large, reject or truncate
+                    # FIX-002: Truncar historial si excede limite de tokens
+                    # Mantener system prompt (indice 0) y mensaje actual (ultimo)
+                    # Eliminar mensajes mas antiguos del medio hasta que quepa
+                    messages_truncated = 0
+                    while estimated_prompt_tokens > 6000 and len(messages_for_api) > 2:
+                        # Eliminar el mensaje mas antiguo (indice 1, despues del system prompt)
+                        removed_msg = messages_for_api.pop(1)
+                        messages_truncated += 1
+                        # Recalcular tokens
+                        total_prompt_chars = sum(len(str(msg.get("content", ""))) for msg in messages_for_api)
+                        estimated_prompt_tokens = total_prompt_chars // 4
+
+                    if messages_truncated > 0:
+                        logger.warning(
+                            "Historial truncado por limite de tokens",
+                            messages_removed=messages_truncated,
+                            remaining_messages=len(messages_for_api),
+                            estimated_tokens=estimated_prompt_tokens
+                        )
+
+                    # Si aun excede despues de truncar, log de advertencia
                     if estimated_prompt_tokens > 7500:
                         logger.error(
                             "⚠️ Prompt exceeds safe token limit - request will likely fail | estimated_prompt_tokens=%s model_limit=%s",
