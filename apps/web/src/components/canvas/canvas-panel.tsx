@@ -51,7 +51,9 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
   );
   // 🆕 Bank chart state for canvas visualization
   const activeBankChart = useCanvasStore((state) => state.activeBankChart);
-  const canvasWidthPercent = useCanvasStore((state) => state.canvasWidthPercent);
+  const canvasWidthPercent = useCanvasStore(
+    (state) => state.canvasWidthPercent,
+  );
   const setCanvasWidth = useCanvasStore((state) => state.setCanvasWidth);
   const cacheRef = React.useRef(new Map<string, ArtifactRecord>());
 
@@ -85,27 +87,6 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
       window.removeEventListener("mouseup", onUp);
     };
   }, [setCanvasWidth]);
-
-  // Keyboard shortcuts for canvas
-  React.useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd+K (Mac) or Ctrl+K (Windows/Linux) to toggle canvas
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        toggleSidebar();
-      }
-      // Escape to close canvas
-      if (e.key === "Escape" && isSidebarOpen) {
-        e.preventDefault();
-        toggleSidebar();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [toggleSidebar, isSidebarOpen]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -271,7 +252,9 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
         data-testid="canvas-panel"
         data-canvas-panel
         style={
-          isSidebarOpen && typeof window !== "undefined" && window.innerWidth >= 768
+          isSidebarOpen &&
+          typeof window !== "undefined" &&
+          window.innerWidth >= 768
             ? { width: `${canvasWidthPercent}vw` }
             : undefined
         }
@@ -413,9 +396,6 @@ function Header({
         )}
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        <kbd className="hidden md:inline-flex px-1.5 py-0.5 rounded bg-surface-2 text-muted font-mono text-[10px]">
-          ⌘K
-        </kbd>
         <button
           type="button"
           onClick={onToggle}
