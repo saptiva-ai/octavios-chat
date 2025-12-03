@@ -2,6 +2,14 @@
 
 Scripts de testing, validación y verificación del sistema.
 
+**Nota Importante:** Algunos scripts de testing de uso muy frecuente se mantienen en `scripts/` (root):
+- `../test-runner.sh` - Runner principal consolidado de todos los tests
+- `../test_audit_flow.sh` - Tests de flujo completo de auditoría
+- `../test_password_reset.sh` - Tests de password reset
+- `../test_bank_query_*.py` - Tests de detección bancaria
+
+Estos scripts usan **rutas relativas** y **variables de entorno** (`TEST_PDF`, `API_URL`) para configuración.
+
 ## Scripts Disponibles
 
 ### Tests de Integración
@@ -22,8 +30,7 @@ Scripts de testing, validación y verificación del sistema.
 - **`test-auth-logging.py`** - Tests de logging de autenticación
 - **`test-backup-system.sh`** - Tests del sistema de backups
 - **`test-credential-rotation.sh`** - Tests de rotación de credentials
-- **`test_mcp_tools.sh`** - Tests de herramientas MCP
-- **`test_audit_flow.sh`** - Tests de flujo de auditoría
+- **`test_mcp_tools.sh`** - Tests de herramientas MCP ([Guía](README_MCP_TESTING.md))
 
 ### Validaciones
 - **`validate-config.sh`** - Validar configuración
