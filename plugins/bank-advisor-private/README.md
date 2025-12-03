@@ -226,24 +226,139 @@ plugins/bank-advisor-private/
 
 ## Supported Queries
 
-### Evolution (Timeline)
+BankAdvisor soporta consultas en lenguaje natural en español. Puedes hacer preguntas desde:
+- **Chat web**: Escribe tu pregunta directamente en el chat
+- **API JSON-RPC**: Envía la consulta al endpoint `/rpc`
+- **CLI**: Usa los scripts de prueba
+
+### Catálogo de Métricas Disponibles
+
+| Métrica | Queries de Ejemplo |
+|---------|-------------------|
+| **Cartera Comercial CC** | `"Cartera comercial de INVEX"`, `"Evolución cartera comercial 2024"` |
+| **Cartera Comercial Sin Gob** | `"Cartera comercial sin gobierno"`, `"CC sin entidades gubernamentales"` |
+| **Pérdida Esperada Total** | `"Pérdida esperada de INVEX"`, `"PE total del sistema"` |
+| **Reservas Totales** | `"Reservas totales de INVEX"`, `"Reservas del sistema 2024"` |
+| **Reservas Totales (Variación)** | `"Variación de reservas INVEX"`, `"Cambio en reservas vs mes anterior"` |
+| **IMOR** | `"IMOR de INVEX"`, `"Índice de morosidad vs sistema"` |
+| **Cartera Vencida** | `"Cartera vencida de INVEX"`, `"Evolución cartera vencida 2024"` |
+| **ICOR** | `"ICOR de INVEX"`, `"Índice de cobertura vs sistema"` |
+| **Etapas de Deterioro (Sistema)** | `"Etapas de deterioro del sistema"`, `"Distribución etapas IFRS9 sistema"` |
+| **Etapas de Deterioro (INVEX)** | `"Etapas de deterioro INVEX"`, `"Etapas 1, 2, 3 de INVEX"` |
+| **Quebrantos Comerciales** | `"Quebrantos comerciales INVEX"`, `"Castigos cartera comercial"` |
+| **ICAP** | `"ICAP de INVEX"`, `"Índice de capitalización vs sistema"` |
+| **Tasa de Deterioro Ajustada** | `"TDA de INVEX"`, `"Tasa deterioro ajustada 2024"` |
+| **Tasa Interés Efectiva (Sistema)** | `"Tasa efectiva del sistema"`, `"TE sistema últimos 12 meses"` |
+| **Tasa Interés Efectiva (INVEX Consumo)** | `"Tasa INVEX consumo"`, `"TE INVEX segmento consumo"` |
+| **Tasa Crédito Corporativo (MN)** | `"Tasa corporativa moneda nacional"`, `"Tasa MN créditos corporativos"` |
+| **Tasa Crédito Corporativo (ME)** | `"Tasa corporativa moneda extranjera"`, `"Tasa ME créditos corporativos"` |
+
+### Patrones de Consulta
+
+**Evolución temporal:**
 ```
 "IMOR de INVEX en 2024"
 "Cartera vencida últimos 12 meses"
-"Evolución del ICAP de INVEX"
+"Evolución del ICAP de enero a julio 2025"
 ```
 
-### Comparison
+**Comparativa INVEX vs Sistema:**
 ```
 "IMOR de INVEX vs sistema"
-"Compara cartera comercial INVEX contra sistema"
+"Compara ICAP INVEX contra sistema"
+"ICOR INVEX comparado con el sistema"
 ```
 
-### Calculated Metrics
+**Métricas calculadas:**
 ```
 "Cartera comercial sin gobierno"
 "Reservas totales de INVEX"
+"Pérdida esperada del sistema"
 ```
+
+**Rankings y posiciones:**
+```
+"Top 5 bancos por IMOR"
+"Ranking de bancos por cartera total"
+"Posición de INVEX en el sistema"
+```
+
+### Ejemplo: Consulta vía API
+
+```bash
+# Consultar IMOR de INVEX
+curl -X POST http://localhost:8002/rpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "bank_analytics",
+      "arguments": {"metric_or_query": "IMOR de INVEX vs sistema en 2024"}
+    },
+    "id": 1
+  }'
+
+# Consultar Cartera Comercial Sin Gobierno
+curl -X POST http://localhost:8002/rpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "bank_analytics",
+      "arguments": {"metric_or_query": "Cartera comercial sin gobierno de INVEX"}
+    },
+    "id": 2
+  }'
+
+# Consultar ICAP
+curl -X POST http://localhost:8002/rpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "bank_analytics",
+      "arguments": {"metric_or_query": "ICAP de INVEX últimos 12 meses"}
+    },
+    "id": 3
+  }'
+```
+
+### Respuesta del Plugin
+
+El plugin retorna un objeto JSON con:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "IMOR de INVEX vs Sistema (2024)\n\nINVEX: 2.34%\nSistema: 2.18%\n..."
+      },
+      {
+        "type": "resource",
+        "resource": {
+          "uri": "data:application/json;base64,...",
+          "mimeType": "application/json",
+          "text": "{\"chart_type\": \"line\", \"data\": [...], \"layout\": {...}}"
+        }
+      }
+    ]
+  },
+  "id": 1
+}
+```
+
+**Campos de respuesta:**
+- `content[0].text`: Resumen textual de los datos
+- `content[1].resource`: Configuración Plotly para visualización interactiva
+  - `chart_type`: Tipo de gráfico (`line`, `bar`, `grouped_bar`, `table`)
+  - `data`: Series de datos para el gráfico
+  - `layout`: Configuración de ejes, títulos, colores
 
 ---
 
