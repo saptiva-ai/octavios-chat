@@ -14,11 +14,17 @@ class MonthlyKPI(Base):
     # Carteras
     cartera_total = Column(Float)
     cartera_comercial_total = Column(Float)
+    cartera_comercial_sin_gob = Column(Float, nullable=True)  # Comercial - Gobierno
     cartera_consumo_total = Column(Float)
     cartera_vivienda_total = Column(Float)
     entidades_gubernamentales_total = Column(Float)
     entidades_financieras_total = Column(Float)
     empresarial_total = Column(Float)
+
+    # Etapas de Cartera Total (montos absolutos IFRS9)
+    cartera_total_etapa_1 = Column(Float, nullable=True)
+    cartera_total_etapa_2 = Column(Float, nullable=True)
+    cartera_total_etapa_3 = Column(Float, nullable=True)
 
     # Calidad de Cartera
     cartera_vencida = Column(Float)
@@ -40,8 +46,13 @@ class MonthlyKPI(Base):
     ct_etapa_2 = Column(Float, nullable=True)
     ct_etapa_3 = Column(Float, nullable=True)
 
+    # Porcentaje de Etapas (% sobre cartera total)
+    pct_etapa_1 = Column(Float, nullable=True)
+    pct_etapa_2 = Column(Float, nullable=True)
+    pct_etapa_3 = Column(Float, nullable=True)
+
     # Quebrantos Comerciales
-    quebrantos_cc = Column(Float, nullable=True)
+    quebrantos_comerciales = Column(Float, nullable=True)  # Renamed from quebrantos_cc
     quebrantos_vs_cartera_cc = Column(Float, nullable=True)  # Ratio quebrantos / cartera comercial
 
     # Tasas
@@ -51,6 +62,9 @@ class MonthlyKPI(Base):
     tda_cartera_total = Column(Float, nullable=True)
     tasa_sistema = Column(Float, nullable=True)  # Tasa Efectiva Sistema
     tasa_invex_consumo = Column(Float, nullable=True)  # Tasa Efectiva INVEX Consumo
+
+    # Market Share
+    market_share_pct = Column(Float, nullable=True)  # % de cartera sobre sistema total
 
     # Metadata
     banco_norm = Column(String, index=True)  # Nombre normalizado (ej: INVEX, BBVA)

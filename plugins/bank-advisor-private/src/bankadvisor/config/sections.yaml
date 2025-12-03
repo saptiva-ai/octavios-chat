@@ -261,7 +261,7 @@ sections:
   # =========================================================================
   - id: quebrantos_cuadro
     title: "Quebrantos Comerciales"
-    field: "quebrantos_cc"
+    field: "quebrantos_comerciales"
     type: "currency"
     unit: "MM MXN"
     ylim: null
@@ -274,7 +274,7 @@ sections:
 
   - id: quebrantos_grafica
     title: "Evolucion Quebrantos"  # S0-05: Título contextual
-    field: "quebrantos_cc"
+    field: "quebrantos_comerciales"
     type: "currency"
     unit: "MM MXN"
     ylim: null
@@ -409,6 +409,32 @@ sections:
     mode: "timeline_with_summary"  # CONVERGENCIA PDF B
     temporal_range: ["2017-01-01", "2024-12-31"]
     note: "Tasa promedio ponderada para créditos corporativos en ME"
+
+  # =========================================================================
+  # Market Share / Participación de Mercado
+  # =========================================================================
+  - id: market_share_cuadro
+    title: "Market Share (PDM)"
+    field: "market_share_pct"
+    type: "ratio"
+    unit: "%"
+    ylim: [0, 30]
+    decimals: 2
+    mode: "dashboard_month_comparison"
+    show_variation_chart: true
+    temporal_range: ["2017-01-01", "2024-12-31"]
+    note: "PDM = % de cartera sobre cartera total del sistema"
+
+  - id: market_share_grafica
+    title: "Evolución Market Share"
+    field: "market_share_pct"
+    type: "ratio"
+    unit: "%"
+    ylim: [0, 30]
+    decimals: 2
+    mode: "timeline_with_summary"
+    temporal_range: ["2017-01-01", "2024-12-31"]
+    note: "PDM = % de cartera sobre cartera total del sistema"
 
   # =========================================================================
   # SECCIONES EXTERNAS (Para futuro)

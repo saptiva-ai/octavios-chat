@@ -555,12 +555,21 @@ def calculate_pe(df: pl.LazyFrame) -> pl.LazyFrame:
 
 def calculate_quebrantos_ratio(df: pl.LazyFrame) -> pl.LazyFrame:
     """Calculate quebrantos vs cartera ratio."""
-    if "quebrantos_cc" not in get_cols(df):
+    cols = get_cols(df)
+
+    # Check for either column name (quebrantos_comerciales or legacy quebrantos_cc)
+    quebrantos_col = None
+    if "quebrantos_comerciales" in cols:
+        quebrantos_col = "quebrantos_comerciales"
+    elif "quebrantos_cc" in cols:
+        quebrantos_col = "quebrantos_cc"
+
+    if quebrantos_col is None:
         return df
 
     return df.with_columns([
         pl.when(pl.col("cartera_comercial_total") > 0)
-        .then(pl.col("quebrantos_cc") / pl.col("cartera_comercial_total"))
+        .then(pl.col(quebrantos_col) / pl.col("cartera_comercial_total"))
         .otherwise(None)
         .alias("quebrantos_vs_cartera_cc")
     ])
