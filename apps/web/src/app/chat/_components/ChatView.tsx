@@ -791,6 +791,15 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                     // Store bank_chart data in metadata to be included in done event
                     if (!metaData) metaData = {};
                     metaData.bank_chart_data = event.data;
+                  } else if (event.type === "bank_clarification") {
+                    // HU3.1: Handle bank_clarification event from streaming
+                    // Store clarification data to display options to user
+                    if (!metaData) metaData = {};
+                    metaData.bank_clarification_data = event.data;
+                    console.warn(
+                      "[❓ BANK_CLARIFICATION] Storing clarification data:",
+                      event.data,
+                    );
                   } else if (event.type === "artifact_created") {
                     // 🆕 Phase 2: Handle artifact_created event (bank_chart persistence)
                     // Store artifact_id in metadata

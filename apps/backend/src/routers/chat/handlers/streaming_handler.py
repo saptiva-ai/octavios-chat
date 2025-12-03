@@ -827,6 +827,7 @@ class StreamingHandler:
             # The is_bank_query() function determines if the message is banking-related
             bank_chart_data = None
             from ....services.tool_execution_service import ToolExecutionService
+            from ....models.chat import ChatMessageModel
 
             logger.debug(
                 "Bank advisor global mode - checking for bank analytics query",
@@ -834,9 +835,30 @@ class StreamingHandler:
                 request_id=context.request_id
             )
 
+            # Get recent messages for clarification context detection
+            recent_messages = []
+            try:
+                recent_msgs = await ChatMessageModel.find(
+                    ChatMessageModel.chat_id == chat_session.id
+                ).sort(-ChatMessageModel.created_at).limit(5).to_list()
+
+                # Convert to dict format with metadata for clarification detection
+                for msg in reversed(recent_msgs):
+                    recent_messages.append({
+                        "role": msg.role.value,
+                        "content": msg.content,
+                        "metadata": msg.metadata if hasattr(msg, 'metadata') else {}
+                    })
+            except Exception as e:
+                logger.warning(
+                    "Failed to load recent messages for clarification context",
+                    error=str(e)
+                )
+
             bank_chart_data = await ToolExecutionService.invoke_bank_analytics(
                 message=context.message,
-                user_id=user_id
+                user_id=user_id,
+                recent_messages=recent_messages if recent_messages else None
             )
 
             # Note: bank_chart_data will be passed to _stream_chat_response
@@ -2056,12 +2078,22 @@ Escribe la respuesta de forma fluida y profesional, como un analista financiero.
                 # BA-P0-004: Include bank_chart_data in metadata for persistence
                 if bank_chart_data:
                     chart_data_dict = bank_chart_data if isinstance(bank_chart_data, dict) else bank_chart_data.model_dump(mode='json')
-                    assistant_metadata["bank_chart_data"] = chart_data_dict
-                    logger.info(
-                        "💾 Saving bank_chart_data in message metadata",
-                        metric=chart_data_dict.get("metric_name"),
-                        has_sql=bool(chart_data_dict.get("metadata", {}).get("sql_generated"))
-                    )
+
+                    # HU3.1: Check if this is a clarification response
+                    if chart_data_dict.get("type") == "clarification":
+                        assistant_metadata["bank_clarification_data"] = chart_data_dict
+                        logger.info(
+                            "💾 Saving bank_clarification_data in message metadata",
+                            original_query=chart_data_dict.get("context", {}).get("original_query"),
+                            options_count=len(chart_data_dict.get("options", []))
+                        )
+                    else:
+                        assistant_metadata["bank_chart_data"] = chart_data_dict
+                        logger.info(
+                            "💾 Saving bank_chart_data in message metadata",
+                            metric=chart_data_dict.get("metric_name"),
+                            has_sql=bool(chart_data_dict.get("metadata", {}).get("sql_generated"))
+                        )
 
                 # Save assistant message
                 assistant_message = await chat_service.add_assistant_message(

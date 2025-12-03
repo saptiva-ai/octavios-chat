@@ -58,37 +58,80 @@ class QuerySpecParser:
     }
 
     METRIC_MAP: Dict[str, str] = {
+        # IMOR - Índice de Morosidad
         "imor": "IMOR",
         "imor_cuadro": "IMOR",
         "morosidad": "IMOR",
+        # ICOR - Índice de Cobertura
         "icor": "ICOR",
         "icor_cuadro": "ICOR",
         "cobertura": "ICOR",
+        # Cartera
         "cartera_total": "CARTERA_TOTAL",
         "cartera total": "CARTERA_TOTAL",
         "cartera": "CARTERA_TOTAL",
         "cartera_comercial": "CARTERA_COMERCIAL",
         "cartera comercial": "CARTERA_COMERCIAL",
         "comercial": "CARTERA_COMERCIAL",
+        "cartera comercial sin gobierno": "CARTERA_COMERCIAL",
         "cartera_consumo": "CARTERA_CONSUMO",
         "cartera consumo": "CARTERA_CONSUMO",
         "cartera_vivienda": "CARTERA_VIVIENDA",
+        "cartera vivienda": "CARTERA_VIVIENDA",
         "cartera vencida": "CARTERA_VENCIDA",
+        "cartera_vencida": "CARTERA_VENCIDA",
+        # Reservas
         "reservas": "RESERVAS",
-        # SUPPORTED (columns exist but data may be empty - see ETL status)
+        "reservas totales": "RESERVAS",
+        "variación de reservas": "RESERVAS",
+        "variacion de reservas": "RESERVAS",
+        # ICAP - Índice de Capitalización
         "icap": "ICAP",
         "icap_cuadro": "ICAP",
         "icap_total": "ICAP",
         "capitalizacion": "ICAP",
+        "capitalización": "ICAP",
+        # TDA - Tasa de Deterioro Ajustada
         "tda": "TDA",
         "tda_cuadro": "TDA",
         "deterioro": "TDA",
+        "tasa de deterioro": "TDA",
+        "tasa deterioro ajustada": "TDA",
+        # Etapas de Deterioro
+        "etapas de deterioro": "ETAPAS_DETERIORO",
+        "etapas deterioro": "ETAPAS_DETERIORO",
+        # Pérdida Esperada
+        "pérdida esperada": "PE_TOTAL",
+        "perdida esperada": "PE_TOTAL",
+        "pe_total": "PE_TOTAL",
+        "pe total": "PE_TOTAL",
+        # Quebrantos
+        "quebrantos": "QUEBRANTOS",
+        "quebrantos comerciales": "QUEBRANTOS",
+        # Tasas de Interés - Corporativas
         "tasa_mn": "TASA_MN",
         "tasa mn": "TASA_MN",
         "tasa moneda nacional": "TASA_MN",
+        "tasa corporativa mn": "TASA_MN",
+        "tasa corporativa moneda nacional": "TASA_MN",
+        "credito corporativo mn": "TASA_MN",
         "tasa_me": "TASA_ME",
         "tasa me": "TASA_ME",
         "tasa moneda extranjera": "TASA_ME",
+        "tasa corporativa me": "TASA_ME",
+        "tasa corporativa moneda extranjera": "TASA_ME",
+        "credito corporativo me": "TASA_ME",
+        # Tasas de Interés - Efectivas
+        "tasa_sistema": "TASA_SISTEMA",
+        "tasa sistema": "TASA_SISTEMA",
+        "tasa efectiva": "TASA_SISTEMA",
+        "tasa efectiva sistema": "TASA_SISTEMA",
+        "tasa interés efectiva": "TASA_SISTEMA",
+        "tasa interes efectiva": "TASA_SISTEMA",
+        "tasa_invex_consumo": "TASA_INVEX_CONSUMO",
+        "tasa invex consumo": "TASA_INVEX_CONSUMO",
+        "tasa invex": "TASA_INVEX_CONSUMO",
+        "tasa efectiva invex": "TASA_INVEX_CONSUMO",
     }
 
     # Regex patterns for heuristic fallback
@@ -116,9 +159,15 @@ Consulta del usuario: {user_query}
 Pista de métrica: {intent_hint}
 Modo sugerido: {mode_hint}
 
-Métricas disponibles: IMOR, ICOR, CARTERA_COMERCIAL, CARTERA_TOTAL, CARTERA_CONSUMO, CARTERA_VIVIENDA, CARTERA_VENCIDA, RESERVAS, ICAP, TDA, TASA_MN, TASA_ME
+Métricas disponibles: IMOR, ICOR, CARTERA_COMERCIAL, CARTERA_TOTAL, CARTERA_CONSUMO, CARTERA_VIVIENDA, CARTERA_VENCIDA, RESERVAS, ICAP, TDA, TASA_MN, TASA_ME, PE_TOTAL, QUEBRANTOS, ETAPAS_DETERIORO, TASA_SISTEMA, TASA_INVEX_CONSUMO
 
-Nota: ICAP, TDA, TASA_MN, TASA_ME tienen columnas en DB pero los datos aún no están poblados por el ETL. Las queries se procesarán pero pueden devolver resultados vacíos.
+Aliases importantes:
+- "pérdida esperada" → PE_TOTAL
+- "quebrantos comerciales" → QUEBRANTOS
+- "etapas de deterioro" → ETAPAS_DETERIORO
+- "tasa efectiva sistema" → TASA_SISTEMA
+- "tasa invex consumo" → TASA_INVEX_CONSUMO
+- "tasa corporativa mn/me" → TASA_MN/TASA_ME
 
 Bancos disponibles: INVEX, SISTEMA (usa SISTEMA para "sistema bancario" o "promedio")
 

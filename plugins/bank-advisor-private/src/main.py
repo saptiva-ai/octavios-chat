@@ -1096,12 +1096,38 @@ async def _try_nl2sql_pipeline(user_query: str, mode: str) -> Optional[Dict[str,
             confidence=spec.confidence_score,
             missing=spec.missing_fields
         )
+        # Build clarification response with suggestions based on missing fields
+        missing = spec.missing_fields
+        options = []
+        suggestion_parts = []
+
+        if "time_range" in missing:
+            options.extend([
+                {"id": "last_6_months", "label": "Últimos 6 meses", "description": "Datos de los últimos 6 meses"},
+                {"id": "last_12_months", "label": "Últimos 12 meses", "description": "Datos del último año"},
+                {"id": "year_2024", "label": "Año 2024", "description": "Datos completos de 2024"}
+            ])
+            suggestion_parts.append("el periodo de tiempo")
+
+        if "bank_names" in missing or not spec.bank_names:
+            options.extend([
+                {"id": "invex", "label": "INVEX", "description": "Solo datos de INVEX"},
+                {"id": "sistema", "label": "Sistema", "description": "Comparativa del sistema bancario"}
+            ])
+            suggestion_parts.append("el banco")
+
+        # Return clarification instead of error
         return {
-            "success": False,
-            "error_code": "incomplete_spec",
-            "error": "ambiguous_query",
-            "message": f"Query is incomplete. Missing: {', '.join(spec.missing_fields)}",
-            "confidence": spec.confidence_score
+            "success": True,
+            "type": "clarification",
+            "message": f"Para completar tu consulta sobre '{user_query}', por favor especifica {' y '.join(suggestion_parts)}.",
+            "options": options,
+            "context": {
+                "original_query": user_query,
+                "detected_metric": spec.metric,
+                "missing_fields": missing,
+                "banks": spec.bank_names or []  # Include detected banks for LLM context
+            }
         }
 
     # Step 2: Retrieve RAG context
