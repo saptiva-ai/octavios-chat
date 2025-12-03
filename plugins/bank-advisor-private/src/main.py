@@ -25,6 +25,7 @@ from sqlalchemy import text
 # Import bankadvisor modules
 from bankadvisor.db import AsyncSessionLocal, init_db
 from bankadvisor.services.analytics_service import AnalyticsService
+# Q1 2025: Legacy IntentService removed, only NlpIntentService remains
 from bankadvisor.services.intent_service import NlpIntentService, Intent
 from bankadvisor.services.visualization_service import VisualizationService
 
