@@ -30,6 +30,7 @@ def get_cols(df: pl.LazyFrame) -> List[str]:
 
 BANK_NAME_MAPPING = {
     # Normalize common variations
+    "BBVA MÉXICO": "BBVA",  # With accent (from Instituciones.xlsx)
     "BBVA MEXICO": "BBVA",
     "BBVA BANCOMER": "BBVA",
     "SANTANDER MEXICO": "SANTANDER",

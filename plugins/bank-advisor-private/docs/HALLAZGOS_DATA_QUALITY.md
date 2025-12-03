@@ -20,7 +20,21 @@ Se ejecutó validación completa de integridad de datos sobre 7 métricas × 7 b
 
 ## 🔴 Problemas Críticos (P0) - Requieren Acción Inmediata
 
-### 1. ICOR: Valores Negativos Fuera de Rango
+### 1. ICOR: Valores Negativos Fuera de Rango ✅ RESUELTO
+
+**Status**: ✅ **FIXED** (2025-12-03)
+
+**Solución Aplicada**:
+- Modificado `calculate_icor()` en `etl/transforms_polars.py` para usar `.abs()` en reservas
+- Formula corregida: `|reservas_etapa_todas| / cartera_vencida`
+- ETL re-ejecutado: INVEX ahora muestra ICOR = 108.65% (antes: -1.09%)
+- **Todos los valores ahora positivos y dentro del rango esperado**
+
+**Commit**: c3bdb203 - fix(etl): Fix ICOR negative values using absolute value
+
+---
+
+### 2. ICOR: Valores Negativos Fuera de Rango (HISTÓRICO - RESUELTO)
 
 **Score**: 0/100 para todos los bancos (INVEX, SISTEMA, SANTANDER, BANORTE, HSBC, CITIBANAMEX)
 
@@ -110,99 +124,93 @@ Latest Value: 0.00%
 
 ## 🟠 Problemas Importantes (P1)
 
-### 3. BBVA: Sin Datos para Ninguna Métrica
+### 3. BBVA: Sin Datos para Ninguna Métrica ✅ RESUELTO
 
-**Score**: 50/100 (100% NULLs en todas las métricas)
+**Status**: ✅ **FIXED** (2025-12-03)
 
-**Problema**:
+**Problema Original**:
+- BBVA tenía solo 75 registros hasta 2023-04-01 (hace 2 años)
+- Todas las métricas con valores 0 o NULL
+
+**Causa Raíz Identificada**:
+- El catálogo `Instituciones.xlsx` usa "BBVA MÉXICO" (con acento)
+- El mapping `BANK_NAME_MAPPING` solo tenía "BBVA MEXICO" (sin acento)
+- La búsqueda `if pattern in name` fallaba: "BBVA MEXICO" ∉ "BBVA MÉXICO"
+- Resultado: "BBVA MÉXICO" no se normalizaba a "BBVA"
+
+**Solución Aplicada**:
+1. Agregado "BBVA MÉXICO" (con acento) al `BANK_NAME_MAPPING` en `etl/transforms_polars.py:33`
+2. Re-ejecutado ETL: cargó 28 meses adicionales (mayo 2023 a julio 2025)
+3. **Resultado**: 103 registros totales (antes: 75), datos hasta 2025-07-01
+
+**Validación**:
 ```
-BBVA tiene 75 registros pero:
-- IMOR: 100% NULL
-- ICOR: 100% NULL
-- ICAP: 100% NULL
-- TDA: 100% NULL
-- TASA_MN: 100% NULL
-- TASA_ME: 100% NULL
-
-Única métrica con datos: Cartera Total (pero 100% zeros)
+Date range: 2017-01-01 to 2025-07-01
+Total records: 103
+Recent values:
+- Cartera Total: ~252M MXN
+- IMOR: 0.30%
+- ICOR: 0.81%
 ```
 
-**Fecha de datos**: Última fecha 2023-04-01 (hace 2 años!)
+**File Modified**: `etl/transforms_polars.py:33`
 
-**Causa Raíz**:
-- BBVA dejó de sincronizarse en abril 2023
-- ETL no está cargando datos recientes de BBVA
-- Posiblemente cambio en formato de reporte CNBV
-
-**Implicaciones**:
-- Comparaciones "INVEX vs BBVA" fallan o muestran datos desactualizados
-- Usuario espera datos actuales pero obtiene de hace 2 años
-
-**Acción Requerida**:
-1. **Verificar logs de ETL para BBVA**:
-   ```bash
-   grep "BBVA" logs/etl_*.log | tail -50
-   ```
-
-2. **Revisar mapeo de nombres**:
-   ```python
-   # ¿CNBV cambió nombre de "BBVA" a "BBVA BANCOMER" o "BBVA MÉXICO"?
-   # Verificar BANK_ALIASES en etl/bank_normalizer.py
-   ```
-
-3. **Re-ejecutar ETL con logs debug** para BBVA
-
-**Prioridad**: 🟠 **ALTA** - Banco importante sin datos
+**Prioridad**: 🟠 **ALTA** - Banco importante sin datos → ✅ RESUELTO
 
 ---
 
-### 4. TDA: 91.3% Valores en Zero
+### 4. TDA: 91.3% Valores en Zero ✅ DOCUMENTADO
 
-**Score**: 73/100 para todos los bancos
+**Status**: ✅ **DOCUMENTED** (2025-12-03) - Comportamiento esperado
 
-**Problema**:
+**Análisis Realizado**:
+TDA (Tasa de Descuentos Anuales) es una **métrica anual reportada solo en enero**, no mensual.
+
+**Datos Validados**:
 ```
+Coverage: 9/103 valores non-zero por banco (8.7%)
+Frecuencia: 1 valor por año (enero, excepto 2022 que es febrero)
 Expected Range: 0 - 100 %
 Actual Data: 91.3% de valores = 0.00
 Non-zero Range: 0 - 6.91%
 Latest Value: 0.00%
 ```
 
-**Análisis**:
-- TDA solo tiene valores != 0 en ~9 meses de 103 (2019-2020 principalmente)
-- Últimos 5+ años: todos 0.00
-- Métrica parece estar obsoleta o mal calculada
+**Fechas con Datos Non-Zero**:
+- 2017-01-01: INVEX = 4.25%, HSBC = 6.91%, SISTEMA = 4.11%
+- 2018-01-01: INVEX = 5.52%, HSBC = 5.50%, SISTEMA = 3.96%
+- 2019-01-01: INVEX = 4.47%, HSBC = 4.29%, SISTEMA = 3.89%
+- 2020-01-01: INVEX = 3.44%, HSBC = 4.52%, SISTEMA = 4.10%
+- 2021-01-01: INVEX = 3.80%, HSBC = 5.35%, SISTEMA = 4.50%
+- 2022-02-01: INVEX = 2.95%, HSBC = 6.00%, SISTEMA = 3.41%
+- 2023-01-01: INVEX = 3.01%, HSBC = 5.48%, SISTEMA = 3.03%
+- 2024-01-01: INVEX = 4.82%, HSBC = 4.54%, SISTEMA = 2.88%
+- 2025-01-01: INVEX = 2.31%, HSBC = 2.34%, SISTEMA = 1.49%
 
-**Causa Raíz Posible**:
-- TDA (Tasa de Deterioro Ajustada) puede ser métrica calculada compleja
-- Fórmula puede depender de campos que ya no existen en CNBV
-- O métrica solo aplicaba a cierto periodo regulatorio
+**Conclusión**:
+- ✅ **TDA es métrica anual válida**, reportada cada enero
+- ✅ **El 91.3% de zeros es correcto** (11 meses sin datos + 1 mes con datos)
+- ✅ **No requiere corrección** - comportamiento esperado
 
-**Implicaciones**:
-- Queries "TDA de INVEX" muestran línea plana en 0 (últimos años)
-- Solo datos históricos 2019-2020 tienen valores
+**Recomendación para UI**:
+- Mostrar TDA como "Métrica Anual" con tooltip: "Reportada en enero de cada año"
+- Visualizaciones deben usar agregación anual, no mensual
+- Filtros de fecha deben sugerir comparación año a año
 
-**Acción Requerida**:
-1. **Investigar definición de TDA**:
-   - ¿Métrica actual o histórica?
-   - ¿CNBV sigue requiriendo reporte?
-
-2. **Opciones**:
-   - **Si obsoleta**: Marcar como "histórica" en metadata, agregar warning en UI
-   - **Si actual**: Corregir cálculo en ETL
-
-3. **Comunicar al usuario**: "TDA solo disponible para 2019-2020"
-
-**Prioridad**: 🟠 **MEDIA** - Métrica con datos pero limitados
+**Prioridad**: ✅ **RESUELTO** - No es problema, es comportamiento esperado de métrica anual
 
 ---
 
-### 5. Cartera Total BBVA: 100% Zeros
+### 5. Cartera Total BBVA: 100% Zeros ✅ RESUELTO
 
-**Score**: 70/100
+**Status**: ✅ **FIXED** (2025-12-03) - Resuelto con fix de normalización BBVA
 
-**Problema**:
-- BBVA tiene 75 registros de cartera_total pero todos son 0.00
+**Problema Original**:
+- BBVA tenía 75 registros de cartera_total pero todos eran 0.00
+
+**Solución**:
+- Mismo fix que punto #3: agregado "BBVA MÉXICO" al mapping
+- Después del ETL: cartera_total ahora tiene valores reales (~252M MXN)
 - Otros bancos tienen valores válidos (INVEX: 1,775 MDP, SISTEMA: 3.1M MDP)
 
 **Relacionado con**: Problema #3 (BBVA sin datos)
