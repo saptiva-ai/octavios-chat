@@ -25,12 +25,13 @@ from sqlalchemy import text
 # Import bankadvisor modules
 from bankadvisor.db import AsyncSessionLocal, init_db
 from bankadvisor.services.analytics_service import AnalyticsService
-from bankadvisor.services.intent_service import IntentService, NlpIntentService, Intent
+from bankadvisor.services.intent_service import NlpIntentService, Intent
 from bankadvisor.services.visualization_service import VisualizationService
 
 # HU3: NLP Query Interpretation imports
 from bankadvisor.config_service import get_config
-from bankadvisor.entity_service import EntityService
+# EntityService removed - Q1 2025 pipeline consolidation
+# from bankadvisor.entity_service import EntityService
 
 logger = structlog.get_logger(__name__)
 
@@ -981,157 +982,75 @@ async def _bank_analytics_impl(
         # Continue to NL2SQL or legacy fallback
 
     # =========================================================================
-    # PHASE 2-3: TRY NL2SQL PIPELINE SECOND
+    # NL2SQL PIPELINE ONLY (Q1 2025: Legacy pipeline removed)
     # =========================================================================
-    if NL2SQL_AVAILABLE and _query_parser and _context_service and _sql_generator:
-        try:
-            nl2sql_result = await _try_nl2sql_pipeline(metric_or_query, mode)
-            if nl2sql_result and nl2sql_result.get("success"):
-                # Performance tracking
-                end_time = datetime.utcnow()
-                duration_ms = (end_time - start_time).total_seconds() * 1000
 
-                logger.info(
-                    "tool.bank_analytics.nl2sql_success",
-                    query=metric_or_query,
-                    pipeline="nl2sql",
-                    duration_ms=round(duration_ms, 2)
-                )
-
-                logger.info(
-                    "bank_analytics.performance",
-                    query=metric_or_query,
-                    total_ms=round(duration_ms, 2),
-                    pipeline="nl2sql"
-                )
-
-                return nl2sql_result
-
-            # NL2SQL returned error or low confidence - try legacy fallback
-            logger.warning(
-                "tool.bank_analytics.nl2sql_fallback",
-                query=metric_or_query,
-                reason=nl2sql_result.get("error_code") if nl2sql_result else "unknown",
-                fallback="Using legacy intent-based logic"
-            )
-
-        except Exception as e:
-            logger.error(
-                "tool.bank_analytics.nl2sql_error",
-                query=metric_or_query,
-                error=str(e),
-                exc_info=True,
-                fallback="Using legacy intent-based logic"
-            )
-            # Continue to legacy fallback
-
-    # =========================================================================
-    # LEGACY FALLBACK: INTENT-BASED LOGIC (BACKWARD COMPATIBLE)
-    # =========================================================================
-    try:
-        # Disambiguate user query using NLP
-        intent = IntentService.disambiguate(metric_or_query)
-
-        if intent.is_ambiguous:
-            logger.warning(
-                "tool.bank_analytics.ambiguous",
-                query=metric_or_query,
-                options=intent.options[:3],
-                pipeline="legacy"
-            )
-            return {
-                "error": "ambiguous_query",
-                "message": f"Query '{metric_or_query}' es ambigua",
-                "options": intent.options[:5],
-                "suggestion": "Por favor, especifica: " + ", ".join(intent.options[:3])
-            }
-
-        # Get section config (contains field name, title, etc.)
-        config = IntentService.get_section_config(intent.resolved_id)
-
-        # Execute SQL query with security hardening
-        async with AsyncSessionLocal() as session:
-            payload = await AnalyticsService.get_dashboard_data(
-                session,
-                metric_or_query=config["field"],
-                mode=mode
-            )
-
-        # Build Plotly visualization config
-        plotly_config = VisualizationService.build_plotly_config(
-            payload["data"]["months"],
-            config
-        )
-
-        # Extract data_as_of from payload (structure varies)
-        data_as_of = payload.get("data_as_of", payload.get("metadata", {}).get("data_as_of", "N/A"))
-
-        # =====================================================================
-        # PERFORMANCE TRACKING: Calculate duration
-        # =====================================================================
-        end_time = datetime.utcnow()
-        duration_ms = (end_time - start_time).total_seconds() * 1000
-        n_rows = len(payload["data"]["months"])
-
-        logger.info(
-            "tool.bank_analytics.success",
-            metric=config["field"],
-            months_returned=n_rows,
-            data_as_of=data_as_of,
-            pipeline="legacy",
-            duration_ms=round(duration_ms, 2)
-        )
-
-        # Log performance metrics separately for easier querying
-        logger.info(
-            "bank_analytics.performance",
+    # Ensure NL2SQL services are available
+    if not (NL2SQL_AVAILABLE and _query_parser and _context_service and _sql_generator):
+        logger.error(
+            "tool.bank_analytics.nl2sql_unavailable",
             query=metric_or_query,
-            metric_id=config["field"],
-            intent=mode,
-            total_ms=round(duration_ms, 2),
-            n_rows=n_rows,
-            pipeline="legacy"
+            message="NL2SQL services not initialized"
         )
-
-        # Generate SQL representation for frontend display
-        sql_generated = f"""SELECT
-    fecha,
-    banco_norm,
-    {config["field"]}
-FROM monthly_kpis
-ORDER BY fecha ASC;"""
-
         return {
-            "data": payload["data"],
-            "metadata": {
-                "metric": config["field"],
-                "data_as_of": data_as_of,
-                "title": payload.get("title", config.get("title", "Análisis Bancario")),
-                "pipeline": "legacy",
-                "sql_generated": sql_generated,
-                "performance": {
-                    "duration_ms": round(duration_ms, 2),
-                    "rows_returned": n_rows
-                }
-            },
-            "plotly_config": plotly_config,
-            "title": config.get("title", payload.get("title", "Análisis Bancario")),
-            "data_as_of": data_as_of
+            "error": "service_unavailable",
+            "message": "NL2SQL service not available. Check logs for initialization errors.",
+            "suggestion": "Contact support if this persists."
         }
 
-    except ValueError as ve:
-        # Security validation failure (invalid metric)
-        logger.warning("tool.bank_analytics.validation_error", error=str(ve))
+    try:
+        nl2sql_result = await _try_nl2sql_pipeline(metric_or_query, mode)
+
+        if nl2sql_result and nl2sql_result.get("success"):
+            # Performance tracking
+            end_time = datetime.utcnow()
+            duration_ms = (end_time - start_time).total_seconds() * 1000
+
+            logger.info(
+                "tool.bank_analytics.nl2sql_success",
+                query=metric_or_query,
+                pipeline="nl2sql",
+                duration_ms=round(duration_ms, 2)
+            )
+
+            logger.info(
+                "bank_analytics.performance",
+                query=metric_or_query,
+                total_ms=round(duration_ms, 2),
+                pipeline="nl2sql"
+            )
+
+            return nl2sql_result
+
+        # NL2SQL returned error or failed
+        error_message = nl2sql_result.get("message", "Query processing failed") if nl2sql_result else "Unknown error"
+        error_code = nl2sql_result.get("error_code", "processing_failed") if nl2sql_result else "processing_failed"
+
+        logger.warning(
+            "tool.bank_analytics.nl2sql_failed",
+            query=metric_or_query,
+            error_code=error_code,
+            message=error_message
+        )
+
         return {
-            "error": "validation_failed",
-            "message": str(ve)
+            "error": error_code,
+            "message": error_message,
+            "suggestions": nl2sql_result.get("suggestions", []) if nl2sql_result else [],
+            "query": metric_or_query
         }
 
     except Exception as e:
-        logger.error("tool.bank_analytics.error", error=str(e), exc_info=True)
+        logger.error(
+            "tool.bank_analytics.nl2sql_exception",
+            query=metric_or_query,
+            error=str(e),
+            exc_info=True
+        )
         return {
             "error": "internal_error",
-            "message": "Error interno procesando la consulta"
+            "message": f"Error processing query: {str(e)}",
+            "query": metric_or_query
         }
 
 
