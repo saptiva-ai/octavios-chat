@@ -720,7 +720,8 @@ async def _try_hu3_nlp_pipeline(
                     banks=entities.banks if entities.banks else None,
                     date_start=entities.date_start,
                     date_end=entities.date_end,
-                    intent=intent_result.intent.value
+                    intent=intent_result.intent.value,
+                    user_query=user_query
                 )
 
             # =========================================================================

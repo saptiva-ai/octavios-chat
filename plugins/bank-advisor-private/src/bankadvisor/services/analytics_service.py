@@ -523,7 +523,8 @@ class AnalyticsService:
         banks: List[str] = None,
         date_start=None,
         date_end=None,
-        intent: str = "evolution"
+        intent: str = "evolution",
+        user_query: str = None
     ) -> Dict[str, Any]:
         """
         Get metric data with filters for HU3 NLP pipeline.
