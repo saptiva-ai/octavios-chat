@@ -1169,51 +1169,85 @@ async def _try_nl2sql_pipeline(user_query: str, mode: str) -> Optional[Dict[str,
     from collections import defaultdict
     from datetime import datetime
 
-    # Group by month (fecha column)
-    data_by_month = defaultdict(dict)
+    # Detect if this is a ranking query (no fecha column, has banco_norm)
+    template_used = sql_result.metadata.get("template", "")
+    is_ranking_query = template_used in ["extended_financieras", "metric_ranking"]
+
     metric_col = spec.metric.lower()
-
-    for row in rows:
-        row_dict = dict(row._mapping)
-        fecha = row_dict.get('fecha')
-        banco = row_dict.get('banco_norm', 'Sistema')
-        value = row_dict.get(metric_col)
-
-        if fecha:
-            # Format month label (e.g., "Jan 2024")
-            if isinstance(fecha, datetime):
-                month_label = fecha.strftime("%b %Y")
-            else:
-                month_label = str(fecha)[:7]  # "2024-01"
-
-            data_by_month[month_label][banco] = value
-
-    # Convert to legacy format
-    # Sort months chronologically, not alphabetically (BA-P0-004)
-    from datetime import datetime
-
-    def parse_month_label(label: str):
-        """Parse month label like 'Jan 2024' to datetime for sorting"""
-        try:
-            return datetime.strptime(label, "%b %Y")
-        except:
-            # Fallback: try ISO format "2024-01"
-            try:
-                return datetime.strptime(label, "%Y-%m")
-            except:
-                # If parsing fails, return label as-is (will sort alphabetically)
-                return label
-
     months_data = []
-    for month_label, banco_values in sorted(data_by_month.items(), key=lambda x: parse_month_label(x[0])):
-        month_entry = {
-            "month_label": month_label,
-            "data": [
-                {"category": banco, "value": val}
-                for banco, val in banco_values.items()
-            ]
-        }
-        months_data.append(month_entry)
+
+    if is_ranking_query:
+        # Ranking queries: format as bar chart with banks on x-axis
+        # Extract the actual column from metadata or fallback to metric_col
+        value_column = sql_result.metadata.get("column", metric_col)
+
+        ranking_data = []
+        for row in rows:
+            row_dict = dict(row._mapping)
+            banco = row_dict.get('banco_norm', 'Desconocido')
+            # Try to get value from the actual column name (e.g., activo_total)
+            value = row_dict.get(value_column)
+            if value is None:
+                # Fallback: try metric_col
+                value = row_dict.get(metric_col)
+            pct_total = row_dict.get('pct_total')
+
+            if value is not None:
+                ranking_data.append({
+                    "category": banco,
+                    "value": value,
+                    "pct_total": pct_total
+                })
+
+        # Format as single month entry for compatibility with VisualizationService
+        if ranking_data:
+            months_data = [{
+                "month_label": "Ranking",
+                "data": ranking_data
+            }]
+    else:
+        # Time series queries: group by fecha column
+        data_by_month = defaultdict(dict)
+
+        for row in rows:
+            row_dict = dict(row._mapping)
+            fecha = row_dict.get('fecha')
+            banco = row_dict.get('banco_norm', 'Sistema')
+            value = row_dict.get(metric_col)
+
+            if fecha:
+                # Format month label (e.g., "Jan 2024")
+                if isinstance(fecha, datetime):
+                    month_label = fecha.strftime("%b %Y")
+                else:
+                    month_label = str(fecha)[:7]  # "2024-01"
+
+                data_by_month[month_label][banco] = value
+
+        # Convert to legacy format
+        # Sort months chronologically, not alphabetically (BA-P0-004)
+
+        def parse_month_label(label: str):
+            """Parse month label like 'Jan 2024' to datetime for sorting"""
+            try:
+                return datetime.strptime(label, "%b %Y")
+            except:
+                # Fallback: try ISO format "2024-01"
+                try:
+                    return datetime.strptime(label, "%Y-%m")
+                except:
+                    # If parsing fails, return label as-is (will sort alphabetically)
+                    return label
+
+        for month_label, banco_values in sorted(data_by_month.items(), key=lambda x: parse_month_label(x[0])):
+            month_entry = {
+                "month_label": month_label,
+                "data": [
+                    {"category": banco, "value": val}
+                    for banco, val in banco_values.items()
+                ]
+            }
+            months_data.append(month_entry)
 
     # Build Plotly config
     # Use spec to determine title and styling
@@ -1234,11 +1268,18 @@ async def _try_nl2sql_pipeline(user_query: str, mode: str) -> Optional[Dict[str,
                 # else: Database values are ALREADY in millions (MDP), no conversion needed
 
     # Add section_config with mode based on template
+    if is_ranking_query:
+        chart_mode = "ranking_bar_chart"
+    elif template_used == "metric_timeseries":
+        chart_mode = "timeline_with_summary"
+    else:
+        chart_mode = "dashboard_month_comparison"
+
     section_config = {
         "title": title,
         "field": spec.metric.lower(),
         "description": f"Query: {user_query}",
-        "mode": "timeline_with_summary" if sql_result.metadata.get("template") == "metric_timeseries" else "dashboard_month_comparison",
+        "mode": chart_mode,
         "type": metric_type
     }
 

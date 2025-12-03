@@ -1764,6 +1764,20 @@ class AnalyticsService:
                 "message": f"Error al calcular market share de {primary_bank}"
             }
 
+    # Mapping from segment codes to actual segment names in DB
+    SEGMENT_CODE_MAP = {
+        "AUTOMOTRIZ": "Credito Automotriz",
+        "CONSUMO_AUTOMOTRIZ": "Credito Automotriz",
+        "NOMINA": "Credito de Nomina",
+        "TDC": "Tarjeta de Credito",
+        "TARJETA": "Tarjeta de Credito",
+        "PERSONALES": "Prestamos Personales",
+        "VIVIENDA": "Credito a la Vivienda",
+        "EMPRESAS": "Credito a Empresas",
+        "CONSUMO": "Consumo Total",
+        "EMPRESARIAL": "Credito a Empresas",
+    }
+
     @staticmethod
     async def get_segment_evolution(
         session: AsyncSession,
@@ -1774,6 +1788,8 @@ class AnalyticsService:
     ) -> Dict[str, Any]:
         """
         Get evolution of a specific metric for a portfolio segment.
+
+        Uses metricas_cartera_segmentada table directly (simplified schema).
 
         Used for questions like:
         - "IMOR automotriz últimos 3 años"
@@ -1790,8 +1806,9 @@ class AnalyticsService:
             Dict with segment evolution data and Plotly config
         """
         from bankadvisor.config_service import get_config
-        from bankadvisor.models.normalized import MetricaCarteraSegmentada, SegmentoCartera, Institucion
+        from bankadvisor.models.kpi import MetricasCarteraSegmentada
         from datetime import datetime, timedelta
+        from sqlalchemy import text
 
         config = get_config()
 
@@ -1800,29 +1817,30 @@ class AnalyticsService:
             end_date = datetime.now().date()
             start_date = end_date - timedelta(days=years * 365)
 
-            # Query segmented data
-            query = select(
-                MetricaCarteraSegmentada.fecha_corte,
-                Institucion.nombre_corto,
-                getattr(MetricaCarteraSegmentada, metric_column)
-            ).join(
-                SegmentoCartera,
-                MetricaCarteraSegmentada.segmento_id == SegmentoCartera.id
-            ).join(
-                Institucion,
-                MetricaCarteraSegmentada.institucion_id == Institucion.id
-            ).where(
-                SegmentoCartera.codigo == segment_code.upper(),
-                MetricaCarteraSegmentada.fecha_corte >= start_date,
-                MetricaCarteraSegmentada.fecha_corte <= end_date
+            # Map segment code to actual segment name
+            segment_name = AnalyticsService.SEGMENT_CODE_MAP.get(
+                segment_code.upper(),
+                segment_code  # Fallback to provided code
             )
 
-            if bank_filter:
-                query = query.where(Institucion.nombre_corto == bank_filter)
+            # Build raw SQL query (simpler and more reliable)
+            sql = text("""
+                SELECT
+                    fecha_corte::date as fecha,
+                    institucion as banco,
+                    {metric}
+                FROM metricas_cartera_segmentada
+                WHERE segmento_nombre = :segment_name
+                  AND fecha_corte::date >= :start_date
+                  AND fecha_corte::date <= :end_date
+                  AND {metric} IS NOT NULL
+                ORDER BY fecha_corte ASC
+            """.format(metric=metric_column))
 
-            query = query.order_by(MetricaCarteraSegmentada.fecha_corte.asc())
-
-            result = await session.execute(query)
+            result = await session.execute(
+                sql,
+                {"segment_name": segment_name, "start_date": start_date, "end_date": end_date}
+            )
             rows = result.fetchall()
 
             if not rows:
@@ -1916,6 +1934,8 @@ class AnalyticsService:
         """
         Get ranking of institutions by metric for a specific segment.
 
+        Uses metricas_cartera_segmentada table directly (simplified schema).
+
         Used for questions like:
         - "IMOR automotriz por banco (Top 5)"
         - "Top 10 bancos con mejor ICOR en consumo"
@@ -1930,41 +1950,41 @@ class AnalyticsService:
             Dict with ranking data and Plotly config
         """
         from bankadvisor.config_service import get_config
-        from bankadvisor.models.normalized import MetricaCarteraSegmentada, SegmentoCartera, Institucion
+        from sqlalchemy import text
 
         config = get_config()
 
         try:
-            # Get latest date
-            latest_date_query = select(func.max(MetricaCarteraSegmentada.fecha_corte))
-            result = await session.execute(latest_date_query)
-            latest_date = result.scalar()
+            # Map segment code to actual segment name
+            segment_name = AnalyticsService.SEGMENT_CODE_MAP.get(
+                segment_code.upper(),
+                segment_code  # Fallback to provided code
+            )
 
-            if not latest_date:
-                return {
-                    "type": "empty",
-                    "message": "No hay datos disponibles"
-                }
+            # Get latest date and ranking using raw SQL
+            sql = text("""
+                WITH latest AS (
+                    SELECT MAX(fecha_corte) as max_fecha
+                    FROM metricas_cartera_segmentada
+                    WHERE segmento_nombre = :segment_name
+                )
+                SELECT
+                    institucion as banco,
+                    {metric}
+                FROM metricas_cartera_segmentada, latest
+                WHERE segmento_nombre = :segment_name
+                  AND fecha_corte = latest.max_fecha
+                  AND {metric} IS NOT NULL
+                  AND institucion NOT ILIKE '%Sistema%'
+                  AND institucion NOT ILIKE '%n.a.%'
+                ORDER BY {metric} ASC
+                LIMIT :top_n
+            """.format(metric=metric_column))
 
-            # Query latest values for segment
-            query = select(
-                Institucion.nombre_corto,
-                getattr(MetricaCarteraSegmentada, metric_column)
-            ).join(
-                SegmentoCartera,
-                MetricaCarteraSegmentada.segmento_id == SegmentoCartera.id
-            ).join(
-                Institucion,
-                MetricaCarteraSegmentada.institucion_id == Institucion.id
-            ).where(
-                SegmentoCartera.codigo == segment_code.upper(),
-                MetricaCarteraSegmentada.fecha_corte == latest_date,
-                Institucion.es_sistema == False  # Exclude SISTEMA aggregate
-            ).order_by(
-                getattr(MetricaCarteraSegmentada, metric_column).asc()  # Lower is better for IMOR
-            ).limit(top_n)
-
-            result = await session.execute(query)
+            result = await session.execute(
+                sql,
+                {"segment_name": segment_name, "top_n": top_n}
+            )
             rows = result.fetchall()
 
             if not rows:

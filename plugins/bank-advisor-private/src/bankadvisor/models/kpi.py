@@ -68,3 +68,51 @@ class MonthlyKPI(Base):
 
     # Metadata
     banco_norm = Column(String, index=True)  # Nombre normalizado (ej: INVEX, BBVA)
+
+
+class MetricasCarteraSegmentada(Base):
+    """
+    Métricas de cartera segmentadas por tipo de crédito.
+
+    Segmentos disponibles:
+    - Credito Automotriz
+    - Credito de Nomina
+    - Tarjeta de Credito
+    - Prestamos Personales
+    - Credito a la Vivienda
+    - Credito a Empresas
+    - etc.
+    """
+    __tablename__ = "metricas_cartera_segmentada"
+
+    id = Column(Integer, primary_key=True, index=True)
+    institucion = Column(String, index=True)
+    fecha_corte = Column(String, index=True)  # Format: YYYY-MM-DD
+    segmento_codigo = Column(String)
+    segmento_nombre = Column(String, index=True)
+    cartera_total = Column(Float)
+    imor = Column(Float, nullable=True)
+    icor = Column(Float, nullable=True)
+    perdida_esperada = Column(Float, nullable=True)
+
+
+class MetricasFinancierasExt(Base):
+    """
+    Métricas financieras extendidas incluyendo activos totales y rentabilidad.
+
+    Contiene datos de ~54 instituciones bancarias.
+    """
+    __tablename__ = "metricas_financieras_ext"
+
+    id = Column(Integer, primary_key=True, index=True)
+    institucion = Column(String, index=True)
+    fecha_corte = Column(String, index=True)  # Format: YYYY-MM-DD
+    activo_total = Column(Float, nullable=True)
+    inversiones_financieras = Column(Float, nullable=True)
+    cartera_total_pm2 = Column(Float, nullable=True)
+    captacion_total = Column(Float, nullable=True)
+    capital_contable = Column(Float, nullable=True)
+    resultado_neto = Column(Float, nullable=True)
+    roa_12m = Column(Float, nullable=True)
+    roe_12m = Column(Float, nullable=True)
+    banco_norm = Column(String, index=True)
