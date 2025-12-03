@@ -42,6 +42,32 @@ El sistema responde con precisión y visualizaciones específicas a las siguient
 
 ---
 
+## 📈 Catálogo de Métricas Disponibles
+
+BankAdvisor soporta un amplio rango de indicadores financieros y de riesgo:
+
+| Métrica | Queries de Ejemplo |
+|---------|-------------------|
+| **Cartera Comercial CC** | `"Cartera comercial de INVEX"`, `"Evolución cartera comercial 2024"` |
+| **Cartera Comercial Sin Gob** | `"Cartera comercial sin gobierno"`, `"CC sin entidades gubernamentales"` |
+| **Pérdida Esperada Total** | `"Pérdida esperada de INVEX"`, `"PE total del sistema"` |
+| **Reservas Totales** | `"Reservas totales de INVEX"`, `"Reservas del sistema 2024"` |
+| **Reservas Totales (Variación)** | `"Variación de reservas INVEX"`, `"Cambio en reservas vs mes anterior"` |
+| **IMOR** | `"IMOR de INVEX"`, `"Índice de morosidad vs sistema"` |
+| **Cartera Vencida** | `"Cartera vencida de INVEX"`, `"Evolución cartera vencida 2024"` |
+| **ICOR** | `"ICOR de INVEX"`, `"Índice de cobertura vs sistema"` |
+| **Etapas de Deterioro (Sistema)** | `"Etapas de deterioro del sistema"`, `"Distribución etapas IFRS9 sistema"` |
+| **Etapas de Deterioro (INVEX)** | `"Etapas de deterioro INVEX"`, `"Etapas 1, 2, 3 de INVEX"` |
+| **Quebrantos Comerciales** | `"Quebrantos comerciales INVEX"`, `"Castigos cartera comercial"` |
+| **ICAP** | `"ICAP de INVEX"`, `"Índice de capitalización vs sistema"` |
+| **Tasa de Deterioro Ajustada** | `"TDA de INVEX"`, `"Tasa deterioro ajustada 2024"` |
+| **Tasa Interés Efectiva (Sistema)** | `"Tasa efectiva del sistema"`, `"TE sistema últimos 12 meses"` |
+| **Tasa Interés Efectiva (INVEX Consumo)** | `"Tasa INVEX consumo"`, `"TE INVEX segmento consumo"` |
+| **Tasa Crédito Corporativo (MN)** | `"Tasa corporativa moneda nacional"`, `"Tasa MN créditos corporativos"` |
+| **Tasa Crédito Corporativo (ME)** | `"Tasa corporativa moneda extranjera"`, `"Tasa ME créditos corporativos"` |
+
+---
+
 ## 🛠️ Quick Start
 
 ### Prerrequisitos
@@ -75,7 +101,7 @@ Valida que las 5 preguntas de negocio y las visualizaciones estén funcionando c
 
 ```bash
 cd plugins/bank-advisor-private
-./test_5_questions.sh
+./scripts/test_5_questions.sh
 ```
 
 ---
@@ -108,7 +134,7 @@ El proyecto cuenta con una suite de pruebas exhaustiva:
 
 | Tipo | Comando | Propósito |
 |------|---------|-----------|
-| **Smoke Test** | `./test_5_questions.sh` | Valida las 5 preguntas críticas de negocio. |
+| **Smoke Test** | `./scripts/test_5_questions.sh` | Valida las 5 preguntas críticas de negocio. |
 | **Demo Test** | `python scripts/smoke_demo_bank_analytics.py` | Valida las 12 queries del demo general. |
 | **Adversarial** | `pytest -m nl2sql_dirty` | Prueba inyecciones SQL y queries maliciosas. |
 | **Unit** | `pytest src/bankadvisor/tests/` | Pruebas unitarias de servicios. |
@@ -118,20 +144,39 @@ El proyecto cuenta con una suite de pruebas exhaustiva:
 
 ## 🏗️ Project Structure
 
+Estructura completa del código fuente y recursos del proyecto:
+
 ```text
 plugins/bank-advisor-private/
-├── config/                 # Configuraciones (synonyms, profiles)
-├── data/                   # Datos raw (CNBV Excel/CSV)
-├── docs/                   # Documentación organizada (core, features, reports)
-├── etl/                    # Scripts de ETL (Extract, Transform, Load)
-├── migrations/             # Scripts SQL de migración
-├── scripts/                # Herramientas de operación y testing
+├── config/                 # Configuraciones y perfiles de cliente
+│   ├── bankadvisor.yaml
+│   ├── synonyms.yaml
+│   └── profiles/
+├── data/                   # Datos crudos (Raw Data - Git Ignored)
+│   └── raw/
+├── docs/                   # Documentación organizada
+│   ├── core/               # Arquitectura, guías de desarrollo y diseños
+│   ├── features/           # Especificaciones funcionales (5 preguntas, ETL)
+│   ├── reports/            # Resultados de pruebas, validaciones y status
+│   └── demos/              # Scripts y planes de demostración
+├── etl/                    # Pipeline de transformación de datos (Polars)
+│   ├── etl_unified.py      # Orquestador principal del ETL unificado
+│   ├── loaders_polars.py   # Cargadores de datos optimizados
+│   └── transforms_polars.py # Transformaciones de negocio
+├── migrations/             # Esquemas y migraciones de base de datos
+│   ├── 000_init_normalized_schema.sql # Esquema base normalizado
+│   └── 004_query_logs_rag_feedback.sql # Tablas para feedback loop
+├── scripts/                # Scripts de operación, testing y mantenimiento
+│   ├── docker-entrypoint.sh # Script de inicio del contenedor
+│   ├── init_bank_advisor_data.sh # Inicializador maestro
+│   ├── test_5_questions.sh # Test suite de las 5 preguntas clave
+│   └── smoke_demo_bank_analytics.py # Test general del demo
 ├── src/                    # Código fuente de la aplicación
-│   ├── bankadvisor/        # Lógica de negocio
-│   │   ├── services/       # Analytics, Intent, SQL Generation
-│   │   └── models/         # Modelos Pydantic/SQLAlchemy
-│   └── main.py             # Entrypoint FastAPI / MCP
-└── tests/                  # Tests de integración y E2E
+│   ├── main.py             # Entrypoint del servidor MCP (FastAPI)
+│   └── bankadvisor/
+│       ├── services/       # Servicios core (Analytics, Intent, SQL Gen, RAG)
+│       └── models/         # Modelos de datos (Pydantic, SQLAlchemy)
+└── tests/                  # Tests automatizados (Unitarios, Integración, E2E)
 ```
 
 ---
