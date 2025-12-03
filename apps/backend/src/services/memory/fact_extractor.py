@@ -8,15 +8,20 @@ Extracts bank names, periods (quarters/years), and financial metrics.
 import re
 from typing import Dict, Optional, Tuple
 
-# Known Mexican banks
+# Known Mexican banks (aligned with BankAdvisor DB)
 BANKS = {
+    # Primary banks (available in BankAdvisor)
     "invex",
     "bbva",
     "banorte",
     "santander",
     "hsbc",
+    "citibanamex",  # Added - available in DB
+    "sistema",      # Added - aggregate metric
+
+    # Additional Mexican banks
     "scotiabank",
-    "banamex",
+    "banamex",      # Alias for Citibanamex
     "banregio",
     "afirme",
     "azteca",
@@ -25,6 +30,13 @@ BANKS = {
     "mifel",
     "bajio",
     "compartamos",
+}
+
+# Bank aliases (alternative names)
+BANK_ALIASES = {
+    "banamex": "citibanamex",
+    "citi": "citibanamex",
+    "citibank": "citibanamex",
 }
 
 # Period patterns: (regex, formatter function)
