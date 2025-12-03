@@ -171,6 +171,55 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("nl2sql.disabled", reason="NL2SQL services not available, using legacy intent logic")
 
+    # Initialize RAG Feedback Loop (Q1 2025)
+    if NL2SQL_AVAILABLE and _context_service and rag_available:
+        try:
+            from bankadvisor.services.query_logger_service import QueryLoggerService
+            from bankadvisor.services.rag_feedback_service import RagFeedbackService
+            from bankadvisor.jobs.rag_feedback_job import RagFeedbackJob, set_rag_feedback_job
+
+            # Initialize QueryLoggerService
+            query_logger = QueryLoggerService(AsyncSessionLocal())
+
+            # Initialize RagFeedbackService
+            from qdrant_client import QdrantClient
+            qdrant_client = QdrantClient(host="qdrant", port=6333)  # Adjust host as needed
+
+            feedback_service = RagFeedbackService(
+                query_logger=query_logger,
+                qdrant_client=qdrant_client,
+                collection_name="bankadvisor_queries"
+            )
+
+            # Initialize and start scheduled job (runs every hour)
+            feedback_job = RagFeedbackJob(
+                feedback_service=feedback_service,
+                interval_hours=1,
+                batch_size=50,
+                min_confidence=0.7
+            )
+            feedback_job.start()
+            set_rag_feedback_job(feedback_job)
+
+            logger.info(
+                "rag_feedback.initialized",
+                interval_hours=1,
+                batch_size=50,
+                message="RAG Feedback Loop active - queries will auto-seed every hour"
+            )
+
+        except Exception as e:
+            logger.warning(
+                "rag_feedback.initialization_failed",
+                error=str(e),
+                message="RAG Feedback Loop disabled - queries won't auto-seed"
+            )
+    else:
+        logger.info(
+            "rag_feedback.disabled",
+            reason="NL2SQL or RAG not available"
+        )
+
     # Ensure data is populated
     await ensure_data_populated()
 
@@ -178,7 +227,15 @@ async def lifespan(app: FastAPI):
     logger.info("bankadvisor.ready", port=port, nl2sql_enabled=NL2SQL_AVAILABLE)
     yield
 
+    # Shutdown logic
     logger.info("bankadvisor.shutdown")
+
+    # Stop RAG Feedback Job
+    from bankadvisor.jobs.rag_feedback_job import get_rag_feedback_job
+    feedback_job = get_rag_feedback_job()
+    if feedback_job:
+        feedback_job.stop()
+        logger.info("rag_feedback_job.stopped")
 
 
 # Create FastAPI app for health checks
@@ -1088,6 +1145,7 @@ async def _try_nl2sql_pipeline(user_query: str, mode: str) -> Optional[Dict[str,
         3. Generate SQL
         4. Execute SQL
         5. Build visualization
+        6. Log to query_logs (RAG Feedback Loop)
 
     Args:
         user_query: Natural language query
@@ -1099,6 +1157,9 @@ async def _try_nl2sql_pipeline(user_query: str, mode: str) -> Optional[Dict[str,
     Raises:
         Exception: If any step fails (caught by caller)
     """
+    from datetime import datetime
+    start_time = datetime.now()
+
     logger.debug("nl2sql_pipeline.start", query=user_query)
 
     # Step 1: Parse to QuerySpec
@@ -1247,6 +1308,32 @@ async def _try_nl2sql_pipeline(user_query: str, mode: str) -> Optional[Dict[str,
         template_used=sql_result.metadata.get("template"),
         metric_type=metric_type
     )
+
+    # Step 6: Log successful query for RAG Feedback Loop (Q1 2025)
+    try:
+        from bankadvisor.services.query_logger_service import QueryLoggerService
+
+        execution_time_ms = (datetime.now() - start_time).total_seconds() * 1000
+
+        async with AsyncSessionLocal() as log_session:
+            query_logger = QueryLoggerService(log_session)
+            await query_logger.log_successful_query(
+                user_query=user_query,
+                generated_sql=sql_result.sql,
+                banco=spec.bank_names[0] if spec.bank_names else None,
+                metric=spec.metric,
+                intent=spec.intent if hasattr(spec, 'intent') else "metric_query",
+                execution_time_ms=execution_time_ms,
+                pipeline_used="nl2sql",
+                mode=mode,
+                result_row_count=len(rows)
+            )
+
+        logger.debug("query_logged.success", execution_time_ms=execution_time_ms)
+
+    except Exception as log_error:
+        # Don't fail the request if logging fails
+        logger.warning("query_logging.failed", error=str(log_error))
 
     return {
         "success": True,
