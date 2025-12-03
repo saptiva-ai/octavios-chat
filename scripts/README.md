@@ -172,7 +172,7 @@ Auditorías de seguridad y verificaciones.
 Scripts de configuración inicial y ambiente.
 
 **Scripts principales:**
-- `env-checker.sh` - Validación de variables de entorno
+- `env-checker.sh` - Validación de variables de entorno ([Documentación detallada](setup/README_ENV_CHECKER.md))
 - `env-manager.sh` - Gestión de variables de entorno
 - `interactive-env-setup.sh` - Setup interactivo
 - `generate-secrets.py` - Generación de secrets
@@ -209,6 +209,7 @@ Tests, validaciones y verificaciones del sistema.
 - `test-all-models.py` - Tests de todos los modelos
 - `test-rag-ingestion.py` - Tests de RAG ingestion
 - `test-semantic-search.py` - Tests de búsqueda semántica
+- `test_mcp_tools.sh` - Testing interactivo MCP ([Documentación](testing/README_MCP_TESTING.md))
 - `validate-config.sh` - Validación de configuración
 - `validate-mvp.sh` - Validación de MVP
 - `validate-production-readiness.sh` - Validación pre-producción
@@ -220,12 +221,40 @@ Tests, validaciones y verificaciones del sistema.
 # Tests de integración
 python scripts/testing/test-auth-and-chat.py
 
+# Tests MCP interactivos
+./scripts/testing/test_mcp_tools.sh
+
 # Validaciones
 ./scripts/testing/validate-mvp.sh
 ./scripts/testing/validate-production-readiness.sh
 
 # Verificaciones
 ./scripts/testing/verify-deployment.sh
+```
+
+---
+
+### [`tests/`](tests/README.md) - Shell Test Suite
+Suite de tests automatizados en shell (e2e, smoke tests).
+
+**Estructura:**
+- `e2e/` - Tests end-to-end (*.test.sh)
+- `smoke/` - Tests de smoke/sanidad
+- `utils/` - Helpers y wrappers
+- `deprecated/` - Tests en proceso de deprecación
+
+**Uso:**
+```bash
+# Ejecutar todos los shell tests
+make test:sh
+
+# Lint shell scripts
+make lint:sh
+
+# Format shell scripts
+make fix:sh
+
+# Ver README_tests.md para convenciones completas
 ```
 
 ---
