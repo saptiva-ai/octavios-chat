@@ -111,8 +111,8 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("database.initialized")
 
-    # Initialize NLP Intent Service
-    IntentService.initialize()
+    # Q1 2025: Legacy IntentService.initialize() removed
+    # NlpIntentService uses runtime config and doesn't need initialization
     logger.info("nlp.initialized")
 
     # Initialize NL2SQL services (Phase 2-3) if available
