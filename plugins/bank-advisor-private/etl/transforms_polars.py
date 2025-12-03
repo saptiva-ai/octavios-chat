@@ -502,11 +502,14 @@ def calculate_icor(df: pl.LazyFrame) -> pl.LazyFrame:
     """
     Calculate ICOR (Índice de Cobertura).
 
-    Formula: reservas / cartera_vencida
+    Formula: |reservas| / cartera_vencida
+
+    Note: reservas_etapa_todas is stored as negative (liability convention),
+    but ICOR should be positive (coverage ratio percentage).
     """
     return df.with_columns([
         pl.when(pl.col("cartera_vencida") > 0)
-        .then(pl.col("reservas_etapa_todas") / pl.col("cartera_vencida"))
+        .then(pl.col("reservas_etapa_todas").abs() / pl.col("cartera_vencida"))
         .otherwise(None)
         .alias("icor")
     ])
