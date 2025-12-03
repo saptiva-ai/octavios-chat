@@ -557,12 +557,19 @@ def aggregate_monthly_kpis(
         pl.col("fecha").dt.truncate("1mo").alias("periodo")
     ])
 
-    # Define aggregations
+    # Define aggregations - sum columns
     sum_cols = [
+        # Carteras
         "cartera_total", "cartera_comercial_total", "cartera_consumo_total",
         "cartera_vivienda_total", "empresarial_total", "entidades_financieras_total",
-        "entidades_gubernamentales_total", "cartera_vencida", "reservas_etapa_todas",
-        "quebrantos_cc"
+        "entidades_gubernamentales_total", "cartera_vencida",
+        # Reservas
+        "reservas_etapa_todas", "reservas_variacion_mm",
+        # Etapas de Deterioro (IFRS9)
+        "ct_etapa_1", "ct_etapa_2", "ct_etapa_3",
+        "cartera_total_etapa_1", "cartera_total_etapa_2", "cartera_total_etapa_3",
+        # Quebrantos
+        "quebrantos_cc", "lib_castigos_comerc",
     ]
 
     # Filter to existing columns
@@ -600,11 +607,28 @@ def aggregate_monthly_kpis(
     result = calculate_pe(result)
     result = calculate_quebrantos_ratio(result)
 
-    # Calculate etapa ratios
+    # Calculate derived metrics
+    result_cols = get_cols(result)
+
+    # Cartera Comercial Sin Gobierno
+    if "cartera_comercial_total" in result_cols and "entidades_gubernamentales_total" in result_cols:
+        result = result.with_columns([
+            (pl.col("cartera_comercial_total") - pl.col("entidades_gubernamentales_total"))
+            .alias("cartera_comercial_sin_gob")
+        ])
+
+    # Rename lib_castigos_comerc to quebrantos_comerciales
+    if "lib_castigos_comerc" in result_cols:
+        result = result.rename({"lib_castigos_comerc": "quebrantos_comerciales"})
+
+    # Calculate etapa ratios (% of total portfolio in each stage)
     for etapa in [1, 2, 3]:
-        etapa_col = f"ct_etapa_{etapa}"
-        # Would need etapa columns to be summed first
-        # This is a simplified version
+        etapa_col = f"cartera_total_etapa_{etapa}"
+        ratio_col = f"pct_etapa_{etapa}"
+        if etapa_col in result_cols and "cartera_total" in result_cols:
+            result = result.with_columns([
+                (pl.col(etapa_col) / pl.col("cartera_total") * 100).alias(ratio_col)
+            ])
 
     # Add banco_norm
     if banco_filter:
