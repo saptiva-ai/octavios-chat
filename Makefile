@@ -126,24 +126,24 @@ help:
 
 setup:
 	@echo "$(YELLOW)🔧 Setting up project...$(NC)"
-	@chmod +x scripts/*.sh
-	@./scripts/interactive-env-setup.sh development
+	@chmod +x scripts/*.sh scripts/setup/*.sh
+	@./scripts/setup/interactive-env-setup.sh development
 	@echo "$(GREEN)✅ Setup complete. Run 'make dev' to start.$(NC)"
 
 env-check:
 	@echo "$(YELLOW)🔍 Validating environment variables...$(NC)"
-	@chmod +x scripts/env-checker.sh
-	@./scripts/env-checker.sh warn
+	@chmod +x scripts/setup/env-checker.sh
+	@./scripts/setup/env-checker.sh warn
 
 env-info:
 	@echo "$(YELLOW)📋 Environment variables information...$(NC)"
-	@chmod +x scripts/env-checker.sh
-	@./scripts/env-checker.sh info
+	@chmod +x scripts/setup/env-checker.sh
+	@./scripts/setup/env-checker.sh info
 
 env-strict:
 	@echo "$(YELLOW)🔒 Strict environment validation...$(NC)"
-	@chmod +x scripts/env-checker.sh
-	@./scripts/env-checker.sh strict
+	@chmod +x scripts/setup/env-checker.sh
+	@./scripts/setup/env-checker.sh strict
 
 dev:
 	@echo "$(YELLOW)🟡 Starting development environment (using existing images)...$(NC)"
@@ -388,10 +388,10 @@ test-local:
 	fi
 	@echo "$(YELLOW)📥 Loading environment from envs/.env.local (if exists)...$(NC)"
 ifdef FILE
-	@eval $$(./scripts/env-manager.sh load local) && \
+	@eval $$(./scripts/setup/env-manager.sh load local) && \
 	cd apps/backend && .venv/bin/python -m pytest $(FILE) $(ARGS)
 else
-	@eval $$(./scripts/env-manager.sh load local) && \
+	@eval $$(./scripts/setup/env-manager.sh load local) && \
 	cd apps/backend && .venv/bin/python -m pytest tests/ $(ARGS)
 endif
 
