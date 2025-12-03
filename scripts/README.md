@@ -8,12 +8,16 @@ Colección organizada de scripts para desarrollo, testing, deployment y mantenim
 
 ## 📊 Organización de Carpetas
 
+**Todos los scripts están organizados en subcarpetas por categoría.**
+Usa `make <comando>` o `make scripts.<category>.<name>` para ejecutarlos.
+
 ```
 scripts/
 ├── 📁 ci/              # CI/CD integration scripts
-├── 📁 database/        # Database operations, backups & migrations (14 scripts)
+├── 📁 database/        # Database operations, backups & migrations (17 scripts)
+├── 📁 deploy/          # Deployment scripts (5 scripts)
 ├── 📁 fixtures/        # Test fixtures & sample data
-├── 📁 git-hooks/       # Git hook templates
+├── 📁 git-hooks/       # Git hook templates (2 scripts)
 ├── 📁 legacy/          # Archived & obsolete scripts (NO USAR)
 │   ├── deploy_archive/     # 18 deploys obsoletos
 │   └── old_deployment/     # 6 scripts de deployment antiguos
@@ -21,60 +25,18 @@ scripts/
 ├── 📁 migrations/      # Data migrations
 ├── 📁 security/        # Security audits & checks (5 scripts)
 ├── 📁 setup/           # Project setup & configuration (13 scripts)
-├── 📁 testing/         # Test runners & validation (34 scripts)
+├── 📁 testing/         # Test runners & validation (42 scripts)
 ├── 📁 tests/           # Test suites organized (e2e, smoke, utils)
-├── 📁 validation/      # Validation scripts
-└── [18 core scripts]   # Scripts de uso muy frecuente
+└── 📁 validation/      # Validation scripts
 ```
 
----
-
-## 🚀 Core Scripts (Directorio Raíz)
-
-Estos 18 scripts se mantienen en el directorio raíz por ser de uso muy frecuente:
-
-### 🚢 Deploy & Registry
-| Script | Propósito | Uso |
-|--------|-----------|-----|
-| **`deploy-to-production.sh`** | ⭐ Deploy completo a producción via registry | `./scripts/deploy-to-production.sh 0.1.3` |
-| `push-dockerhub.sh` | Push de imágenes a Docker Hub | Llamado por Makefile |
-| `tag-dockerhub.sh` | Tag de imágenes para Docker Hub | `./scripts/tag-dockerhub.sh 0.1.3` |
-| `tag-images.sh` | Tag de imágenes locales | `./scripts/tag-images.sh 0.1.3` |
-| `start-production.sh` | Iniciar servicios en producción | `./scripts/start-production.sh` |
-
-**Uso recomendado para deploy:**
+**✨ Nuevo:** Todos los scripts se ejecutan vía Makefile con dot notation:
 ```bash
-# LOCAL: Build y push
-make deploy-registry VERSION=0.1.3
-
-# SERVIDOR: Deploy automatizado
-./scripts/deploy-to-production.sh 0.1.3
+make scripts.<category>.<name>    # Cualquier script
+make db.backup                     # Database backup
+make test.api                      # API tests
+make deploy-registry VERSION=x.x.x # Deploy desde registry
 ```
-
-### 🧪 Testing & Development
-| Script | Propósito | Uso |
-|--------|-----------|-----|
-| `test-runner.sh` | Runner principal de tests | `./scripts/test-runner.sh` |
-| `test_bank_query_detection.py` | Tests de detección de queries bank | `python scripts/test_bank_query_detection.py` |
-| `test_bank_query_hybrid.py` | Tests híbridos de bank advisor | `python scripts/test_bank_query_hybrid.py` |
-| `test_password_reset.sh` | Tests de reset de contraseña | `./scripts/test_password_reset.sh` |
-| `test_audit_file_8_auditors.py` | Tests de sistema de auditoría | `python scripts/test_audit_file_8_auditors.py` |
-| `test_audit_flow.sh` | Tests de flujo de auditoría | `./scripts/test_audit_flow.sh` |
-| `test_audit_schema_only.py` | Tests de schema de auditoría | `python scripts/test_audit_schema_only.py` |
-| `test_mcp_audit.py` | Tests de MCP audit | `python scripts/test_mcp_audit.py` |
-
-### 💾 Database
-| Script | Propósito | Uso |
-|--------|-----------|-----|
-| `db-manager.sh` | CLI para operaciones de base de datos | `./scripts/db-manager.sh backup` |
-| `init-bankadvisor-db.sh` | Inicializar Bank Advisor DB + ETL | `./scripts/init-bankadvisor-db.sh` |
-| `init_bank_advisor_data.sh` | Cargar datos iniciales de Bank Advisor | `./scripts/init_bank_advisor_data.sh` |
-
-### 🔒 Git Hooks (Automáticos)
-| Script | Propósito | Cuándo se ejecuta |
-|--------|-----------|-------------------|
-| `git-secrets-check.sh` | Detecta secrets antes de commit | Pre-commit hook (automático) |
-| `cleanup-python-cache.sh` | Limpia cache de Python | Pre-commit hook (automático) |
 
 ---
 
@@ -111,6 +73,31 @@ Operaciones de base de datos, backups, restauraciones y migraciones.
 
 # Migraciones
 python scripts/database/migrate-conversation-timestamps.py
+```
+
+---
+
+### [`deploy/`](deploy/README.md) - Deployment Scripts
+Scripts de deployment y gestión de imágenes Docker.
+
+**Scripts principales:**
+- `deploy-to-production.sh` - ⭐ Deploy completo a producción vía Docker Hub
+- `tag-dockerhub.sh` - Tag de imágenes para Docker Hub
+- `tag-images.sh` - Tag de imágenes locales
+- `push-dockerhub.sh` - Push de imágenes a Docker Hub
+- `start-production.sh` - Iniciar servicios en producción
+
+**Uso:**
+```bash
+# Deploy completo
+make deploy-registry VERSION=0.1.3
+
+# En servidor
+./scripts/deploy/deploy-to-production.sh 0.1.3
+
+# Tag y push
+./scripts/deploy/tag-dockerhub.sh 0.1.3
+./scripts/deploy/push-dockerhub.sh
 ```
 
 ---

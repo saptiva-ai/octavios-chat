@@ -388,8 +388,8 @@ endif
 # ============================================================================
 
 test:
-	$(AT)chmod +x scripts/test-runner.sh
-	$(DRY_RUN) ./scripts/test-runner.sh $(T) $(TEST_ARGS) $(VERBOSE_FLAG)
+	$(AT)chmod +x scripts/testing/test-runner.sh
+	$(DRY_RUN) ./scripts/testing/test-runner.sh $(T) $(TEST_ARGS) $(VERBOSE_FLAG)
 
 # Dot notation for specific test types
 test.%:
@@ -425,7 +425,7 @@ ifndef DB_CMD
 	$(AT)echo "Available: backup, restore, stats, shell"
 	$(AT)exit 1
 endif
-	$(DRY_RUN) ./scripts/db-manager.sh $(DB_CMD) $(PROJECT_NAME) $(VERBOSE_FLAG)
+	$(DRY_RUN) ./scripts/database/db-manager.sh $(DB_CMD) $(PROJECT_NAME) $(VERBOSE_FLAG)
 
 # Dot notation for database commands
 db.%:
@@ -434,13 +434,13 @@ db.%:
 # Bank Advisor
 init-bank-advisor:
 	$(AT)echo "$(BLUE)🏦 Initializing Bank Advisor Data$(NC)"
-	$(DRY_RUN) ./scripts/init_bank_advisor_data.sh $(VERBOSE_FLAG)
+	$(DRY_RUN) ./scripts/database/init_bank_advisor_data.sh $(VERBOSE_FLAG)
 
 init-bank-advisor-migrations:
-	$(DRY_RUN) ./scripts/init_bank_advisor_data.sh --migrations-only $(VERBOSE_FLAG)
+	$(DRY_RUN) ./scripts/database/init_bank_advisor_data.sh --migrations-only $(VERBOSE_FLAG)
 
 init-bank-advisor-etl:
-	$(DRY_RUN) ./scripts/init_bank_advisor_data.sh --etl-only $(VERBOSE_FLAG)
+	$(DRY_RUN) ./scripts/database/init_bank_advisor_data.sh --etl-only $(VERBOSE_FLAG)
 
 # ============================================================================
 # DEPLOYMENT
@@ -512,7 +512,7 @@ ifndef VERSION
 	$(AT)exit 1
 endif
 	$(AT)echo "$(YELLOW)🚀 Deploying from Docker Hub (version $(VERSION))...$(NC)"
-	$(DRY_RUN) ./scripts/deploy-to-production.sh $(VERSION) $(VERBOSE_FLAG)
+	$(DRY_RUN) ./scripts/deploy/deploy-to-production.sh $(VERSION) $(VERBOSE_FLAG)
 
 # ============================================================================
 # CLEANUP
