@@ -1741,31 +1741,21 @@ Escribe la respuesta de forma fluida y profesional, como un analista financiero.
                     # FIX-001: Use resolved system_prompt (not hardcoded system_message)
                     # Use model_params for temperature/max_tokens (registry overrides context)
 
-                    # FIX-002: Obtener historial de conversacion para memoria del chat
-                    # Sin esto, el LLM no recuerda mensajes anteriores (ej: "mi nombre es Juan")
-                    message_history = await chat_service.build_message_context(
+                    # FIX-002: Build context with MEMORY system
+                    # Includes: system_prompt + memory_facts + recent messages + current message
+                    # Falls back to legacy 20-message context if MEMORY_ENABLED=false
+                    messages_for_api = await chat_service.build_message_context_with_memory(
                         chat_session=chat_session,
                         current_message=context.message,
-                        provided_context=None  # Obtener del DB
+                        system_prompt=system_prompt,
                     )
-
-                    # Construir mensajes con system prompt + historial
-                    messages_for_api = [{"role": "system", "content": system_prompt}]
-
-                    # Agregar historial (excluye el mensaje actual que ya viene en message_history)
-                    # message_history incluye mensajes previos + mensaje actual al final
-                    for msg in message_history[:-1]:  # Todos menos el ultimo (mensaje actual)
-                        messages_for_api.append(msg)
-
-                    # Agregar mensaje actual del usuario
-                    messages_for_api.append({"role": "user", "content": context.message})
 
                     # Log para debugging de memoria
                     logger.info(
-                        "Historial de chat incluido en contexto",
-                        history_count=len(message_history) - 1,
+                        "Chat context built with memory system",
                         total_messages=len(messages_for_api),
-                        session_id=str(chat_session.id)
+                        session_id=str(chat_session.id),
+                        memory_enabled=getattr(chat_service.settings, 'memory_enabled', False)
                     )
 
                     # Calculate dynamic max_tokens based on actual prompt size
