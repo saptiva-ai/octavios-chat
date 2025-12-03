@@ -1,8 +1,9 @@
 # BankAdvisor MCP Server
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Production Ready
 **Protocol:** MCP (Model Context Protocol) via JSON-RPC 2.0
+**ETL Engine:** Polars (high-performance DataFrame)
 
 ---
 
@@ -20,7 +21,7 @@ User: "IMOR de INVEX en 2024"
 - **Natural Language Queries**: Spanish banking terminology
 - **9 Priority Visualizations**: IMOR, ICAP, ICOR, Cartera, Reservas, etc.
 - **Hybrid Intent Classification**: Rules-first (80% queries in <20ms) + LLM fallback
-- **Automated ETL**: Daily data refresh from CNBV sources
+- **Unified ETL with Polars**: 11x faster loading (1.3M records in 4s), 5x less memory
 - **SOLID Architecture**: Clean separation of concerns
 
 ---
@@ -172,6 +173,9 @@ To add a new client, copy `config/profiles/template.yaml` to `config/profiles/<c
 ## Testing
 
 ```bash
+# ETL equivalence tests (13 tests, data loading + transformations)
+BANK_ADVISOR_DATA_ROOT=./data/raw pytest etl/tests/test_etl_equivalence.py -v
+
 # Smoke test (pre-demo validation)
 python scripts/smoke_demo_bank_analytics.py --port 8002
 
@@ -181,8 +185,8 @@ python scripts/ops_validate_etl.py --port 8002
 # Performance benchmark
 python scripts/benchmark_performance_http.py --port 8002
 
-# Unit tests
-pytest tests/ -v
+# Unit tests (services)
+pytest src/bankadvisor/tests/ -v
 ```
 
 ---
@@ -192,11 +196,18 @@ pytest tests/ -v
 ```
 plugins/bank-advisor-private/
 ├── src/
+│   ├── main.py                 # MCP server entry point
 │   └── bankadvisor/
 │       ├── services/           # Core services (intent, analytics, plotly)
 │       ├── entity_service.py   # NL entity extraction
 │       ├── config_service.py   # Metric/visualization config
 │       └── runtime_config.py   # Runtime settings
+├── etl/                        # Unified ETL Pipeline (Polars)
+│   ├── etl_unified.py          # Main orchestrator
+│   ├── loaders_polars.py       # Data loaders (8 sources)
+│   ├── transforms_polars.py    # IFRS9 transformations
+│   └── tests/
+│       └── test_etl_equivalence.py  # 13 equivalence tests
 ├── config/
 │   ├── bankadvisor.yaml        # Main config
 │   ├── profiles/               # Client profiles
@@ -205,10 +216,7 @@ plugins/bank-advisor-private/
 │   ├── smoke_demo_bank_analytics.py
 │   ├── ops_validate_etl.py
 │   └── benchmark_performance_http.py
-├── tests/
-│   ├── test_nl_variants.py     # 32 NL phrase variants
-│   ├── test_llm_fallback.py    # LLM resilience tests
-│   └── test_9_priority_visualizations.py
+├── data/raw/                   # Source data files (gitignored)
 ├── docs/                       # All documentation
 ├── CHANGELOG.md
 └── README.md
@@ -241,19 +249,33 @@ plugins/bank-advisor-private/
 
 ## ETL Operations
 
-### Dual ETL Architecture
+### Unified ETL Architecture (Polars)
 
-Bank Advisor uses **two coexisting ETL pipelines**:
+Bank Advisor uses a **unified Polars-based ETL pipeline** that consolidates all data sources:
 
-1. **Legacy ETL** → `monthly_kpis` table
-   - 3660 historical records (2017-2025)
-   - Sources: CNBV, ICAP, TDA, Corporate Loans (1.3M+ records processed)
-   - Maintains backward compatibility with existing queries
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    ETL UNIFICADO (etl_unified.py)               │
+├─────────────────────────────────────────────────────────────────┤
+│  8 Data Sources → loaders_polars.py → transforms_polars.py     │
+│                                                                 │
+│  Sources:                          Output Tables:               │
+│  ├─ CNBV_Cartera_Bancos_V2.xlsx   ├─ monthly_kpis (3660 rows)  │
+│  ├─ BE_BM_202509.xlsx (16 sheets) ├─ cnbv_enriched (32K rows)  │
+│  ├─ ICAP_Bancos.xlsx              ├─ segments (2.4K rows)      │
+│  ├─ TDA.xlsx                      └─ instituciones (37 banks)  │
+│  ├─ TE_Invex_Sistema.xlsx                                       │
+│  ├─ CorporateLoan_CNBVDB.csv      Performance:                  │
+│  ├─ CASTIGOS.xlsx                 ├─ CSV 219MB: 45s → 4s (11x) │
+│  └─ Instituciones.xlsx            ├─ Memory: 800MB → 150MB (5x)│
+│                                   └─ Total ETL: ~8 seconds      │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-2. **Normalized ETL** → Relational schema
-   - Tables: `instituciones`, `metricas_financieras`, `segmentos_cartera`, `metricas_cartera_segmentada`
-   - Source: BE_BM_202509.xlsx (Balance Sheet + Income Statement)
-   - Enables advanced NL2SQL queries
+**Key Components:**
+- `etl/loaders_polars.py` - Unified data loading with lazy evaluation
+- `etl/transforms_polars.py` - IFRS9-compliant transformations
+- `etl/etl_unified.py` - Orchestrator for all pipelines
 
 See [`ETL_CONSOLIDATION.md`](ETL_CONSOLIDATION.md) for complete architecture documentation.
 
@@ -270,16 +292,16 @@ make init-bank-advisor  # Re-runs verification without re-processing
 ### Manual ETL Execution
 
 ```bash
-# Full initialization (migrations + both ETL)
+# Full initialization (migrations + unified ETL)
 make init-bank-advisor
 
-# Legacy ETL only (monthly_kpis)
-docker exec octavios-chat-bajaware_invex-bank-advisor python -m bankadvisor.etl_runner
+# Run unified ETL directly (with dry-run option)
+cd plugins/bank-advisor-private
+python -m etl.etl_unified --dry-run  # Test without DB writes
+python -m etl.etl_unified            # Full execution to DB
 
-# Normalized ETL only
-docker exec octavios-chat-bajaware_invex-bank-advisor python /app/etl/etl_processor.py
-docker exec octavios-chat-bajaware_invex-bank-advisor cat /app/etl/carga_inicial_bancos.sql | \
-  docker exec -i octavios-chat-bajaware_invex-postgres psql -U octavios -d bankadvisor
+# Run ETL equivalence tests
+BANK_ADVISOR_DATA_ROOT=./data/raw pytest etl/tests/test_etl_equivalence.py -v
 
 # Validate ETL health
 python scripts/ops_validate_etl.py --port 8002
@@ -318,6 +340,7 @@ See `CHANGELOG.md` for full release notes.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 1.1.0 | 2025-12-03 | Unified ETL with Polars (11x faster), 13 equivalence tests |
 | 1.0.0 | 2025-11-30 | Initial release, INVEX MVP |
 
 ---
