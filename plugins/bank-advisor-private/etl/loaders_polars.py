@@ -10,6 +10,7 @@ Performance: 10-15x faster than Pandas for large files (CorporateLoan: 219MB)
 from __future__ import annotations
 
 import polars as pl
+import pandas as pd
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Dict, Optional, List, Any
@@ -312,7 +313,13 @@ def load_castigos_comerciales(paths: DataPaths) -> pl.LazyFrame:
         df = normalize_institution_code(df, "institucion")
 
     if "fecha" in col_names:
-        df = df.with_columns([pl.col("fecha").str.to_date("%Y-%m-%d").alias("fecha")])
+        # Handle multiple date formats (2022/1/01 or 2022-01-01)
+        df = df.with_columns([
+            pl.when(pl.col("fecha").str.contains("/"))
+            .then(pl.col("fecha").str.to_date("%Y/%m/%d", strict=False))
+            .otherwise(pl.col("fecha").str.to_date("%Y-%m-%d", strict=False))
+            .alias("fecha")
+        ])
 
     return df
 
@@ -635,9 +642,13 @@ def load_be_bm_sheet(
 
             bank_name = str(bank_name).strip()
 
-            # Skip summary rows
-            if bank_name.lower() in ('total', 'subtotal', 'sistema'):
+            # Skip summary rows (but keep Sistema for aggregated data)
+            if bank_name.lower() in ('total', 'subtotal'):
                 continue
+
+            # Normalize "Sistema  */" to "SISTEMA"
+            if 'sistema' in bank_name.lower():
+                bank_name = 'SISTEMA'
 
             # Extract values for each date and metric
             for date_idx, date_str in enumerate(dates):
@@ -670,32 +681,170 @@ def load_be_bm_sheet(
 
 
 def load_be_bm_pm2(paths: DataPaths) -> pl.LazyFrame:
-    """Load Pm2 sheet (Balance sheet metrics)."""
-    return load_be_bm_sheet(
-        paths,
-        sheet_name="Pm2",
-        metrics=["activo_total", "inversiones_financieras", "cartera_total",
-                 "captacion_total", "capital_contable", "resultado_neto"],
-        header_marker="Activo total",
-        bank_col=1,
-        start_col=2,
-        step=2,
-        num_dates=3
-    )
+    """
+    Load Pm2 sheet (Balance sheet metrics) with custom parser.
+
+    PM2 structure:
+    - Row 4: Metric headers at cols 2, 8, 14, 20, 26, 32 (6 cols apart)
+    - Row 5: Dates at cols 2,4,6 for each metric (Sept24, Aug25, Sept25)
+    - Rows 6+: Bank data
+    """
+    path = paths.be_bm
+    if not path.exists():
+        logger.warning(f"BE_BM file not found: {path}")
+        return pl.LazyFrame()
+
+    try:
+        pdf = pd.read_excel(path, sheet_name="Pm2", header=None)
+
+        # PM2 structure: each metric is 6 columns apart, with 3 dates per metric
+        metric_config = [
+            (2, "activo_total"),      # Col 2, 4, 6
+            (8, "inversiones_financieras"),  # Col 8, 10, 12
+            (14, "cartera_total_pm2"),  # Col 14, 16, 18
+            (20, "captacion_total"),   # Col 20, 22, 24
+            (26, "capital_contable"),  # Col 26, 28, 30
+            (32, "resultado_neto"),    # Col 32, 34, 36
+        ]
+
+        # Extract dates from row 5 (using first metric as reference)
+        dates = []
+        for offset in [0, 2, 4]:  # Columns 2, 4, 6
+            date_val = pdf.iloc[5, 2 + offset]
+            date_str = _excel_serial_to_date(date_val)
+            if date_str:
+                dates.append(date_str)
+
+        if not dates:
+            logger.warning("No dates found in PM2 sheet")
+            return pl.LazyFrame()
+
+        # Process data rows (start from row 6)
+        data_rows = []
+        for row_idx in range(6, len(pdf)):
+            bank_name = pdf.iloc[row_idx, 1]
+            if pd.isna(bank_name) or str(bank_name).strip() == '':
+                continue
+
+            bank_name = str(bank_name).strip()
+            if bank_name.lower() in ('total', 'subtotal'):
+                continue
+
+            # Normalize Sistema
+            if 'sistema' in bank_name.lower():
+                bank_name = 'SISTEMA'
+
+            # For each date
+            for date_idx, date_str in enumerate(dates):
+                row_data = {
+                    'institucion': bank_name,
+                    'fecha_corte': date_str
+                }
+
+                # For each metric, get value at appropriate column
+                for base_col, metric_name in metric_config:
+                    col_idx = base_col + (date_idx * 2)  # Dates are 2 cols apart within group
+                    if col_idx < len(pdf.columns):
+                        value = pdf.iloc[row_idx, col_idx]
+                        row_data[metric_name] = clean_numeric(value)
+                    else:
+                        row_data[metric_name] = None
+
+                data_rows.append(row_data)
+
+        if not data_rows:
+            logger.warning("No data rows found in PM2 sheet")
+            return pl.LazyFrame()
+
+        df = pl.LazyFrame(data_rows)
+        logger.info(f"Loaded {len(data_rows)} records from PM2 (Balance)")
+        return df
+
+    except Exception as e:
+        logger.error(f"Error loading PM2 sheet: {e}")
+        return pl.LazyFrame()
 
 
 def load_be_bm_indicadores(paths: DataPaths) -> pl.LazyFrame:
-    """Load Indicadores sheet (ROA, ROE)."""
-    return load_be_bm_sheet(
-        paths,
-        sheet_name="Indicadores",
-        metrics=["roa_12m", "roe_12m"],
-        header_marker="ROA",
-        bank_col=1,
-        start_col=2,
-        step=1,
-        num_dates=3
-    )
+    """
+    Load Indicadores sheet (ROA, ROE) with custom parser.
+
+    Indicadores structure:
+    - Row 4: Col 2=ROA header, Col 5=ROE header
+    - Row 5: Dates (3 per metric)
+    - Rows 6+: Bank data
+    """
+    path = paths.be_bm
+    if not path.exists():
+        logger.warning(f"BE_BM file not found: {path}")
+        return pl.LazyFrame()
+
+    try:
+        pdf = pd.read_excel(path, sheet_name="Indicadores", header=None)
+
+        # Indicadores structure: ROA at cols 2,3,4; ROE at cols 5,6,7
+        # Each metric has 3 dates
+        metric_config = [
+            (2, "roa_12m"),   # Cols 2, 3, 4
+            (5, "roe_12m"),   # Cols 5, 6, 7
+        ]
+
+        # Extract dates from row 5
+        dates = []
+        for col in [3, 4]:  # Aug 2025, Sept 2025 (skip Sept 2024)
+            date_val = pdf.iloc[5, col]
+            date_str = _excel_serial_to_date(date_val)
+            if date_str:
+                dates.append(date_str)
+
+        if not dates:
+            logger.warning("No dates found in Indicadores sheet")
+            return pl.LazyFrame()
+
+        # Process data rows
+        data_rows = []
+        for row_idx in range(6, len(pdf)):
+            bank_name = pdf.iloc[row_idx, 1]
+            if pd.isna(bank_name) or str(bank_name).strip() == '':
+                continue
+
+            bank_name = str(bank_name).strip()
+            if bank_name.lower() in ('total', 'subtotal'):
+                continue
+
+            # Normalize Sistema
+            if 'sistema' in bank_name.lower():
+                bank_name = 'SISTEMA'
+
+            # For each date (using last 2 dates: Aug and Sept 2025)
+            for date_idx, date_str in enumerate(dates):
+                row_data = {
+                    'institucion': bank_name,
+                    'fecha_corte': date_str
+                }
+
+                # For each metric
+                for base_col, metric_name in metric_config:
+                    col_idx = base_col + date_idx + 1  # +1 to skip first date
+                    if col_idx < len(pdf.columns):
+                        value = pdf.iloc[row_idx, col_idx]
+                        row_data[metric_name] = clean_numeric(value)
+                    else:
+                        row_data[metric_name] = None
+
+                data_rows.append(row_data)
+
+        if not data_rows:
+            logger.warning("No data rows found in Indicadores sheet")
+            return pl.LazyFrame()
+
+        df = pl.LazyFrame(data_rows)
+        logger.info(f"Loaded {len(data_rows)} records from Indicadores (ROA, ROE)")
+        return df
+
+    except Exception as e:
+        logger.error(f"Error loading Indicadores sheet: {e}")
+        return pl.LazyFrame()
 
 
 def load_be_bm_cct(paths: DataPaths) -> pl.LazyFrame:

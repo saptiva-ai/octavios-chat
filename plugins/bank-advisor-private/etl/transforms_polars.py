@@ -80,7 +80,59 @@ def add_banco_norm_column(df: pl.LazyFrame, source_col: str = "institucion") -> 
 # CNBV PORTFOLIO TRANSFORMATIONS
 # =============================================================================
 
-def prepare_cnbv(df: pl.LazyFrame) -> pl.LazyFrame:
+def enrich_with_instituciones(
+    df: pl.LazyFrame,
+    instituciones: pl.LazyFrame
+) -> pl.LazyFrame:
+    """
+    Enrich data with bank names from instituciones catalog.
+
+    Args:
+        df: DataFrame with institucion column (codes like '040059')
+        instituciones: Instituciones catalog with institucion_code -> banco mapping
+
+    Returns:
+        DataFrame with banco column added and banco_norm created from it
+    """
+    logger.info("Enriching with instituciones catalog...")
+
+    # Ensure both have compatible key column
+    existing_cols = get_cols(df)
+
+    if "institucion" not in existing_cols:
+        logger.warning("No 'institucion' column found, skipping instituciones enrichment")
+        return df
+
+    # Join with instituciones
+    inst_cols = get_cols(instituciones)
+    logger.info(f"Instituciones columns: {inst_cols}")
+
+    # Select relevant columns from instituciones
+    inst_subset = instituciones.select([
+        pl.col("institucion_code"),
+        pl.col("banco")
+    ])
+
+    # Join
+    df = df.join(
+        inst_subset,
+        left_on="institucion",
+        right_on="institucion_code",
+        how="left"
+    )
+
+    # Create banco_norm from banco (bank name)
+    df = add_banco_norm_column(df, "banco")
+
+    # Log join results
+    collected = df.select([pl.col("banco").is_not_null().sum().alias("matched")]).collect()
+    matched_count = collected["matched"][0]
+    logger.info(f"Instituciones join: {matched_count} records matched")
+
+    return df
+
+
+def prepare_cnbv(df: pl.LazyFrame, instituciones: Optional[pl.LazyFrame] = None) -> pl.LazyFrame:
     """
     Prepare CNBV cartera data with calculated aggregations.
 
@@ -201,8 +253,11 @@ def prepare_cnbv(df: pl.LazyFrame) -> pl.LazyFrame:
         .alias("ct_etapa_3"),
     ])
 
-    # Add banco_norm
-    if "institucion" in existing_cols:
+    # Add banco_norm via instituciones enrichment (code -> name mapping)
+    if instituciones is not None:
+        df = enrich_with_instituciones(df, instituciones)
+    elif "institucion" in existing_cols:
+        # Fallback to direct normalization (only works if institucion has names)
         df = add_banco_norm_column(df, "institucion")
 
     return df
@@ -601,6 +656,12 @@ def aggregate_monthly_kpis(
     # Rename periodo to fecha
     result = result.rename({"periodo": "fecha"})
 
+    # Add banco_norm to identify the entity
+    entity_name = banco_filter.upper() if banco_filter else "SISTEMA"
+    result = result.with_columns([
+        pl.lit(entity_name).alias("banco_norm")
+    ])
+
     # Recalculate ratios after aggregation
     result = calculate_imor(result)
     result = calculate_icor(result)
@@ -637,6 +698,44 @@ def aggregate_monthly_kpis(
         result = result.with_columns([pl.lit("SISTEMA").alias("banco_norm")])
 
     return result
+
+
+def calculate_market_share(df: pl.LazyFrame) -> pl.LazyFrame:
+    """
+    Calculate market share for each bank based on cartera_total.
+
+    Market Share = (bank_cartera_total / sistema_cartera_total) * 100
+
+    Args:
+        df: Monthly KPIs with banco_norm and cartera_total columns
+
+    Returns:
+        DataFrame with market_share_pct column added
+    """
+    logger.info("Calculating market share...")
+
+    # Extract SISTEMA totals per period
+    sistema = df.filter(pl.col("banco_norm") == "SISTEMA").select([
+        pl.col("fecha"),
+        pl.col("cartera_total").alias("cartera_sistema")
+    ])
+
+    # Join with all banks
+    df = df.join(sistema, on="fecha", how="left")
+
+    # Calculate market share
+    df = df.with_columns([
+        pl.when(pl.col("cartera_sistema") > 0)
+        .then((pl.col("cartera_total") / pl.col("cartera_sistema") * 100))
+        .otherwise(None)
+        .alias("market_share_pct")
+    ])
+
+    # Drop temporary column
+    df = df.drop("cartera_sistema")
+
+    logger.info("Market share calculated")
+    return df
 
 
 # =============================================================================
@@ -726,7 +825,9 @@ def transform_all(sources: Dict[str, pl.LazyFrame]) -> Dict[str, pl.LazyFrame]:
     logger.info("\n--- LEGACY PIPELINE ---")
 
     if "cnbv" in sources and sources["cnbv"].collect().height > 0:
-        cnbv_prepared = prepare_cnbv(sources["cnbv"])
+        # Get instituciones catalog for code -> name mapping
+        instituciones = sources.get("instituciones")
+        cnbv_prepared = prepare_cnbv(sources["cnbv"], instituciones)
 
         # Enrich with castigos
         if "castigos" in sources:
@@ -771,7 +872,10 @@ def transform_all(sources: Dict[str, pl.LazyFrame]) -> Dict[str, pl.LazyFrame]:
                 continue
 
         if monthly_kpis_list:
-            result["monthly_kpis"] = pl.concat(monthly_kpis_list)
+            monthly_kpis = pl.concat(monthly_kpis_list)
+            # Calculate market share for all banks
+            monthly_kpis = calculate_market_share(monthly_kpis)
+            result["monthly_kpis"] = monthly_kpis
 
     # 2. Transform Normalized BE_BM pipeline
     logger.info("\n--- NORMALIZED PIPELINE ---")

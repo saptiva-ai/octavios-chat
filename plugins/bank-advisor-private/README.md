@@ -375,15 +375,18 @@ Bank Advisor uses a **unified Polars-based ETL pipeline** that consolidates all 
 │  8 Data Sources → loaders_polars.py → transforms_polars.py     │
 │                                                                 │
 │  Sources:                          Output Tables:               │
-│  ├─ CNBV_Cartera_Bancos_V2.xlsx   ├─ monthly_kpis (3660 rows)  │
-│  ├─ BE_BM_202509.xlsx (16 sheets) ├─ cnbv_enriched (32K rows)  │
-│  ├─ ICAP_Bancos.xlsx              ├─ segments (2.4K rows)      │
-│  ├─ TDA.xlsx                      └─ instituciones (37 banks)  │
-│  ├─ TE_Invex_Sistema.xlsx                                       │
-│  ├─ CorporateLoan_CNBVDB.csv      Performance:                  │
-│  ├─ CASTIGOS.xlsx                 ├─ CSV 219MB: 45s → 4s (11x) │
-│  └─ Instituciones.xlsx            ├─ Memory: 800MB → 150MB (5x)│
-│                                   └─ Total ETL: ~8 seconds      │
+│  ├─ CNBV_Cartera_Bancos_V2.xlsx   ├─ monthly_kpis (693 rows)   │
+│  ├─ BE_BM_202509.xlsx (16 sheets) │   └─ 7 banks: INVEX, BBVA,  │
+│  ├─ ICAP_Bancos.xlsx              │      SANTANDER, BANORTE...  │
+│  ├─ TDA.xlsx                      ├─ cnbv_enriched (32K rows)  │
+│  ├─ TE_Invex_Sistema.xlsx         ├─ segments (2.4K rows)      │
+│  ├─ CorporateLoan_CNBVDB.csv      ├─ pm2 (162 rows activos)    │
+│  ├─ CASTIGOS.xlsx                 └─ indicadores (108 ROA/ROE) │
+│  └─ Instituciones.xlsx (99 banks)                               │
+│                                   Performance:                  │
+│                                   ├─ CSV 219MB: 45s → 4s (11x) │
+│                                   ├─ Memory: 800MB → 150MB (5x)│
+│                                   └─ Total ETL: ~22 seconds     │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -425,11 +428,13 @@ python scripts/ops_validate_etl.py --port 8002
 ### Data Loaded
 
 After successful initialization:
-- **3660 monthly records** (enero 2017 - julio 2025)
-- **37 instituciones bancarias**
-- **Métricas**: ICAP (2815), TDA (3660), TASA_MN (2707), TASA_ME (2142)
-- **Segmentos**: Normalized portfolio segments catalog
-- **Balance Sheet**: Sept 2025 data (if BE_BM_202509.xlsx available)
+- **693 monthly KPI records** (7 bancos × ~99 meses: 2017-2025)
+- **7 bancos principales**: INVEX, BBVA, SANTANDER, BANORTE, HSBC, CITIBANAMEX, SISTEMA
+- **99 instituciones en catálogo** (mapeo código → nombre)
+- **33 columnas** incluyendo: cartera_total, imor, icor, icap_total, tda, market_share_pct
+- **2,445 registros de segmentos** (15 tipos: CCE, CCEF, CCCAut, etc.)
+- **162 registros PM2** (activo_total, capital_contable, resultado_neto)
+- **108 registros Indicadores** (ROA, ROE por banco)
 
 ---
 
@@ -455,6 +460,7 @@ See `CHANGELOG.md` for full release notes.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 1.2.0 | 2025-12-03 | Market share calculation, instituciones join fix, PM2/Indicadores loaders |
 | 1.1.0 | 2025-12-03 | Unified ETL with Polars (11x faster), 13 equivalence tests |
 | 1.0.0 | 2025-11-30 | Initial release, INVEX MVP |
 
