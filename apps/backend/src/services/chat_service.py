@@ -319,13 +319,14 @@ class ChatService:
 
             tool_invocations: List[Dict[str, Any]] = []
 
-            # Build payload using prompt registry
-            payload_data, metadata = build_payload(
+            # Build payload using prompt registry (with conversation history)
+            payload_data, metadata = await build_payload(
                 model=model,
                 user_prompt=message,
                 user_context=context,
                 tools_enabled=tools_enabled,
-                channel=channel
+                channel=channel,
+                chat_id=chat_id if chat_id else None
             )
 
             # Add document context as system message if provided
