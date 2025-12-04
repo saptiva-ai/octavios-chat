@@ -827,7 +827,7 @@ class StreamingHandler:
             # The is_bank_query() function determines if the message is banking-related
             bank_chart_data = None
             from ....services.tool_execution_service import ToolExecutionService
-            from ....models.chat import ChatMessageModel
+            from ....models.chat import ChatMessage as ChatMessageModel
 
             logger.debug(
                 "Bank advisor global mode - checking for bank analytics query",

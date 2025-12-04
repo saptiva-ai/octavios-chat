@@ -740,6 +740,12 @@ async def build_messages(
     })
 
     # 2. Historial de conversación (si existe chat_id)
+    logger.info(
+        "🔍 [HISTORY DEBUG] build_messages called",
+        has_chat_id=bool(chat_id),
+        chat_id=chat_id
+    )
+
     if chat_id:
         try:
             settings = get_settings()
@@ -764,18 +770,23 @@ async def build_messages(
                     "content": msg.content
                 })
 
-            logger.debug(
-                "Added conversation history to messages",
+            logger.info(
+                "🔍 [HISTORY DEBUG] Added conversation history to messages",
                 chat_id=chat_id,
                 history_count=len(recent_messages),
                 total_fetched=len(all_recent),
-                skipped_current=len(all_recent) > 0
+                skipped_current=len(all_recent) > 0,
+                recent_messages_preview=[
+                    f"{msg.role.value}: {msg.content[:50]}..."
+                    for msg in reversed(recent_messages)
+                ][:3]
             )
         except Exception as e:
             logger.warning(
                 "Failed to load conversation history, continuing without it",
                 chat_id=chat_id,
-                error=str(e)
+                error=str(e),
+                exc_info=True
             )
 
     # 3. User prompt con contexto opcional
