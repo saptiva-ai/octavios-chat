@@ -451,6 +451,7 @@ async def is_bank_query(message: str) -> bool:
     # 1. Check cache first
     from ..core.redis_cache import get_redis_cache
     import hashlib
+    import re
 
     try:
         cache = await get_redis_cache()
@@ -705,7 +706,6 @@ async def is_bank_query(message: str) -> bool:
                 break
 
     # 5. Pattern matching for metric-like queries
-    import re
     metric_patterns = [
         r'\b(cuál|cual|dame|muestra|obtener|consultar)\b.{0,30}\b(indicador|métrica|metrica|índice|indice|ratio)\b',
         r'\b(cómo|como)\b.{0,30}\b(está|esta|van|anda)\b.{0,20}\b(banco|cartera|mora)\b',
