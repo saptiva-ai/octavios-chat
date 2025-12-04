@@ -198,7 +198,13 @@ def build_tools_context(
             })
 
     markdown = describe_tools_markdown(enabled_tools)
-    schemas = tool_schemas_json(enabled_tools)
+
+    # BA-P0-004: Excluir bank_analytics de schemas porque se ejecuta proactivamente
+    # bank_analytics se invoca ANTES del LLM en streaming_handler.py y sus resultados
+    # se inyectan como contexto. No debe aparecer en el payload de tools porque
+    # confunde al LLM y genera tool_calls que el backend no puede ejecutar.
+    tools_for_schemas = [t for t in enabled_tools if t.get("name") != "bank_analytics"]
+    schemas = tool_schemas_json(tools_for_schemas) if tools_for_schemas else None
 
     logger.debug(
         "Built tools context",
