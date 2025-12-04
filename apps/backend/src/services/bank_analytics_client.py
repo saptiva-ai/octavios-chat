@@ -476,18 +476,43 @@ async def is_bank_query(message: str) -> bool:
 
     # 1. Financial metrics and indicators (high priority)
     financial_metrics = [
+        # Core risk metrics
         "imor", "icor", "icap", "roi", "roe", "roa",
         "morosidad", "mora", "vencida", "vencido",
+
+        # Portfolio and credit metrics
         "cartera", "portafolio", "portfolio",
-        "reservas", "provisiones",
+        "cartera comercial", "cartera consumo", "cartera vivienda",
+        "sin gob", "sin gobierno", "cc",
+
+        # Reserves and provisions
+        "reservas", "provisiones", "reservas totales",
+
+        # Capital and solvency
         "capitalización", "capitalizacion", "capital",
         "solvencia", "liquidez",
+
+        # Margins and rates
         "margen", "spread", "diferencial",
-        "crecimiento", "variación", "variacion",
         "tasa", "tasas", "interés", "interes",
+        "tasa efectiva", "tasa de interés efectiva",
+        "tasa corporativo", "tasa corporativa",
+        "mn", "me", "moneda nacional", "moneda extranjera",
+
+        # Growth and performance
+        "crecimiento", "variación", "variacion",
         "rendimiento", "rentabilidad",
+
+        # Balance sheet items
         "activos", "pasivos", "patrimonio",
-        "utilidad", "utilidades", "ganancia"
+        "utilidad", "utilidades", "ganancia",
+
+        # Credit quality and loss metrics
+        "quebranto", "quebrantos", "castigo", "castigos",
+        "quebrantos comerciales",
+        "pérdida esperada", "perdida esperada", "pérdida esperada total",
+        "deterioro", "etapa", "etapas", "etapas de deterioro",
+        "tasa de deterioro", "deterioro ajustada"
     ]
 
     # 2. Bank names (Mexican financial institutions)
