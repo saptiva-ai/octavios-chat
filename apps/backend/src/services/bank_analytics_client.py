@@ -527,10 +527,13 @@ async def is_bank_query(message: str) -> bool:
     # 3. Banking product types
     banking_products = [
         "comercial", "consumo", "vivienda", "hipotecario", "hipoteca",
-        "automotriz", "pyme", "empresarial", "corporativo",
+        "automotriz", "automotor", "autos", "vehículos", "vehiculos",
+        "pyme", "empresarial", "corporativo",
         "tarjeta", "crédito", "credito", "préstamo", "prestamo",
+        "crédito de consumo", "credito de consumo",
         "financiamiento", "leasing", "arrendamiento",
-        "ahorro", "inversión", "inversion", "cuenta", "depósito", "deposito"
+        "ahorro", "inversión", "inversion", "cuenta", "depósito", "deposito",
+        "nómina", "nomina"
     ]
 
     # 4. Regulatory and institutional terms
@@ -545,19 +548,25 @@ async def is_bank_query(message: str) -> bool:
     # 5. Query patterns that suggest comparison or analysis
     query_patterns = [
         "comparar", "comparación", "comparacion", "versus", "vs",
+        "frente a", "frente al", "contra", "respecto a", "respecto al",
         "evolución", "evolucion", "tendencia", "histórico", "historico",
+        "ha evolucionado", "cómo ha", "como ha",
         "análisis", "analisis", "desempeño", "desempeno", "performance",
         "ranking", "top", "mejor", "peor", "líder", "lider",
         "trimestre", "semestre", "anual", "mensual",
-        "últimos", "ultimos", "reciente", "actual"
+        "últimos", "ultimos", "último", "ultimo", "reciente", "actual",
+        "porcentaje", "participación", "participacion", "%",
+        "cuánto", "cuanto", "qué", "que"
     ]
 
     # 6. Financial/banking context words
     financial_context = [
         "financiero", "financiera", "financieros", "financieras",
         "económico", "economico", "economía", "economia",
-        "sector bancario", "sistema financiero",
-        "mercado", "industria"
+        "sector bancario", "sistema financiero", "sistema bancario",
+        "mercado", "industria", "resto de bancos", "otros bancos",
+        "competencia", "competidores", "pares",
+        "tamaño", "ranking", "cada banco", "por banco"
     ]
 
     # Check all categories
