@@ -746,9 +746,16 @@ async def build_messages(
             # Recuperar últimos N mensajes (excluyendo el actual)
             recent_limit = getattr(settings, 'memory_recent_messages', 20)
 
-            recent_messages = await ChatMessageModel.find(
+            # CRITICAL FIX: Skip the most recent message (current user message)
+            # because it was already saved to DB before build_messages() is called.
+            # We fetch recent_limit + 1 messages, skip the first one (most recent),
+            # and use the next recent_limit messages as history.
+            all_recent = await ChatMessageModel.find(
                 ChatMessageModel.chat_id == chat_id
-            ).sort(-ChatMessageModel.created_at).limit(recent_limit).to_list()
+            ).sort(-ChatMessageModel.created_at).limit(recent_limit + 1).to_list()
+
+            # Skip the first message (most recent = current user message just saved)
+            recent_messages = all_recent[1:] if len(all_recent) > 0 else []
 
             # Agregar en orden cronológico (más antiguo primero)
             for msg in reversed(recent_messages):
@@ -760,7 +767,9 @@ async def build_messages(
             logger.debug(
                 "Added conversation history to messages",
                 chat_id=chat_id,
-                history_count=len(recent_messages)
+                history_count=len(recent_messages),
+                total_fetched=len(all_recent),
+                skipped_current=len(all_recent) > 0
             )
         except Exception as e:
             logger.warning(
