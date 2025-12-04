@@ -715,20 +715,22 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
               });
             }
 
-            // Don't send temp IDs or phantom chat IDs to backend - they don't exist there yet
-            // A "phantom chat" is a UUID from URL that doesn't exist in the database yet
+            // Don't send temp IDs to backend - they don't exist there yet
             const wasTempId = currentChatId?.startsWith("temp-");
-            const isPhantomChat =
-              currentChatId && messages.length === 0 && !wasTempId;
 
-            // Send chat_id to backend only if:
-            // 1. NOT a temp ID (generated client-side)
-            // 2. NOT a phantom chat (UUID from URL with no messages loaded)
+            // CRITICAL FIX: Don't treat valid chat IDs as "phantom" just because messages haven't loaded yet
+            // Previous logic: isPhantomChat = currentChatId && messages.length === 0 && !wasTempId
+            // Problem: This caused follow-up messages to create new conversations because messages
+            // hadn't loaded yet from the backend (race condition)
+            //
+            // New logic: If we have a valid (non-temp) chat_id, ALWAYS use it
+            // The backend will handle whether the chat exists or needs to be created
+            //
+            // Send chat_id to backend only if it's NOT a temp ID
             // CRITICAL: Use `null` instead of `undefined`
             // - `null` serializes as "chat_id": null (backend knows to create new chat)
             // - `undefined` removes the key entirely (causes backend validation errors)
-            const chatIdForBackend =
-              wasTempId || isPhantomChat ? null : currentChatId || null;
+            const chatIdForBackend = wasTempId ? null : currentChatId || null;
 
             // OBS-1: Log payload before sending to backend
             logDebug("[ChatView] payload_outbound", {
