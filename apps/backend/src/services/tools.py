@@ -446,9 +446,9 @@ def normalize_tools_state(tools: Optional[Dict[str, Any]]) -> Dict[str, bool]:
     # Default map from known tools (all tools disabled by default)
     normalized: Dict[str, bool] = {name: False for name in DEFAULT_AVAILABLE_TOOLS.keys()}
 
-    # BA-P0-004: bank_analytics disabled by default - only enabled when user selects tool
-    # This ensures BankAdvisor only activates on explicit user selection
-    normalized["bank_analytics"] = False
+    # BA-P0-004: bank_analytics enabled by default for SAPTIVA models
+    # The system prompt instructs the LLM when to use this tool for banking queries
+    normalized["bank_analytics"] = True
 
     if tools:
         for name, value in tools.items():
