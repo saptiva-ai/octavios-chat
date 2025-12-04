@@ -47,34 +47,6 @@ models:
         - Cualquier pregunta sobre contenido del documento adjunto
       * Si no hay segmentos relevantes o la herramienta falla, dilo honestamente y sugiere reformular la pregunta.
 
-      **Consultas Bancarias (Bank Analytics):**
-      * CRÍTICO: Si el usuario pregunta sobre métricas bancarias, SIEMPRE usa la herramienta `bank_analytics` ANTES de responder
-      * Métricas bancarias incluyen:
-        - IMOR, ICOR, ICAP, TDA (morosidad, cobertura, capitalización, deterioro)
-        - Cartera: total, comercial, consumo, vivienda, vencida, automotriz, nómina, tarjetas
-        - PDM / Market Share / Participación de mercado / Cuota de mercado
-        - Reservas totales, pérdida esperada, quebrantos
-        - Tamaño de bancos, activos totales, ranking por activos
-        - Tasas de interés (MN, ME, sistema, efectiva, corporativa)
-        - Etapas de deterioro (Etapa 1, 2, 3)
-      * Bancos soportados: INVEX, SISTEMA (promedio del mercado), BBVA, SANTANDER, BANORTE, HSBC, CITIBANAMEX, SCOTIABANK, INBURSA
-      * Ejemplos de preguntas que DEBEN usar `bank_analytics`:
-        - "¿Cómo está mi IMOR?" → bank_analytics(metric_or_query="¿Cómo está mi IMOR?", mode="chart")
-        - "¿Cuál es el PDM de INVEX últimos 6 meses?" → bank_analytics
-        - "¿Cómo está la cartera de consumo?" → bank_analytics
-        - "Ranking de bancos por activos" → bank_analytics
-        - "IMOR de INVEX vs mercado" → bank_analytics
-        - "Market share medido por cartera total" → bank_analytics
-        - "Evolución de cartera automotriz último trimestre" → bank_analytics
-      * Parámetros de `bank_analytics`:
-        - `metric_or_query` (string, requerido): La pregunta completa del usuario en español
-        - `mode` (string, opcional): Usa "chart" para gráficas visuales, "dashboard" para vista de tablero
-      * La herramienta retorna:
-        - Datos numéricos estructurados (months, values)
-        - Gráfica Plotly interactiva (plotly_config) lista para mostrar
-        - Metadata (métrica, tipo, fecha de datos, template SQL usado)
-      * IMPORTANTE: NO intentes responder preguntas bancarias sin llamar a bank_analytics - no tienes acceso a datos en tiempo real de INVEX
-
       Herramientas disponibles
       {TOOLS}
       * Llama herramientas cuando:
@@ -172,34 +144,6 @@ models:
       * Si no responde la pregunta: "No encuentro información sobre X en el documento"
       * PROHIBIDO inventar datos, cifras, URLs, personas, fechas o contenido
       * Usa comillas para citas textuales del documento
-
-      **Consultas Bancarias (Bank Analytics):**
-      * CRÍTICO: Si el usuario pregunta sobre métricas bancarias, SIEMPRE usa la herramienta `bank_analytics` ANTES de responder
-      * Métricas bancarias incluyen:
-        - IMOR, ICOR, ICAP, TDA (morosidad, cobertura, capitalización, deterioro)
-        - Cartera: total, comercial, consumo, vivienda, vencida, automotriz, nómina, tarjetas
-        - PDM / Market Share / Participación de mercado / Cuota de mercado
-        - Reservas totales, pérdida esperada, quebrantos
-        - Tamaño de bancos, activos totales, ranking por activos
-        - Tasas de interés (MN, ME, sistema, efectiva, corporativa)
-        - Etapas de deterioro (Etapa 1, 2, 3)
-      * Bancos soportados: INVEX, SISTEMA (promedio del mercado), BBVA, SANTANDER, BANORTE, HSBC, CITIBANAMEX, SCOTIABANK, INBURSA
-      * Ejemplos de preguntas que DEBEN usar `bank_analytics`:
-        - "¿Cómo está mi IMOR?" → bank_analytics(metric_or_query="¿Cómo está mi IMOR?", mode="chart")
-        - "¿Cuál es el PDM de INVEX últimos 6 meses?" → bank_analytics
-        - "¿Cómo está la cartera de consumo?" → bank_analytics
-        - "Ranking de bancos por activos" → bank_analytics
-        - "IMOR de INVEX vs mercado" → bank_analytics
-        - "Market share medido por cartera total" → bank_analytics
-        - "Evolución de cartera automotriz último trimestre" → bank_analytics
-      * Parámetros de `bank_analytics`:
-        - `metric_or_query` (string, requerido): La pregunta completa del usuario en español
-        - `mode` (string, opcional): Usa "chart" para gráficas visuales, "dashboard" para vista de tablero
-      * La herramienta retorna:
-        - Datos numéricos estructurados (months, values)
-        - Gráfica Plotly interactiva (plotly_config) lista para mostrar
-        - Metadata (métrica, tipo, fecha de datos, template SQL usado)
-      * IMPORTANTE: NO intentes responder preguntas bancarias sin llamar a bank_analytics - no tienes acceso a datos en tiempo real de INVEX
 
       Herramientas disponibles
       {TOOLS}
@@ -303,34 +247,6 @@ models:
       * Si no responde la pregunta: "No encuentro información sobre X en el documento"
       * PROHIBIDO inventar datos, cifras, URLs, personas, fechas o contenido
       * Usa comillas para citas textuales del documento
-
-      **Consultas Bancarias (Bank Analytics):**
-      * CRÍTICO: Si el usuario pregunta sobre métricas bancarias, SIEMPRE usa la herramienta `bank_analytics` ANTES de responder
-      * Métricas bancarias incluyen:
-        - IMOR, ICOR, ICAP, TDA (morosidad, cobertura, capitalización, deterioro)
-        - Cartera: total, comercial, consumo, vivienda, vencida, automotriz, nómina, tarjetas
-        - PDM / Market Share / Participación de mercado / Cuota de mercado
-        - Reservas totales, pérdida esperada, quebrantos
-        - Tamaño de bancos, activos totales, ranking por activos
-        - Tasas de interés (MN, ME, sistema, efectiva, corporativa)
-        - Etapas de deterioro (Etapa 1, 2, 3)
-      * Bancos soportados: INVEX, SISTEMA (promedio del mercado), BBVA, SANTANDER, BANORTE, HSBC, CITIBANAMEX, SCOTIABANK, INBURSA
-      * Ejemplos de preguntas que DEBEN usar `bank_analytics`:
-        - "¿Cómo está mi IMOR?" → bank_analytics(metric_or_query="¿Cómo está mi IMOR?", mode="chart")
-        - "¿Cuál es el PDM de INVEX últimos 6 meses?" → bank_analytics
-        - "¿Cómo está la cartera de consumo?" → bank_analytics
-        - "Ranking de bancos por activos" → bank_analytics
-        - "IMOR de INVEX vs mercado" → bank_analytics
-        - "Market share medido por cartera total" → bank_analytics
-        - "Evolución de cartera automotriz último trimestre" → bank_analytics
-      * Parámetros de `bank_analytics`:
-        - `metric_or_query` (string, requerido): La pregunta completa del usuario en español
-        - `mode` (string, opcional): Usa "chart" para gráficas visuales, "dashboard" para vista de tablero
-      * La herramienta retorna:
-        - Datos numéricos estructurados (months, values)
-        - Gráfica Plotly interactiva (plotly_config) lista para mostrar
-        - Metadata (métrica, tipo, fecha de datos, template SQL usado)
-      * IMPORTANTE: NO intentes responder preguntas bancarias sin llamar a bank_analytics - no tienes acceso a datos en tiempo real de INVEX
 
       Herramientas disponibles
       {TOOLS}
