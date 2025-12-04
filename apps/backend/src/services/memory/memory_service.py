@@ -145,11 +145,19 @@ class MemoryService:
             messages.append({"role": "system", "content": memory_text})
 
         # 3. Recent messages from conversation history
-        recent = await ChatMessageModel.find(
+        # CRITICAL FIX: Skip the most recent message (current user message)
+        # because it was already saved to DB before get_context_for_llm() is called,
+        # and build_message_context_with_memory() adds it manually at line 260.
+        # We fetch memory_recent_messages + 1, skip the first one (most recent),
+        # and use the next memory_recent_messages as history.
+        all_recent = await ChatMessageModel.find(
             ChatMessageModel.chat_id == session_id
         ).sort(-ChatMessageModel.created_at).limit(
-            self.settings.memory_recent_messages
+            self.settings.memory_recent_messages + 1
         ).to_list()
+
+        # Skip the first message (most recent = current user message just saved)
+        recent = all_recent[1:] if len(all_recent) > 0 else []
 
         # Reverse to chronological order (oldest first)
         for msg in reversed(recent):
@@ -157,6 +165,18 @@ class MemoryService:
                 "role": msg.role.value,
                 "content": msg.content
             })
+
+        logger.info(
+            "🔍 [MEMORY DEBUG] Added conversation history to context",
+            session_id=session_id,
+            history_count=len(recent),
+            total_fetched=len(all_recent),
+            skipped_current=len(all_recent) > 0,
+            recent_messages_preview=[
+                f"{msg.role.value}: {msg.content[:50]}..."
+                for msg in reversed(recent)
+            ][:3]
+        )
 
         return messages
 
