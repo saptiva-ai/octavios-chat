@@ -289,15 +289,16 @@ Responde SOLO con JSON válido:
 
         # Rule 4: Multiple banks indicator -> comparison/evolution
         # "todos los bancos", "todos bancos", "all banks" suggests showing all banks over time
+        # HIGH CONFIDENCE (0.96) to override LLM's tendency to interpret as ranking
         multi_bank_keywords = ["todos los bancos", "todos bancos", "all banks", "múltiples bancos", "varios bancos"]
         if any(kw in query_lower for kw in multi_bank_keywords):
-            # If has metric, assume they want evolution comparison
-            if hasattr(entities, 'metric') and entities.metric:
-                return ParsedIntent(
-                    intent=Intent.COMPARISON,
-                    confidence=0.85,
-                    explanation="Query mentions 'todos los bancos' with metric - implies comparison over time"
-                )
+            # Always return COMPARISON when "todos los bancos" is detected
+            # User wants to compare all banks, not rank them
+            return ParsedIntent(
+                intent=Intent.COMPARISON,
+                confidence=0.96,
+                explanation="Query mentions 'todos los bancos' - implies comparison over time"
+            )
 
         # Rule 5: Evolution keywords
         evolution_keywords = ["evolución", "evolucion", "tendencia", "histórico", "historico", "cambio", "variación", "variacion"]
