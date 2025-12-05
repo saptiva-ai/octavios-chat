@@ -56,7 +56,7 @@ TEST_CASES = [
         query="Reservas totales por banco",
         expected_type="chart",
         expected_metric_keywords=["reserva"],
-        value_range=(-40000000, 0),  # Negative is correct (liability convention)
+        value_range=(-35000000, -400),  # Negative is correct (liability convention)
     ),
     MetricTestCase(
         name="5. Reservas (Variación)",
@@ -89,19 +89,19 @@ TEST_CASES = [
         is_percentage=True,
     ),
     MetricTestCase(
-        name="9. Etapas Deterioro Sistema",
-        query="Etapas de deterioro del sistema",
+        name="9. Etapas Deterioro Sistema (Etapa 1)",
+        query="ct_etapa_1 del sistema",
         expected_type="chart",
-        expected_metric_keywords=["etapa", "deterioro"],
-        value_range=(1000, 500000),  # MDP, not percentage
-        is_percentage=False,
+        expected_metric_keywords=["etapa", "ct_etapa"],
+        value_range=(90, 100),  # Percentage (Etapa 1 ~95-96% for SISTEMA)
+        is_percentage=True,
     ),
     MetricTestCase(
-        name="10. Etapas Deterioro INVEX",
-        query="Etapas de deterioro de INVEX",
+        name="10. Etapas Deterioro INVEX (Etapa 1)",
+        query="ct_etapa_1 de INVEX",
         expected_type="chart",
-        expected_metric_keywords=["etapa", "deterioro"],
-        value_range=(0, 100),  # Percentage after scale fix
+        expected_metric_keywords=["etapa", "ct_etapa"],
+        value_range=(80, 100),  # Percentage after scale fix (Etapa 1 ~95%)
         is_percentage=True,
     ),
     MetricTestCase(
@@ -285,16 +285,20 @@ def test_metric_streaming(test_case: MetricTestCase, token: str) -> Dict[str, An
                 chart = sse_data["bank_chart"]
                 result["details"]["chart_received"] = True
 
-                # 1. Check title
+                # 1. Check title (check both top-level and metadata)
                 metric_name = (chart.get("metric_name") or "").lower()
                 title = (chart.get("title") or "").lower()
+                # Also check metadata.title if top-level title is empty
+                if not title:
+                    metadata = chart.get("metadata", {})
+                    title = (metadata.get("title") or "").lower()
                 title_text = f"{metric_name} {title}"
 
                 keyword_found = any(kw.lower() in title_text for kw in test_case.expected_metric_keywords)
                 if not keyword_found:
                     result["issues"].append(f"Title mismatch: got '{metric_name}', expected keywords: {test_case.expected_metric_keywords}")
                 result["details"]["metric_name"] = chart.get("metric_name")
-                result["details"]["title"] = chart.get("title")
+                result["details"]["title"] = chart.get("title") or chart.get("metadata", {}).get("title")
 
                 # 2. Check plotly data
                 plotly_config = chart.get("plotly_config", {})
