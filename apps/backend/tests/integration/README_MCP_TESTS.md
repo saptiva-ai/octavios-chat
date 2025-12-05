@@ -168,7 +168,7 @@ REDIS_URL=redis://:password@localhost:6380
 |------|-----------|-------------------|-------|
 | `deep_research` | ✅ 15 | ✅ 3 | 18 |
 | `extract_document_text` | ✅ 18 | ✅ 3 | 21 |
-| `audit_file` | ✅ Existing | ✅ 1 | - |
+| `excel_analyzer` | ✅ Existing | ✅ 1 | - |
 | `excel_analyzer` | ✅ Existing | ✅ 2 | - |
 | `viz_tool` | ✅ Existing | ❌ TODO | - |
 

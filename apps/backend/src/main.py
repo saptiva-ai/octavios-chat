@@ -31,9 +31,10 @@ from .core.telemetry import (
     increment_tool_invocation,
 )
 from .middleware.auth import AuthMiddleware
-from .middleware.rate_limit import RateLimitMiddleware
+from .middleware.rate_limit import RateLimitMiddleware, limiter, _rate_limit_exceeded_handler
 from .middleware.telemetry import TelemetryMiddleware
 from .middleware.cache_control import CacheControlMiddleware
+from slowapi.errors import RateLimitExceeded
 from .routers import auth, chat, deep_research, health, history, reports, stream, metrics, conversations, intent, models, documents, review, features, files, mcp_admin, resources, artifacts
 from .routers import settings as settings_router
 from .services.storage import storage
@@ -138,7 +139,11 @@ def create_app() -> FastAPI:
     app.add_middleware(RateLimitMiddleware)
     app.add_middleware(CacheControlMiddleware)  # ISSUE-023: Prevent caching of API responses
     
+    # Rate limiter state
+    app.state.limiter = limiter
+
     # Exception handlers
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.add_exception_handler(APIError, api_exception_handler)
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)

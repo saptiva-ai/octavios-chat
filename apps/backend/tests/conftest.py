@@ -28,10 +28,20 @@ from src.core.database import Database
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def initialize_database():
-    """Initialize database connection for all tests."""
-    await Database.connect_to_mongo()
-    yield
-    await Database.close_mongo_connection()
+    """Initialize database connection for all tests (skip if MONGODB_URL not set)."""
+    import os
+    mongodb_url = os.getenv("MONGODB_URL")
+    if mongodb_url:
+        try:
+            await Database.connect_to_mongo()
+            yield
+            await Database.close_mongo_connection()
+        except Exception as e:
+            # Skip database initialization if connection fails (for unit tests)
+            yield
+    else:
+        # Skip database initialization for unit tests that don't need it
+        yield
 
 
 @pytest.fixture(autouse=True)

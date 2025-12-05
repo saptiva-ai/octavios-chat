@@ -2,6 +2,12 @@
 
 Este documento describe el proceso completo de deployment para **SAPTIVA Copilot OS** usando CI/CD automatizado y deployments manuales.
 
+## 📚 Índice rápido de runbooks y guías relacionadas
+- [DEPLOYMENT_GUIDE_V2](./DEPLOYMENT_GUIDE_V2.md): script v2 de deploy seguro (carga de env vars, creación de `etl_runs`, health checks y init de Bank Advisor).
+- [PRODUCTION_DEPLOY_IMPROVEMENTS](./PRODUCTION_DEPLOY_IMPROVEMENTS.md): versión production-first V3/V3.1 (compose override de prod, verificación sin hot reload, restore de dump integrado).
+- [DEPLOY_PRODUCTION](./DEPLOY_PRODUCTION.md): playbook SAFE UPDATE para actualizar código sin borrar volúmenes ni datos.
+- [DEPLOY_NOTES](./DEPLOY_NOTES.md): notas de la última entrega (gráficas con unidades, stats inyectadas en LLM y mejoras de canvas).
+
 ## Arquitectura de Deployment
 
 ```mermaid
@@ -83,7 +89,7 @@ PRODUCTION_API_URL=https://api.yourdomain.com
 
 #### General Secrets:
 ```bash
-GITHUB_TOKEN=ghp_your_token_with_packages_permission
+GITHUB_TOKEN=<your_token_with_packages_permission>
 ```
 
 ### 2. Configurar Servidor

@@ -42,7 +42,7 @@ class TestContextManager:
             ]
         }
         
-        context_manager.add_tool_result("audit_file", audit_result)
+        context_manager.add_tool_result("excel_analyzer", audit_result)
         
         assert len(context_manager.sources) == 1
         source = context_manager.sources[0]

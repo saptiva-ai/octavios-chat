@@ -3,6 +3,12 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from pathlib import Path
+import os
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_MCP_DOCUMENT_EXTRACTION", "false").lower() != "true",
+    reason="MCP document extraction tests deshabilitados por defecto (requires full stack)",
+)
 
 from src.mcp.tools.document_extraction_tool import DocumentExtractionTool
 from src.mcp.protocol import ToolCategory, ToolCapability

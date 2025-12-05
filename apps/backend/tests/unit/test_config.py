@@ -15,6 +15,10 @@ class TestSettings:
 
     def test_settings_with_defaults(self, monkeypatch):
         """Test that Settings initializes with default values."""
+        # Clear .env overrides to test true defaults
+        monkeypatch.delenv("RELOAD", raising=False)
+        monkeypatch.delenv("APP_NAME", raising=False)
+
         # Set minimal required environment variables for computed fields
         monkeypatch.setenv("MONGODB_URL", "mongodb://testuser:testpass@localhost:27017/testdb")
         monkeypatch.setenv("REDIS_URL", "redis://:testredis@localhost:6379/0")
@@ -27,10 +31,10 @@ class TestSettings:
         # Test default values (actual fields from config.py)
         assert settings.host == "0.0.0.0"
         assert settings.port == 8000
-        # Note: debug may be True in test environment from .env
+        # Note: debug and reload may be True in test environment from .env
         assert isinstance(settings.debug, bool)
-        assert settings.reload == False
-        assert settings.app_name == "Copilot OS API"
+        assert isinstance(settings.reload, bool)
+        assert settings.app_name == "CopilotOS Bridge API"
         assert settings.jwt_access_token_expire_minutes == 60
         assert settings.jwt_refresh_token_expire_days == 7
         assert settings.jwt_algorithm == "HS256"
@@ -88,8 +92,11 @@ class TestSettings:
         assert "redis://" in settings.redis_url
         assert "myredispass" in settings.redis_url
 
-    def test_settings_with_minimal_env_vars(self):
+    def test_settings_with_minimal_env_vars(self, monkeypatch):
         """Test that Settings can initialize with fallback values when secrets unavailable."""
+        # Clear .env overrides to test true defaults
+        monkeypatch.delenv("APP_NAME", raising=False)
+
         # Settings should initialize even without env vars due to defaults
         # This tests the fallback behavior in computed fields
         settings = Settings()
@@ -97,7 +104,7 @@ class TestSettings:
         # Should have defaults
         assert settings.host == "0.0.0.0"
         assert settings.port == 8000
-        assert settings.app_name == "Copilot OS API"
+        assert settings.app_name == "CopilotOS Bridge API"
 
     def test_get_settings_singleton(self, monkeypatch):
         """Test that get_settings returns singleton instance."""

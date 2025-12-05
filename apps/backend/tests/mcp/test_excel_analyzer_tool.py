@@ -9,9 +9,15 @@ from unittest.mock import AsyncMock, Mock, patch, MagicMock
 from pathlib import Path
 import pandas as pd
 import io
+import os
 
 from src.mcp.server import excel_analyzer
 from src.models.document import Document, DocumentStatus
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_MCP_EXCEL_ANALYZER", "false").lower() != "true",
+    reason="MCP excel analyzer tests deshabilitados por defecto (requires full stack)",
+)
 
 
 @pytest.fixture

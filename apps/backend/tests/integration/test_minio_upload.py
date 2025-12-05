@@ -10,9 +10,15 @@ Tests the complete flow:
 import pytest
 from httpx import AsyncClient
 import io
+import os
 
 from src.main import app
 from src.services.minio_service import minio_service
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_INTEGRATION_MINIO", "false").lower() != "true",
+    reason="Integration MinIO deshabilitado por defecto (requires MinIO service)",
+)
 
 
 @pytest.mark.asyncio

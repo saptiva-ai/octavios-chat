@@ -25,7 +25,6 @@ from sse_starlette.sse import EventSourceResponse
 from ....core.config import get_settings, Settings
 from ....core.redis_cache import get_redis_cache
 from ....core.telemetry import trace_span, increment_llm_timeout
-from ....core.constants import AUDIT_COMMAND_PREFIX, TOOL_NAME_AUDIT
 from ....schemas.chat import ChatRequest, ChatResponse
 from ....schemas.common import ApiResponse
 from ....services.chat_service import ChatService
@@ -71,37 +70,11 @@ async def send_chat_message(
     # ========================================================================
     # STREAMING PATH
     # ========================================================================
-    # WORKAROUND: Force non-streaming when documents are attached OR audit commands
+    # WORKAROUND: Force non-streaming when documents are attached
     # This ensures document context is properly loaded via SimpleChatStrategy
     # until Qdrant indexing is fully operational for streaming RAG
     file_ids = getattr(request, 'file_ids', None) or []
     has_documents = len(file_ids) > 0
-
-    # Check if message is an audit command
-    is_audit_command = request.message.strip().startswith(AUDIT_COMMAND_PREFIX)
-
-    # DISABLED: AUTO-ENABLE AUDIT TOOL for audit commands
-    # Reason: Creates duplicate audit executions - one via legacy non-streaming MCP tool
-    # and another via streaming handler. The streaming handler already detects audit
-    # commands and executes them properly with real-time progress + artifact rendering.
-    # Keeping this enabled causes two chat messages: one legacy (text-only) and one
-    # modern (with canvas/artifact). Solution: Let streaming handler be the single
-    # source of truth for audit execution.
-    # if is_audit_command:
-    #     if request.tools_enabled is None:
-    #         request.tools_enabled = {}
-    #     request.tools_enabled[TOOL_NAME_AUDIT] = True
-    #     logger.info(f"Auto-enabled {TOOL_NAME_AUDIT} tool for audit command", user_id=user_id)
-
-    # logger.info(
-    #     "🔍 [DOCUMENT DEBUG] Checking for documents",
-    #     stream_requested=getattr(request, 'stream', False),
-    #     has_file_ids_attr=hasattr(request, 'file_ids'),
-    #     file_ids_value=file_ids,
-    #     file_ids_count=len(file_ids),
-    #     has_documents=has_documents,
-    #     user_id=user_id
-    # )
 
     if getattr(request, 'stream', False):
         if has_documents:
@@ -115,7 +88,7 @@ async def send_chat_message(
             )
             request.stream = False
 
-        # Check Accept header for SSE streaming (applies to audit AND regular messages)
+        # Check Accept header for SSE streaming
         accept_header = http_request.headers.get("accept", "")
         if "text/event-stream" in accept_header:
             streaming_handler = StreamingHandler(settings)
@@ -214,6 +187,73 @@ async def send_chat_message(
 
         # 4.5. Invoke MCP tools before LLM (NEW: Phase 2 MCP integration)
         tool_results = await ToolExecutionService.invoke_relevant_tools(context, user_id)
+
+        # 4.6. Check for bank analytics query (BA-P0-001)
+        # GLOBAL MODE: Bank Advisor is always active and automatically detects relevant queries
+        # The is_bank_query() function determines if the message is banking-related
+        bank_chart_data = None
+
+        bank_chart_data = await ToolExecutionService.invoke_bank_analytics(
+            message=context.message,
+            user_id=user_id
+        )
+
+        if bank_chart_data:
+            tool_results["bank_analytics"] = bank_chart_data
+            logger.info(
+                "Bank analytics result detected and added",
+                metric=bank_chart_data.get("metric_name"),
+                request_id=context.request_id
+            )
+        else:
+            logger.debug(
+                "No bank analytics data returned (message not banking-related)",
+                request_id=context.request_id
+            )
+
+            # NUEVO: Persist as artifact (BA-P0-003)
+            from ....models.artifact import Artifact, ArtifactType
+            from datetime import datetime
+
+            try:
+                # Create title from metric and banks
+                metric_name = bank_chart_data.get("metric_name", "Análisis Bancario")
+                bank_names = bank_chart_data.get("bank_names", [])
+                chart_title = bank_chart_data.get("title") or f"{metric_name} - {', '.join(bank_names)}"
+
+                artifact = Artifact(
+                    user_id=user_id,
+                    chat_session_id=chat_session.id,
+                    title=chart_title,
+                    type=ArtifactType.BANK_CHART,
+                    content=bank_chart_data,  # Full BankChartData object
+                    versions=[],
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                artifact.add_version(bank_chart_data)
+                await artifact.insert()
+
+                logger.info(
+                    "bank_chart.artifact_created",
+                    artifact_id=str(artifact.id),
+                    metric=metric_name,
+                    banks=bank_names,
+                    request_id=context.request_id
+                )
+
+                # Add artifact reference to tool_results for LLM context
+                tool_results["bank_analytics_artifact_id"] = str(artifact.id)
+
+            except Exception as e:
+                logger.error(
+                    "bank_chart.artifact_creation_failed",
+                    error=str(e),
+                    request_id=context.request_id,
+                    exc_info=True
+                )
+                # Don't fail the request if artifact creation fails
+
         if tool_results:
             # Update context with tool results for LLM injection
             context = ChatContext(
@@ -275,36 +315,45 @@ async def send_chat_message(
             decision_metadata = handler_result.metadata.decision_metadata if handler_result.metadata else None
             tool_invocations = decision_metadata.get("tool_invocations", []) if decision_metadata else []
 
-            # Extract validation_report_id from tool results if present
-            validation_report_id = None
+            # Extract bank_chart_artifact from tool results if present
+            bank_chart_artifact = None
             if tool_results:
                 for key, result in tool_results.items():
-                    # Check for audit_file result
-                    if "audit_file" in key and isinstance(result, dict):
-                        validation_report_id = result.get("validation_report_id")
-                        if validation_report_id:
-                            break
+                    # Check for bank_analytics result (BA-P0-001)
+                    if key == "bank_analytics" and isinstance(result, dict):
+                        bank_chart_artifact = result
+                        logger.info(
+                            "Bank chart artifact detected",
+                            metric=result.get("metric_name")
+                        )
 
             logger.info(
                 "🔍 DEBUG: About to save assistant message with metadata",
                 decision_metadata=decision_metadata,
                 tool_invocations=tool_invocations,
                 has_tool_invocations=len(tool_invocations) > 0,
-                validation_report_id=validation_report_id
+                has_bank_chart=bank_chart_artifact is not None
             )
+
+            # Build message metadata
+            message_metadata = {
+                "strategy_used": handler_result.strategy_used,
+                "processing_time_ms": handler_result.processing_time_ms,
+                "tokens_used": handler_result.metadata.tokens_used if handler_result.metadata else None,
+                "decision_metadata": decision_metadata,
+                "tool_invocations": tool_invocations
+            }
+
+            # Add bank_chart artifact if present (BA-P0-001)
+            if bank_chart_artifact:
+                message_metadata["artifact"] = bank_chart_artifact
+                message_metadata["kind"] = "bank_chart"
 
             assistant_message = await chat_service.add_assistant_message(
                 chat_session=chat_session,
                 content=handler_result.sanitized_content or handler_result.content,
                 model=context.model,
-                metadata={
-                    "strategy_used": handler_result.strategy_used,
-                    "processing_time_ms": handler_result.processing_time_ms,
-                    "tokens_used": handler_result.metadata.tokens_used if handler_result.metadata else None,
-                    "decision_metadata": decision_metadata,
-                    "tool_invocations": tool_invocations,  # Add tool_invocations at top level for frontend
-                    "validation_report_id": validation_report_id  # Inject validation_report_id for UI card
-                }
+                metadata=message_metadata
             )
 
             logger.info(
@@ -323,12 +372,18 @@ async def send_chat_message(
             # Invalidate caches
             await cache.invalidate_chat_history(chat_session.id)
 
-            # Return response
-            return (ChatResponseBuilder()
+            # Build response
+            response_builder = (ChatResponseBuilder()
                 .from_processing_result(handler_result)
                 .with_metadata("processing_time_ms", (time.time() - start_time) * 1000)
-                .with_metadata("assistant_message_id", str(assistant_message.id))
-                .build())
+                .with_metadata("assistant_message_id", str(assistant_message.id)))
+
+            # Add bank_chart artifact to response (BA-P0-001)
+            if bank_chart_artifact:
+                response_builder = response_builder.with_artifact(bank_chart_artifact)
+                response_builder = response_builder.with_metadata("kind", "bank_chart")
+
+            return response_builder.build()
 
         # Fallback (should not happen with StandardChatHandler)
         logger.warning(

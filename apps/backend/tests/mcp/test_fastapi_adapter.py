@@ -13,9 +13,15 @@ from unittest.mock import AsyncMock, Mock, patch
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
 from fastmcp import FastMCP
+import os
 
 from src.mcp.fastapi_adapter import MCPFastAPIAdapter
 from src.models.user import User
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_MCP_FASTAPI_ADAPTER", "false").lower() != "true",
+    reason="MCP fastapi adapter tests deshabilitados por defecto (requires Redis/stack).",
+)
 
 
 @pytest.fixture

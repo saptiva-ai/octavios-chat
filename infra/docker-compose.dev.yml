@@ -14,7 +14,7 @@ services:
         cd /app/apps/web && pnpm dev --hostname 0.0.0.0 --port 3000
     environment:
       - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8001}
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-}
       - DEEP_RESEARCH_ENABLED=${DEEP_RESEARCH_ENABLED:-true}
       - CI=true
     volumes:
@@ -36,14 +36,23 @@ services:
       - ../envs/.env
     volumes:
       # Mount source code for hot reload
-      - ../apps/backend/src:/app/src:ro
+      - ../apps/backend/src:/app/src
       - ../apps/backend/tests:/app/tests:ro
       - ../apps/backend/pytest.ini:/app/pytest.ini:ro
-      - ../.coveragerc:/app/.coveragerc:ro
+      - ../apps/backend/.coveragerc:/app/.coveragerc:ro
     environment:
       - DEEP_RESEARCH_ENABLED=${DEEP_RESEARCH_ENABLED:-true}
       - PYTHONPATH=/usr/local/lib/python3.11/site-packages:/app/src  # Ensure vendor MCP takes precedence
       - COVERAGE_FILE=/tmp/.coverage
+
+
+
+  file-manager:
+    volumes:
+      # Mount source code for hot reload
+      - ../plugins/public/file-manager/src:/app/src
+
+
 
 volumes:
   web_node_modules:

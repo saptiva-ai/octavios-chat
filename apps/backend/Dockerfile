@@ -53,6 +53,9 @@ WORKDIR /app
 # Copy the pre-built virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
 
+# Copy uv binary from builder for installing dev dependencies
+COPY --from=builder /bin/uv /bin/uvx /bin/
+
 # Activate venv by modifying PATH
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONPATH="/app/src" \

@@ -624,3 +624,127 @@ def _generate_title_heuristic(text: str) -> str:
         return "Nueva conversación"
 
     return cleaned
+
+
+# ============================================================================
+# Canvas State Endpoints
+# ============================================================================
+
+class CanvasStateUpdate(BaseModel):
+    """Canvas state update request"""
+    is_sidebar_open: Optional[bool] = None
+    active_artifact_id: Optional[str] = None
+    active_message_id: Optional[str] = None
+    active_bank_chart: Optional[Dict] = None
+
+
+class CanvasStateResponse(BaseModel):
+    """Canvas state response"""
+    is_sidebar_open: bool
+    active_artifact_id: Optional[str]
+    active_message_id: Optional[str]
+    active_bank_chart: Optional[Dict]
+    updated_at: datetime
+
+
+@router.patch("/sessions/{session_id}/canvas", tags=["conversations"])
+async def save_canvas_state(
+    session_id: str,
+    canvas_update: CanvasStateUpdate,
+    request: Request
+):
+    """
+    Save canvas state for a conversation session.
+    Updates only the fields provided in the request.
+    """
+    user_id = request.state.user_id
+
+    # Find session
+    session = await ChatSessionModel.find_one(
+        ChatSessionModel.id == session_id,
+        ChatSessionModel.user_id == user_id
+    )
+
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found"
+        )
+
+    # Prepare update data
+    from ..models.chat import CanvasState
+
+    current_canvas = session.canvas_state
+    if current_canvas is None:
+        # Create new canvas state
+        current_canvas = CanvasState()
+
+    # Update only provided fields
+    if canvas_update.is_sidebar_open is not None:
+        current_canvas.is_sidebar_open = canvas_update.is_sidebar_open
+    if canvas_update.active_artifact_id is not None:
+        current_canvas.active_artifact_id = canvas_update.active_artifact_id
+    if canvas_update.active_message_id is not None:
+        current_canvas.active_message_id = canvas_update.active_message_id
+    if canvas_update.active_bank_chart is not None:
+        current_canvas.active_bank_chart = canvas_update.active_bank_chart
+
+    current_canvas.updated_at = datetime.utcnow()
+
+    # Save to database
+    await session.update({"$set": {
+        "canvas_state": current_canvas.model_dump(),
+        "updated_at": datetime.utcnow()
+    }})
+
+    logger.info(
+        "Canvas state saved",
+        session_id=session_id,
+        is_open=current_canvas.is_sidebar_open,
+        has_bank_chart=bool(current_canvas.active_bank_chart)
+    )
+
+    return {"status": "success", "message": "Canvas state saved"}
+
+
+@router.get("/sessions/{session_id}/canvas", response_model=CanvasStateResponse, tags=["conversations"])
+async def get_canvas_state(
+    session_id: str,
+    request: Request
+):
+    """
+    Get canvas state for a conversation session.
+    Returns the persisted canvas state or default values if not set.
+    """
+    user_id = request.state.user_id
+
+    # Find session
+    session = await ChatSessionModel.find_one(
+        ChatSessionModel.id == session_id,
+        ChatSessionModel.user_id == user_id
+    )
+
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found"
+        )
+
+    # Return canvas state or defaults
+    if session.canvas_state:
+        return CanvasStateResponse(
+            is_sidebar_open=session.canvas_state.is_sidebar_open,
+            active_artifact_id=session.canvas_state.active_artifact_id,
+            active_message_id=session.canvas_state.active_message_id,
+            active_bank_chart=session.canvas_state.active_bank_chart,
+            updated_at=session.canvas_state.updated_at
+        )
+    else:
+        # Return default canvas state
+        return CanvasStateResponse(
+            is_sidebar_open=False,
+            active_artifact_id=None,
+            active_message_id=None,
+            active_bank_chart=None,
+            updated_at=session.updated_at
+        )

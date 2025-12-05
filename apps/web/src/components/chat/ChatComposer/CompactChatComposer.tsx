@@ -783,8 +783,8 @@ export function CompactChatComposer({
                   className={cn(
                     "h-11 w-11 rounded-full",
                     "grid place-items-center",
-                    "text-neutral-300 bg-transparent",
-                    "hover:bg-[var(--surface-strong)] active:bg-[var(--surface-strong)]",
+                    "text-muted bg-transparent",
+                    "hover:bg-surface-2 active:bg-surface-2",
                     "transition-colors duration-150",
                     "outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
                     (disabled || loading) && "cursor-not-allowed opacity-40",
@@ -814,7 +814,7 @@ export function CompactChatComposer({
                 rows={1}
                 className={cn(
                   "w-full resize-none bg-transparent",
-                  "text-[15px] leading-6 text-neutral-100 placeholder:text-neutral-400",
+                  "text-[15px] leading-6 text-foreground placeholder:text-muted",
                   "outline-none ring-0 border-0",
                   "focus:outline-none focus:ring-0 focus:border-0 focus:border-transparent",
                   "focus-visible:outline-none focus-visible:ring-0",
@@ -864,8 +864,8 @@ export function CompactChatComposer({
                   "transition-all duration-150",
                   "outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
                   canSubmit
-                    ? "bg-primary text-neutral-900 hover:bg-primary/90 active:scale-95"
-                    : "bg-neutral-700/40 text-neutral-500 cursor-not-allowed",
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95"
+                    : "bg-muted/20 text-muted cursor-not-allowed",
                 )}
                 aria-label={
                   isUploading
@@ -1045,7 +1045,7 @@ export function CompactChatComposer({
                             </div>
 
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-zinc-100 truncate">
+                              <p className="text-sm font-semibold text-foreground truncate">
                                 {filename}
                               </p>
                               <div className="mt-2 flex items-center gap-3">
@@ -1197,7 +1197,7 @@ export function CompactChatComposer({
                               );
                               onAttachmentsChange?.(filtered);
                             }}
-                            className="flex-shrink-0 p-2 rounded-xl hover:bg-red-500/20 text-zinc-400 hover:text-red-400 transition-all duration-200 hover:scale-110 opacity-0 group-hover:opacity-100"
+                            className="flex-shrink-0 p-2 rounded-xl hover:bg-red-500/20 text-muted hover:text-red-400 transition-all duration-200 hover:scale-110 opacity-0 group-hover:opacity-100"
                             aria-label="Eliminar archivo"
                           >
                             <CloseIcon className="h-4 w-4" />

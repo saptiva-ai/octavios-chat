@@ -18,7 +18,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..', 'src'))
 
 from src.services.tool_execution_service import ToolExecutionService, TOOL_CACHE_TTL
-from src.core.constants import TOOL_NAME_AUDIT, TOOL_NAME_EXCEL
+from src.core.constants import TOOL_NAME_EXCEL
 from src.domain.chat_context import ChatContext
 
 
@@ -37,7 +37,6 @@ def mock_mcp_adapter():
     adapter = AsyncMock()
     # _get_tool_map returns a dict of tool implementations
     tool_map = {
-        TOOL_NAME_AUDIT: AsyncMock(),
         TOOL_NAME_EXCEL: AsyncMock()
     }
     adapter._get_tool_map = AsyncMock(return_value=tool_map)
@@ -49,7 +48,7 @@ def mock_mcp_adapter():
 def mock_context():
     """Mock ChatContext."""
     context = Mock(spec=ChatContext)
-    context.tools_enabled = {TOOL_NAME_AUDIT: True, TOOL_NAME_EXCEL: True}
+    context.tools_enabled = {TOOL_NAME_EXCEL: True}
     context.document_ids = ["doc-123"]
     return context
 
@@ -85,50 +84,62 @@ class TestToolExecutionService:
             mock_get_adapter.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_executes_audit_tool_cache_miss(self, mock_context, mock_redis, mock_mcp_adapter):
-        """Should execute audit tool and cache result on cache miss."""
-        # Setup
-        mock_mcp_adapter._execute_tool_impl.return_value = {"findings": ["issue1"]}
-        
+    async def test_executes_excel_tool_cache_miss(self, mock_context, mock_redis, mock_mcp_adapter):
+        """Should execute excel tool and cache result on cache miss."""
+        # Setup Document mock
+        mock_doc = AsyncMock()
+        mock_doc.user_id = "user-123"
+        mock_doc.content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+        # Setup tool execution
+        mock_mcp_adapter._execute_tool_impl.return_value = {"sheets": ["Sheet1"]}
+
         with patch('src.services.tool_execution_service.get_redis_cache', return_value=mock_redis), \
-             patch('src.services.tool_execution_service.get_mcp_adapter', return_value=mock_mcp_adapter):
-            
+             patch('src.services.tool_execution_service.get_mcp_adapter', return_value=mock_mcp_adapter), \
+             patch('src.models.document.Document.get', return_value=mock_doc):
+
             results = await ToolExecutionService.invoke_relevant_tools(mock_context, "user-123")
-            
+
             # Verification
-            assert f"{TOOL_NAME_AUDIT}_doc-123" in results
-            assert results[f"{TOOL_NAME_AUDIT}_doc-123"] == {"findings": ["issue1"]}
-            
+            assert f"{TOOL_NAME_EXCEL}_doc-123" in results
+            assert results[f"{TOOL_NAME_EXCEL}_doc-123"] == {"sheets": ["Sheet1"]}
+
             # Verify execution
             mock_mcp_adapter._execute_tool_impl.assert_called_once()
             call_args = mock_mcp_adapter._execute_tool_impl.call_args
-            assert call_args.kwargs["tool_name"] == TOOL_NAME_AUDIT
+            assert call_args.kwargs["tool_name"] == TOOL_NAME_EXCEL
             assert call_args.kwargs["payload"]["doc_id"] == "doc-123"
-            
+
             # Verify caching
             mock_redis.get.assert_called_once()
             mock_redis.set.assert_called_once()
             set_args = mock_redis.set.call_args
-            assert set_args.kwargs["expire"] == TOOL_CACHE_TTL[TOOL_NAME_AUDIT]
+            assert set_args.kwargs["expire"] == TOOL_CACHE_TTL[TOOL_NAME_EXCEL]
 
     @pytest.mark.asyncio
-    async def test_returns_cached_audit_result(self, mock_context, mock_redis, mock_mcp_adapter):
+    async def test_returns_cached_excel_result(self, mock_context, mock_redis, mock_mcp_adapter):
         """Should return cached result and skip execution on cache hit."""
+        # Setup Document mock
+        mock_doc = AsyncMock()
+        mock_doc.user_id = "user-123"
+        mock_doc.content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
         # Setup cache hit
-        cached_data = {"findings": ["cached_issue"]}
+        cached_data = {"sheets": ["CachedSheet"]}
         mock_redis.get.return_value = cached_data
-        
+
         with patch('src.services.tool_execution_service.get_redis_cache', return_value=mock_redis), \
-             patch('src.services.tool_execution_service.get_mcp_adapter', return_value=mock_mcp_adapter):
-            
+             patch('src.services.tool_execution_service.get_mcp_adapter', return_value=mock_mcp_adapter), \
+             patch('src.models.document.Document.get', return_value=mock_doc):
+
             results = await ToolExecutionService.invoke_relevant_tools(mock_context, "user-123")
-            
+
             # Verification
-            assert results[f"{TOOL_NAME_AUDIT}_doc-123"] == cached_data
-            
+            assert results[f"{TOOL_NAME_EXCEL}_doc-123"] == cached_data
+
             # Verify NO execution
             mock_mcp_adapter._execute_tool_impl.assert_not_called()
-            
+
             # Verify cache read
             mock_redis.get.assert_called_once()
 
@@ -198,15 +209,21 @@ class TestToolExecutionService:
     @pytest.mark.asyncio
     async def test_cache_read_failure_fallback(self, mock_context, mock_redis, mock_mcp_adapter):
         """Should execute tool even if cache read fails."""
+        # Setup Document mock
+        mock_doc = AsyncMock()
+        mock_doc.user_id = "user-123"
+        mock_doc.content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
         # Setup cache failure
         mock_redis.get.side_effect = Exception("Redis down")
         mock_mcp_adapter._execute_tool_impl.return_value = {"result": "ok"}
-        
+
         with patch('src.services.tool_execution_service.get_redis_cache', return_value=mock_redis), \
-             patch('src.services.tool_execution_service.get_mcp_adapter', return_value=mock_mcp_adapter):
-            
+             patch('src.services.tool_execution_service.get_mcp_adapter', return_value=mock_mcp_adapter), \
+             patch('src.models.document.Document.get', return_value=mock_doc):
+
             results = await ToolExecutionService.invoke_relevant_tools(mock_context, "user-123")
-            
+
             # Should have executed despite redis error
-            assert f"{TOOL_NAME_AUDIT}_doc-123" in results
+            assert f"{TOOL_NAME_EXCEL}_doc-123" in results
             mock_mcp_adapter._execute_tool_impl.assert_called_once()

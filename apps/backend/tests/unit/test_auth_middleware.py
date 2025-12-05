@@ -150,6 +150,9 @@ class TestAuthMiddleware:
 
         mock_request = Mock(spec=Request)
         mock_request.headers = {}
+        # Mock request.url.path for EventSource check
+        mock_request.url.path = "/api/protected"
+        mock_request.query_params = {}
 
         token = middleware._extract_token(mock_request)
 
@@ -162,6 +165,9 @@ class TestAuthMiddleware:
         mock_request = Mock(spec=Request)
         # Missing "Bearer " prefix
         mock_request.headers = {"Authorization": "just-a-token"}
+        # Mock request.url.path for EventSource check
+        mock_request.url.path = "/api/protected"
+        mock_request.query_params = {}
 
         token = middleware._extract_token(mock_request)
 

@@ -90,9 +90,9 @@ const defaultComponents = {
           }}
           className={cn(
             "inline-flex items-center gap-2 px-4 py-2 rounded-md",
-            "bg-saptiva-mint/10 hover:bg-saptiva-mint/20",
-            "text-saptiva-mint font-medium",
-            "border border-saptiva-mint/30",
+            "bg-primary/10 hover:bg-primary/20",
+            "text-primary font-medium",
+            "border border-primary/30",
             "transition-colors cursor-pointer",
             props.className,
           )}
@@ -108,7 +108,7 @@ const defaultComponents = {
         {...props}
         href={href}
         className={cn(
-          "text-saptiva-mint underline decoration-dotted underline-offset-2 hover:text-saptiva-light transition-colors",
+          "text-primary underline decoration-dotted underline-offset-2 hover:text-primary/80 transition-colors",
           props.className,
         )}
         target="_blank"
@@ -151,7 +151,7 @@ const defaultComponents = {
       <code
         {...props}
         className={cn(
-          "rounded-md bg-white/10 px-1.5 py-0.5 font-mono text-[0.85em]",
+          "rounded-md bg-muted/20 px-1.5 py-0.5 font-mono text-[0.85em] text-primary",
           className,
         )}
       >
@@ -162,17 +162,14 @@ const defaultComponents = {
   blockquote: ({ className, ...props }: React.HTMLAttributes<HTMLElement>) => (
     <blockquote
       {...props}
-      className={cn(
-        "border-l-2 border-saptiva-mint/50 pl-4 text-saptiva-light/90",
-        className,
-      )}
+      className={cn("border-l-2 border-primary/50 pl-4 text-muted", className)}
     />
   ),
   ul: ({ className, ...props }: React.HTMLAttributes<HTMLUListElement>) => (
     <ul
       {...props}
       className={cn(
-        "list-disc space-y-2 pl-5 marker:text-saptiva-mint/80",
+        "list-disc space-y-2 pl-5 marker:text-primary/80",
         className,
       )}
     />
@@ -181,7 +178,7 @@ const defaultComponents = {
     <ol
       {...props}
       className={cn(
-        "list-decimal space-y-2 pl-5 marker:text-saptiva-mint/80",
+        "list-decimal space-y-2 pl-5 marker:text-primary/80",
         className,
       )}
     />
@@ -191,7 +188,7 @@ const defaultComponents = {
       <table
         {...props}
         className={cn(
-          "w-full border-collapse border border-white/10 text-left text-sm",
+          "w-full border-collapse border border-border text-left text-sm",
           className,
         )}
       />
@@ -200,13 +197,19 @@ const defaultComponents = {
   th: ({ className, ...props }: React.HTMLAttributes<HTMLTableCellElement>) => (
     <th
       {...props}
-      className={cn("border border-white/10 bg-white/5 px-3 py-2", className)}
+      className={cn(
+        "border border-border bg-surface-2 px-3 py-2 text-foreground font-medium",
+        className,
+      )}
     />
   ),
   td: ({ className, ...props }: React.HTMLAttributes<HTMLTableCellElement>) => (
     <td
       {...props}
-      className={cn("border border-white/10 px-3 py-2 align-top", className)}
+      className={cn(
+        "border border-border px-3 py-2 align-top text-foreground",
+        className,
+      )}
     />
   ),
 };
@@ -285,7 +288,14 @@ export function MarkdownMessage({
   }, []);
 
   return (
-    <div className={cn("prose prose-invert max-w-none text-sm", className)}>
+    <div
+      className={cn(
+        "prose dark:prose-invert max-w-none text-sm prose-p:text-foreground prose-headings:text-foreground prose-strong:text-foreground prose-li:text-foreground",
+        // LAYOUT FIX: Add min-w-0 to allow prose content to shrink below content size in flex layouts
+        "min-w-0",
+        className,
+      )}
+    >
       <ReactMarkdown
         remarkPlugins={markdownPlugins.remark}
         rehypePlugins={markdownPlugins.rehype}

@@ -16,7 +16,7 @@ services:
   # ========================================
   mongodb:
     image: mongo:7.0
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-mongodb
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat}-mongodb
     restart: unless-stopped
     env_file:
       - ../envs/.env
@@ -43,7 +43,7 @@ services:
   # ========================================
   redis:
     image: redis:7-alpine
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-redis
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat}-redis
     restart: unless-stopped
     env_file:
       - ../envs/.env
@@ -67,32 +67,11 @@ services:
       - octavios-network
 
   # ========================================
-  # LANGUAGETOOL - Grammar Checking Service
-  # ========================================
-  languagetool:
-    image: erikvl87/languagetool:latest
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-languagetool
-    restart: unless-stopped
-    environment:
-      - Java_Xms=512m
-      - Java_Xmx=1g
-    ports:
-      - "8010:8010"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8010/v2/languages"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    networks:
-      - octavios-network
-
-  # ========================================
   # MINIO - S3-Compatible Object Storage
   # ========================================
   minio:
     image: minio/minio:latest
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-minio
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat}-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
     env_file:
@@ -135,7 +114,7 @@ services:
   # - Memory-mapped storage for efficient large-scale deployments
   qdrant:
     image: qdrant/qdrant:v1.12.5
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-qdrant
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat}-qdrant
     restart: unless-stopped
     env_file:
       - ../envs/.env
@@ -189,7 +168,7 @@ services:
       context: ../apps/backend
       dockerfile: Dockerfile
       target: production
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-backend
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat}-backend
     restart: unless-stopped
     env_file:
       - ../envs/.env
@@ -220,7 +199,6 @@ services:
       - ALETHEIA_API_KEY=${ALETHEIA_API_KEY:-}
       - ALETHEIA_TIMEOUT=${ALETHEIA_TIMEOUT:-120}
       - ALETHEIA_MAX_RETRIES=${ALETHEIA_MAX_RETRIES:-3}
-      - LANGUAGETOOL_URL=http://languagetool:8010
 
       # Object Storage (MinIO)
       - MINIO_ENDPOINT=minio:9000
@@ -266,12 +244,14 @@ services:
       # Plugin URLs (for future Plugin-First Architecture)
       - FILE_MANAGER_URL=${FILE_MANAGER_URL:-http://file-manager:8001}
 
+      # MCP Server URLs (bank-advisor for banking analytics)
+      - MCP_SERVERS_URLS=${MCP_SERVERS_URLS:-[]}
+
+
     depends_on:
       mongodb:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      languagetool:
         condition: service_healthy
       minio:
         condition: service_healthy
@@ -283,10 +263,7 @@ services:
     ports:
       - "${API_PORT:-8000}:8000"
 
-    # Volume mount for hot reload in development
-    # Source code is mounted to enable immediate reflection of changes
-    volumes:
-      - ../apps/backend/src:/app/src
+    # No volumes in base - added in docker-compose.dev.yml for development hot reload
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
@@ -307,12 +284,16 @@ services:
       dockerfile: apps/web/Dockerfile
       target: runner
       args:
-        # NEXT_PUBLIC_API_URL not set to enable Next.js proxy
+        # API_BASE_URL for server-side proxy (internal Docker network)
+        API_BASE_URL: ${API_BASE_URL:-http://backend:8000}
+        # NEXT_PUBLIC_API_URL: Empty by default to use Next.js proxy
+        # Override with public domain for production deployments without proxy
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
         NEXT_PUBLIC_MAX_FILE_SIZE_MB: ${NEXT_PUBLIC_MAX_FILE_SIZE_MB:-50}
         NODE_ENV: production
         UID: ${UID:-1000}
         GID: ${GID:-1000}
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-web
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat}-web
     restart: unless-stopped
     user: "${UID:-1000}:${GID:-1000}"
     env_file:
@@ -372,7 +353,7 @@ services:
   # ========================================
   nginx:
     image: nginx:1.25-alpine
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-nginx
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat}-nginx
     restart: unless-stopped
     ports:
       - "80:80"
@@ -396,7 +377,7 @@ services:
     build:
       context: ..
       dockerfile: tests/Dockerfile.playwright
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-playwright
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat}-playwright
     environment:
       - PLAYWRIGHT_BASE_URL=http://web:3000
       - API_BASE_URL=http://backend:8000
@@ -413,7 +394,11 @@ services:
     networks:
       - octavios-network
 
-# ========================================
+
+
+
+
+  # ========================================
   # FILE MANAGER - Public Plugin Service
   # ========================================
   # Plugin-First Architecture: Public plugin for file operations
@@ -422,7 +407,7 @@ services:
     build:
       context: ..
       dockerfile: plugins/public/file-manager/Dockerfile
-    container_name: ${COMPOSE_PROJECT_NAME:-octavios}-file-manager
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat}-file-manager
     restart: unless-stopped
     env_file:
       - ../envs/.env
@@ -437,9 +422,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:
       - "${FILE_MANAGER_PORT:-8001}:8001"
-    volumes:
-      # Hot reload in development
-      - ../plugins/public/file-manager/src:/app/src
+    # No volumes in base - src volume added in docker-compose.dev.yml for development hot reload
     depends_on:
       minio:
         condition: service_healthy
@@ -472,6 +455,8 @@ volumes:
 
   minio_data:
     driver: local
+
+
 
   # These volumes always use Docker-managed storage
   nginx_logs:

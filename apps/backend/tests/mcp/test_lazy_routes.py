@@ -181,9 +181,9 @@ class TestDiscoverEndpoint:
         # Mock registry response
         mock_registry.discover_tools.return_value = [
             {
-                "name": "audit_file",
+                "name": "excel_analyzer",
                 "category": "compliance",
-                "description": "Tool: audit_file",
+                "description": "Tool: excel_analyzer",
                 "loaded": False
             },
             {
@@ -221,9 +221,9 @@ class TestDiscoverEndpoint:
 
         mock_registry.discover_tools.return_value = [
             {
-                "name": "audit_file",
+                "name": "excel_analyzer",
                 "category": "compliance",
-                "description": "Tool: audit_file",
+                "description": "Tool: excel_analyzer",
                 "loaded": False
             }
         ]
@@ -235,7 +235,7 @@ class TestDiscoverEndpoint:
         data = response.json()
 
         assert data["total"] == 1
-        assert data["tools"][0]["name"] == "audit_file"
+        assert data["tools"][0]["name"] == "excel_analyzer"
 
         # Verify category filter was passed
         mock_registry.discover_tools.assert_called_once_with(
@@ -249,9 +249,9 @@ class TestDiscoverEndpoint:
 
         mock_registry.discover_tools.return_value = [
             {
-                "name": "audit_file",
+                "name": "excel_analyzer",
                 "category": "compliance",
-                "description": "Tool: audit_file",
+                "description": "Tool: excel_analyzer",
                 "loaded": False
             }
         ]
@@ -293,9 +293,9 @@ class TestDiscoverEndpoint:
 
         mock_registry.discover_tools.return_value = [
             {
-                "name": "audit_file",
+                "name": "excel_analyzer",
                 "category": "compliance",
-                "description": "Tool: audit_file",
+                "description": "Tool: excel_analyzer",
                 "loaded": False
             }
         ]
@@ -320,7 +320,7 @@ class TestGetToolSpecEndpoint:
 
         # Mock tool spec
         mock_spec = ToolSpec(
-            name="audit_file",
+            name="excel_analyzer",
             version="1.0.0",
             display_name="Audit File",
             description="Validates document compliance",
@@ -337,12 +337,12 @@ class TestGetToolSpecEndpoint:
         mock_registry.get_tool_spec = AsyncMock(return_value=mock_spec)
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            response = await client.get("/mcp/lazy/tools/audit_file")
+            response = await client.get("/mcp/lazy/tools/excel_analyzer")
 
         assert response.status_code == 200
         data = response.json()
 
-        assert data["name"] == "audit_file"
+        assert data["name"] == "excel_analyzer"
         assert data["version"] == "1.0.0"
         assert data["display_name"] == "Audit File"
         assert data["description"] == "Validates document compliance"
@@ -350,7 +350,7 @@ class TestGetToolSpecEndpoint:
         assert data["loaded_on_demand"] is True
 
         # Verify registry was called
-        mock_registry.get_tool_spec.assert_called_once_with("audit_file")
+        mock_registry.get_tool_spec.assert_called_once_with("excel_analyzer")
 
     async def test_get_tool_spec_not_found(self, app_with_lazy_routes):
         """Test getting spec for non-existent tool."""
@@ -370,7 +370,7 @@ class TestGetToolSpecEndpoint:
         app, mock_registry = app_with_lazy_routes
 
         mock_spec = ToolSpec(
-            name="audit_file",
+            name="excel_analyzer",
             version="1.0.0",
             display_name="Audit File",
             description="Test",
@@ -383,7 +383,7 @@ class TestGetToolSpecEndpoint:
         mock_registry.get_tool_spec = AsyncMock(return_value=mock_spec)
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            response = await client.get("/mcp/lazy/tools/audit_file")
+            response = await client.get("/mcp/lazy/tools/excel_analyzer")
 
         assert response.status_code == 200
         data = response.json()
@@ -403,7 +403,7 @@ class TestInvokeEndpoint:
         # Mock successful response
         mock_response = ToolInvokeResponse(
             success=True,
-            tool="audit_file",
+            tool="excel_analyzer",
             version="1.0.0",
             result={"findings": []},
             error=None,
@@ -419,7 +419,7 @@ class TestInvokeEndpoint:
             response = await client.post(
                 "/mcp/lazy/invoke",
                 json={
-                    "tool": "audit_file",
+                    "tool": "excel_analyzer",
                     "payload": {"doc_id": "doc123"},
                     "context": {}
                 }
@@ -429,13 +429,13 @@ class TestInvokeEndpoint:
         data = response.json()
 
         assert data["success"] is True
-        assert data["tool"] == "audit_file"
+        assert data["tool"] == "excel_analyzer"
         assert data["duration_ms"] == 123.45
 
         # Verify registry invoke was called
         assert mock_registry.invoke.called
         call_args = mock_registry.invoke.call_args[0][0]
-        assert call_args.tool == "audit_file"
+        assert call_args.tool == "excel_analyzer"
         assert call_args.payload == {"doc_id": "doc123"}
 
     async def test_invoke_tool_payload_validation_error(self, app_with_lazy_routes):
@@ -450,7 +450,7 @@ class TestInvokeEndpoint:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.post(
                     "/mcp/lazy/invoke",
-                    json={"tool": "audit_file", "payload": {"doc_id": "doc123"}},
+                    json={"tool": "excel_analyzer", "payload": {"doc_id": "doc123"}},
                 )
 
         data = response.json()
@@ -470,7 +470,7 @@ class TestInvokeEndpoint:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.post(
                     "/mcp/lazy/invoke",
-                    json={"tool": "audit_file", "payload": {"doc_id": "doc123"}},
+                    json={"tool": "excel_analyzer", "payload": {"doc_id": "doc123"}},
                 )
 
         data = response.json()
@@ -490,7 +490,7 @@ class TestInvokeEndpoint:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.post(
                     "/mcp/lazy/invoke",
-                    json={"tool": "audit_file", "payload": {"doc_id": "doc123"}},
+                    json={"tool": "excel_analyzer", "payload": {"doc_id": "doc123"}},
                 )
 
         data = response.json()
@@ -505,7 +505,7 @@ class TestInvokeEndpoint:
 
         mock_response = ToolInvokeResponse(
             success=True,
-            tool="audit_file",
+            tool="excel_analyzer",
             version="1.0.0",
             result={},
             error=None,
@@ -521,7 +521,7 @@ class TestInvokeEndpoint:
             response = await client.post(
                 "/mcp/lazy/invoke",
                 json={
-                    "tool": "audit_file",
+                    "tool": "excel_analyzer",
                     "payload": {"doc_id": "doc123"},
                     "context": {"extra": "data"}
                 }
@@ -560,7 +560,7 @@ class TestInvokeEndpoint:
 
         mock_response = ToolInvokeResponse(
             success=True,
-            tool="audit_file",
+            tool="excel_analyzer",
             version="1.0.0",
             result={},
             error=None,
@@ -576,7 +576,7 @@ class TestInvokeEndpoint:
             response = await client.post(
                 "/mcp/lazy/invoke",
                 json={
-                    "tool": "audit_file",
+                    "tool": "excel_analyzer",
                     "payload": {"doc_id": "doc123"},
                     "context": {}
                 }
@@ -611,7 +611,7 @@ class TestInvokeEndpoint:
 
         mock_response = ToolInvokeResponse(
             success=True,
-            tool="audit_file",
+            tool="excel_analyzer",
             version="1.0.0",
             result={},
             error=None,
@@ -627,7 +627,7 @@ class TestInvokeEndpoint:
             response = await client.post(
                 "/mcp/lazy/invoke",
                 json={
-                    "tool": "audit_file",
+                    "tool": "excel_analyzer",
                     "payload": {"doc_id": "doc123"},
                     "context": {}
                 }
@@ -706,7 +706,7 @@ class TestUnloadEndpoint:
         app, _ = app_with_lazy_routes
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            response = await client.delete("/mcp/lazy/tools/audit_file/unload")
+            response = await client.delete("/mcp/lazy/tools/excel_analyzer/unload")
 
         assert response.status_code == 403
 
@@ -717,17 +717,17 @@ class TestUnloadEndpoint:
         mock_registry.unload_tool.return_value = True
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            response = await client.delete("/mcp/lazy/tools/audit_file/unload")
+            response = await client.delete("/mcp/lazy/tools/excel_analyzer/unload")
 
         assert response.status_code == 200
         data = response.json()
 
         assert data["unloaded"] is True
-        assert data["tool"] == "audit_file"
+        assert data["tool"] == "excel_analyzer"
         assert "successfully" in data["message"]
 
         # Verify registry was called
-        mock_registry.unload_tool.assert_called_once_with("audit_file")
+        mock_registry.unload_tool.assert_called_once_with("excel_analyzer")
 
     async def test_unload_tool_not_loaded(self, app_with_lazy_routes_admin):
         """Test unloading a tool that's not loaded."""
@@ -736,13 +736,13 @@ class TestUnloadEndpoint:
         mock_registry.unload_tool.return_value = False
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            response = await client.delete("/mcp/lazy/tools/audit_file/unload")
+            response = await client.delete("/mcp/lazy/tools/excel_analyzer/unload")
 
         assert response.status_code == 200
         data = response.json()
 
         assert data["unloaded"] is False
-        assert data["tool"] == "audit_file"
+        assert data["tool"] == "excel_analyzer"
         assert "was not loaded" in data["message"]
 
 
@@ -790,7 +790,7 @@ class TestAuthenticationRequired:
             app.include_router(router)
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            response = await client.get("/mcp/lazy/tools/audit_file")
+            response = await client.get("/mcp/lazy/tools/excel_analyzer")
 
         assert response.status_code == 401
 
@@ -813,7 +813,7 @@ class TestAuthenticationRequired:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
                 "/mcp/lazy/invoke",
-                json={"tool": "audit_file", "payload": {"doc_id": "doc123"}}
+                json={"tool": "excel_analyzer", "payload": {"doc_id": "doc123"}}
             )
 
         assert response.status_code == 401

@@ -210,6 +210,11 @@ class PromptRegistry:
         system_text = entry.system_base
         system_text = system_text.replace("{CopilotOS}", self.copilot_name)
         system_text = system_text.replace("{Saptiva}", self.org_name)
+        
+        # Inyectar fecha actual para grounding temporal
+        from datetime import datetime
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        system_text = system_text.replace("{CURRENT_DATE}", current_date)
 
         # Paso 2: Inyectar herramientas si están disponibles
         if tools_markdown:
