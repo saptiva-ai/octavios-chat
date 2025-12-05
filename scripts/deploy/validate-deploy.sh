@@ -48,7 +48,8 @@ check_env_var() {
         return 1
     fi
 
-    local var_length=${#!var_name}
+    local var_value="${!var_name}"
+    local var_length=${#var_value}
     if [ "$var_length" -lt "$min_length" ]; then
         log_error "Environment variable $var_name is too short (${var_length} < ${min_length})"
         ((ERRORS++))
