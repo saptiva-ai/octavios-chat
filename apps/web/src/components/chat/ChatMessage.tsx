@@ -7,18 +7,26 @@ import { Button, Badge } from "../ui";
 import { StreamingMessage } from "./StreamingMessage";
 import { FileReviewMessage } from "./FileReviewMessage";
 import { MessageAuditCard } from "./MessageAuditCard";
+import { BankChartMessage } from "./BankChartMessage";
+import { BankAdvisorResponse } from "./BankAdvisorResponse";
 import { PreviewAttachment } from "./PreviewAttachment";
 import { featureFlags } from "../../lib/feature-flags";
 import type {
   ChatMessage as ChatMessageType,
   ChatMessageKind,
   FileReviewData,
+  BankChartData,
 } from "../../lib/types";
 import type { ToolInvocation } from "@/lib/types";
 import type { FileAttachment } from "../../types/files";
 import { ArtifactCard } from "./artifact-card";
 import { parseToolCalls } from "../../lib/tool-parser";
 import { AuditSummaryCard } from "./artifacts/AuditSummaryCard";
+import { useCanvasStore } from "@/lib/stores/canvas-store";
+import {
+  ChartBarIcon,
+  ArrowsPointingOutIcon,
+} from "@heroicons/react/24/outline";
 
 export interface ChatMessageProps {
   id?: string;
@@ -96,6 +104,10 @@ export function ChatMessage({
 }: ChatMessageProps) {
   const [copied, setCopied] = React.useState(false);
 
+  // 🆕 Canvas highlight synchronization (Phase 2)
+  const activeMessageId = useCanvasStore((state) => state.activeMessageId);
+  const isActiveInCanvas = activeMessageId === id;
+
   const isFileReview = kind === "file-review";
 
   const isUser = role === "user";
@@ -120,6 +132,67 @@ export function ChatMessage({
       inv.tool_name === "create_artifact" &&
       inv.result?.id,
   );
+
+  // State for artifact data (BA-P0-003: Load bank_chart artifacts)
+  const [artifactData, setArtifactData] = React.useState<Record<string, any>>(
+    {},
+  );
+
+  // Fetch artifact content for bank_chart types
+  React.useEffect(() => {
+    const fetchArtifacts = async () => {
+      console.warn(
+        "[🎨 ARTIFACTS] Checking artifact invocations:",
+        artifactInvocations,
+      );
+      for (const inv of artifactInvocations) {
+        const artifactId = inv.result?.id as string;
+        const artifactType = inv.result?.type as string;
+
+        console.warn(
+          `[🎨 ARTIFACTS] Found artifact: type=${artifactType}, id=${artifactId}`,
+        );
+
+        // Only fetch if it's a bank_chart and we haven't loaded it yet
+        if (
+          artifactType === "bank_chart" &&
+          artifactId &&
+          !artifactData[artifactId]
+        ) {
+          try {
+            console.warn(
+              `[📊 BANK_CHART] Fetching artifact content for ${artifactId}`,
+            );
+            const response = await fetch(`/api/artifacts/${artifactId}`);
+            if (response.ok) {
+              const data = await response.json();
+              console.warn(
+                `[📊 BANK_CHART] Artifact content loaded:`,
+                data.content,
+              );
+              setArtifactData((prev) => ({
+                ...prev,
+                [artifactId]: data.content,
+              }));
+            } else {
+              console.error(
+                `[📊 BANK_CHART] Failed to fetch artifact: ${response.status} ${response.statusText}`,
+              );
+            }
+          } catch (error) {
+            console.error(
+              `[📊 BANK_CHART] Error fetching artifact ${artifactId}:`,
+              error,
+            );
+          }
+        }
+      }
+    };
+
+    if (artifactInvocations.length > 0) {
+      fetchArtifacts();
+    }
+  }, [artifactInvocations, artifactData]);
 
   React.useEffect(() => {
     if (isUser) {
@@ -147,6 +220,41 @@ export function ChatMessage({
       review,
     };
     return <FileReviewMessage message={message} />;
+  }
+
+  // Check for bank_chart kind (BA-P0-002)
+  const isBankChart =
+    kind === "bank_chart" || (artifact as any)?.type === "bank_chart";
+  const bankChartData: BankChartData | null = isBankChart
+    ? (artifact as BankChartData) ||
+      (metadata?.artifact as BankChartData) ||
+      (metadata?.bank_chart_data as BankChartData)
+    : (metadata?.bank_chart_data as BankChartData) || null;
+
+  // Debug logging for bank chart data
+  // Log every assistant message render to debug missing button issue
+  if (isAssistant) {
+    console.warn("[🔍 BANK_CHART DEBUG] Assistant message render:", {
+      messageId: id,
+      hasMetadata: !!metadata,
+      hasBankChartData: !!metadata?.bank_chart_data,
+      bankChartDataResolved: !!bankChartData,
+      willRenderButton: isAssistant && !!bankChartData,
+      metadataKeys: metadata ? Object.keys(metadata) : [],
+      isStreaming,
+      status,
+    });
+  }
+  if (metadata?.bank_chart_data) {
+    console.warn("[🔍 BANK_CHART DEBUG] Found bank_chart_data in metadata:", {
+      isBankChart,
+      hasData: !!bankChartData,
+      isAssistant,
+      willRender: isAssistant && !!bankChartData,
+      plotlyData: metadata.bank_chart_data.plotly_config?.data,
+      plotlyLayout: metadata.bank_chart_data.plotly_config?.layout,
+      fullMetadata: metadata.bank_chart_data,
+    });
   }
 
   // Identify audit messages to append inline audit card after content
@@ -213,7 +321,7 @@ export function ChatMessage({
       className={cn(
         "group flex gap-3 px-4 py-6 transition-colors duration-150",
         isUser ? "flex-row-reverse" : "flex-row",
-        "hover:bg-white/5",
+        "hover:bg-surface-2/50",
         className,
       )}
       role="article"
@@ -223,15 +331,17 @@ export function ChatMessage({
       <div
         className={cn(
           "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-medium uppercase",
-          isUser
-            ? "bg-primary/20 text-primary"
-            : "bg-white/10 text-white opacity-60",
+          isUser ? "bg-primary/20 text-primary" : "bg-muted/20 text-muted",
         )}
       >
         {isUser ? "Tú" : "AI"}
       </div>
 
       {/* Message content */}
+      {/*
+        LAYOUT FIX: Flex child with min-w-0 to allow shrinking below content size
+        This prevents code blocks from pushing the message container wider than available space
+      */}
       <div
         className={cn("flex-1 min-w-0", isUser ? "text-right" : "text-left")}
       >
@@ -271,12 +381,19 @@ export function ChatMessage({
           </div>
         )}
 
+        {/*
+          LAYOUT FIX: Message bubble container
+          - Changed inline-flex → flex to establish proper block-level flex container
+          - Kept max-w-full to respect parent boundaries
+          - Added w-full to ensure bubble takes available width and can constrain children
+          - This prevents code blocks from escaping the bubble
+        */}
         <div
           className={cn(
-            "inline-flex max-w-full rounded-3xl px-5 py-4 text-left text-sm leading-relaxed",
+            "flex w-full max-w-full flex-col rounded-3xl px-5 py-4 text-left text-sm leading-relaxed",
             isUser
-              ? "bg-primary/15 text-white"
-              : "bg-[var(--surface)] text-white",
+              ? "bg-primary/15 text-foreground"
+              : "bg-surface text-foreground",
             isError && "bg-danger/5",
           )}
           style={
@@ -293,7 +410,10 @@ export function ChatMessage({
           aria-label="Contenido del mensaje"
         >
           <div
-            className={cn("break-words", !isAssistant && "whitespace-pre-wrap")}
+            className={cn(
+              "min-w-0 break-words",
+              !isAssistant && "whitespace-pre-wrap",
+            )}
           >
             {isAssistant ? (
               <StreamingMessage
@@ -368,6 +488,16 @@ export function ChatMessage({
             </div>
           )}
 
+        {/* Bank chart visualization - Structured response with SQL and Canvas button */}
+        {isAssistant && bankChartData && (
+          <BankAdvisorResponse
+            bankChartData={bankChartData}
+            messageId={id || "unknown"}
+            metadata={metadata as any}
+            className={isUser ? "ml-auto" : ""}
+          />
+        )}
+
         {/* Artifact cards should appear after the assistant's summary (and audit card) */}
         {artifactInvocations.length > 0 && (
           <div
@@ -376,14 +506,25 @@ export function ChatMessage({
               isUser ? "items-end" : "items-start",
             )}
           >
-            {artifactInvocations.map((inv) => (
-              <ArtifactCard
-                key={(inv.result?.id as string) || inv.tool_name}
-                id={(inv.result?.id as string) || ""}
-                title={(inv.result?.title as string) || "Artefacto"}
-                type={(inv.result?.type as any) || "markdown"}
-              />
-            ))}
+            {artifactInvocations.map((inv) => {
+              const artifactId = (inv.result?.id as string) || "";
+              const artifactType = (inv.result?.type as any) || "markdown";
+              const content = artifactData[artifactId];
+
+              console.warn(
+                `[🎨 RENDER] Rendering artifact card: id=${artifactId}, type=${artifactType}, hasContent=${!!content}`,
+              );
+
+              return (
+                <ArtifactCard
+                  key={artifactId || inv.tool_name}
+                  id={artifactId}
+                  title={(inv.result?.title as string) || "Artefacto"}
+                  type={artifactType}
+                  content={content}
+                />
+              );
+            })}
           </div>
         )}
 

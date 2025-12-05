@@ -30,6 +30,16 @@ async def get_tool_visibility(settings: Settings = Depends(get_settings)) -> dic
             "enabled": files_enabled,
             "updated_at": updated_at,
         },
+        {
+            "key": "bank-advisor",
+            "enabled": settings.tool_bank_advisor_enabled,
+            "updated_at": updated_at,
+        },
+        {
+            "key": "bank_analytics",
+            "enabled": settings.tool_bank_advisor_enabled,
+            "updated_at": updated_at,
+        },
         # Legacy entries kept for backward compatibility with older clients.
         {
             "key": "add-files",

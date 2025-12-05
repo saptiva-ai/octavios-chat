@@ -3,11 +3,11 @@ Authentication routes for the Copilot OS API.
 """
 
 from datetime import datetime
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordBearer
 
 from ..core.config import Settings, get_settings
-from ..core.exceptions import AuthenticationError
+from ..core.exceptions import AuthenticationError, APIError
 from ..schemas.auth import (
     AuthRequest,
     AuthResponse,
@@ -26,6 +26,8 @@ from ..services.auth_service import (
     refresh_access_token,
     register_user,
 )
+# Import stateless security utils
+from ..core.security import create_password_reset_token, verify_password_reset_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
@@ -121,82 +123,91 @@ async def logout(
 @router.post("/forgot-password", response_model=ForgotPasswordResponse, status_code=status.HTTP_200_OK)
 async def forgot_password(
     payload: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
     settings: Settings = Depends(get_settings)
 ) -> ForgotPasswordResponse:
     """
     Request password reset email.
 
     Sends a password reset link to the user's email address.
-    The link is valid for 1 hour.
+    The link is valid for 30 minutes (stateless JWT).
     """
     import structlog
     from ..models.user import User
-    from ..models.password_reset import PasswordResetToken
     from ..services.email_service import get_email_service
 
     logger = structlog.get_logger(__name__)
 
-    # Find user by email
-    user = await User.find_one(User.email == payload.email)
+    try:
+        # Validate SMTP configuration early
+        if not settings.smtp_user or not settings.smtp_password:
+            logger.error(
+                "SMTP configuration missing - password reset unavailable",
+                smtp_user_set=bool(settings.smtp_user),
+                smtp_password_set=bool(settings.smtp_password)
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="El servicio de recuperación de contraseña no está configurado. Por favor contacte al administrador."
+            )
 
-    # Always return success to prevent email enumeration
-    if not user:
-        logger.warning(
-            "Password reset requested for non-existent email",
-            email=payload.email
+        # Find user by email
+        user = await User.find_one(User.email == payload.email)
+
+        # Always return success to prevent email enumeration
+        if not user:
+            logger.warning(
+                "Password reset requested for non-existent email",
+                email=payload.email
+            )
+            return ForgotPasswordResponse(
+                message="Si el correo existe en nuestro sistema, recibirás un enlace de recuperación",
+                email=payload.email
+            )
+
+        # Create stateless reset token (JWT)
+        token = create_password_reset_token(user.email)
+
+        # Generate reset link
+        reset_link = f"{settings.password_reset_url_base}/reset-password?token={token}"
+
+        # Send email using background task
+        email_service = get_email_service()
+
+        # Using background_tasks for non-blocking email sending
+        background_tasks.add_task(
+            email_service.send_password_reset_email,
+            to_email=user.email,
+            username=user.username,
+            reset_link=reset_link
         )
+
+        logger.info(
+            "Password reset email task scheduled",
+            email=user.email,
+            user_id=str(user.id),
+            reset_url_base=settings.password_reset_url_base
+        )
+
         return ForgotPasswordResponse(
             message="Si el correo existe en nuestro sistema, recibirás un enlace de recuperación",
             email=payload.email
         )
 
-    # Invalidate any existing tokens for this user
-    existing_tokens = await PasswordResetToken.find(
-        PasswordResetToken.user_id == str(user.id),
-        PasswordResetToken.used == False
-    ).to_list()
-
-    for token in existing_tokens:
-        await token.mark_as_used()
-
-    # Create new reset token
-    reset_token = PasswordResetToken(
-        user_id=str(user.id),
-        email=user.email,
-        token=PasswordResetToken.generate_token(),
-        expires_at=PasswordResetToken.create_expiration(hours=1)
-    )
-    await reset_token.insert()
-
-    # Generate reset link
-    reset_link = f"{settings.password_reset_url_base}/reset-password?token={reset_token.token}"
-
-    # Send email
-    email_service = get_email_service()
-    email_sent = await email_service.send_password_reset_email(
-        to_email=user.email,
-        username=user.username,
-        reset_link=reset_link
-    )
-
-    if not email_sent:
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
         logger.error(
-            "Failed to send password reset email",
-            email=user.email,
-            user_id=str(user.id)
+            "Unexpected error in forgot-password endpoint",
+            error=str(e),
+            error_type=type(e).__name__,
+            email=payload.email
         )
-        # Still return success to user for security
-    else:
-        logger.info(
-            "Password reset email sent",
-            email=user.email,
-            user_id=str(user.id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al procesar la solicitud de recuperación de contraseña. Por favor intente nuevamente."
         )
-
-    return ForgotPasswordResponse(
-        message="Si el correo existe en nuestro sistema, recibirás un enlace de recuperación",
-        email=payload.email
-    )
 
 
 @router.post("/reset-password", response_model=ResetPasswordResponse, status_code=status.HTTP_200_OK)
@@ -206,59 +217,32 @@ async def reset_password(
     """
     Reset password using token from email.
 
-    The token must be valid and not expired (1 hour limit).
+    The token must be valid and not expired (30 minutes limit).
     """
     import structlog
-    from ..models.password_reset import PasswordResetToken
     from ..models.user import User
-    from ..core.exceptions import APIError
 
     logger = structlog.get_logger(__name__)
 
-    # Find token
-    reset_token = await PasswordResetToken.find_one(
-        PasswordResetToken.token == payload.token
-    )
+    # Validate token (stateless)
+    email = verify_password_reset_token(payload.token)
 
-    if not reset_token:
-        logger.warning("Invalid password reset token attempted")
-        raise APIError(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Token de recuperación inválido o expirado"
-        )
-
-    # Validate token
-    if not reset_token.is_valid():
-        logger.warning(
-            "Expired or used password reset token attempted",
-            user_id=reset_token.user_id,
-            used=reset_token.used,
-            expired=reset_token.expires_at < datetime.utcnow()
-        )
-        raise APIError(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Token de recuperación inválido o expirado"
-        )
-
-    # Find user
-    user = await User.get(reset_token.user_id)
+    # Find user by email
+    user = await User.find_one(User.email == email)
     if not user:
         logger.error(
-            "Password reset token references non-existent user",
-            user_id=reset_token.user_id
+            "Password reset token valid but user not found",
+            email=email
         )
         raise APIError(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Token de recuperación inválido"
+            detail="Usuario no encontrado"
         )
 
     # Update password
     from passlib.hash import argon2
-    user.hashed_password = argon2.hash(payload.new_password)
+    user.password_hash = argon2.hash(payload.new_password)
     await user.save()
-
-    # Mark token as used
-    await reset_token.mark_as_used()
 
     logger.info(
         "Password successfully reset",

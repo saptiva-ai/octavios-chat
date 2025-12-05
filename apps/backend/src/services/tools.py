@@ -197,8 +197,14 @@ def build_tools_context(
                 "description": f"Tool: {tool_name}"
             })
 
-    markdown = describe_tools_markdown(enabled_tools)
-    schemas = tool_schemas_json(enabled_tools)
+    # BA-P0-004: Excluir bank_analytics porque se ejecuta proactivamente
+    # bank_analytics se invoca ANTES del LLM en streaming_handler.py y sus resultados
+    # se inyectan como contexto. No debe aparecer en el markdown NI en schemas porque
+    # confunde al LLM y genera tool_calls que el backend no puede ejecutar.
+    tools_without_bank_analytics = [t for t in enabled_tools if t.get("name") != "bank_analytics"]
+
+    markdown = describe_tools_markdown(tools_without_bank_analytics)
+    schemas = tool_schemas_json(tools_without_bank_analytics) if tools_without_bank_analytics else None
 
     logger.debug(
         "Built tools context",
@@ -259,41 +265,6 @@ DEFAULT_AVAILABLE_TOOLS = {
     },
 
     # === Document Tools (MCP) ===
-    "audit_file": {
-        "name": "audit_file",
-        "description": "Validar documentos PDF contra políticas de compliance COPILOTO_414 (disclaimers, formato, logos, gramática)",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "doc_id": {
-                    "type": "string",
-                    "description": "ID del documento a validar"
-                },
-                "policy_id": {
-                    "type": "string",
-                    "enum": ["auto", "414-std", "414-strict", "banamex", "afore-xxi"],
-                    "default": "auto",
-                    "description": "Política de compliance a aplicar"
-                },
-                "enable_disclaimer": {
-                    "type": "boolean",
-                    "default": True,
-                    "description": "Activar auditor de disclaimers"
-                },
-                "enable_format": {
-                    "type": "boolean",
-                    "default": True,
-                    "description": "Activar auditor de formato"
-                },
-                "enable_logo": {
-                    "type": "boolean",
-                    "default": True,
-                    "description": "Activar auditor de logos"
-                }
-            },
-            "required": ["doc_id"]
-        }
-    },
     "create_artifact": {
         "name": "create_artifact",
         "description": "Guardar un artefacto (markdown, código o grafo) asociado al chat y devolver su ID",
@@ -416,6 +387,28 @@ DEFAULT_AVAILABLE_TOOLS = {
         }
     },
 
+    # === Banking Analytics Tools (MCP) - BA-P0-001 ===
+    "bank_analytics": {
+        "name": "bank_analytics",
+        "description": "Consultar y visualizar métricas bancarias CNBV (IMOR, ROE, ROA, Morosidad, Liquidez, CAP) con NL2SQL. Soporta consultas en lenguaje natural sobre datos históricos bancarios mexicanos 2017-2025.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "metric_or_query": {
+                    "type": "string",
+                    "description": "Consulta en lenguaje natural o métrica bancaria (ej: 'IMOR de INVEX en 2024', 'ROE de Santander vs BBVA 2023', 'bancos con mayor morosidad')"
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["dashboard", "comparison", "trend", "ranking"],
+                    "default": "dashboard",
+                    "description": "Tipo de visualización: dashboard (métrica única), comparison (varios bancos), trend (evolución temporal), ranking (top/bottom bancos)"
+                }
+            },
+            "required": ["metric_or_query"]
+        }
+    },
+
     # === Utility Tools ===
     "calculator": {
         "name": "calculator",
@@ -456,8 +449,12 @@ DEFAULT_AVAILABLE_TOOLS = {
 def normalize_tools_state(tools: Optional[Dict[str, Any]]) -> Dict[str, bool]:
     """Normalize raw tools-enabled mapping to boolean map with defaults."""
 
-    # Default map from known tools
+    # Default map from known tools (all tools disabled by default)
     normalized: Dict[str, bool] = {name: False for name in DEFAULT_AVAILABLE_TOOLS.keys()}
+
+    # BA-P0-004: bank_analytics enabled by default for SAPTIVA models
+    # The system prompt instructs the LLM when to use this tool for banking queries
+    normalized["bank_analytics"] = True
 
     if tools:
         for name, value in tools.items():

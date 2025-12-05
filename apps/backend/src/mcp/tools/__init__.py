@@ -2,7 +2,6 @@
 MCP Tools - Concrete tool implementations.
 
 Available tools:
-- AuditFileTool: COPILOTO_414 compliance validation
 - ExcelAnalyzerTool: Excel data analysis and statistics
 - VizTool: Data visualization (Plotly/ECharts spec generation)
 - DeepResearchTool: Multi-step research with Aletheia integration
@@ -11,7 +10,6 @@ Available tools:
 - GetRelevantSegmentsTool: RAG segment retrieval with relevance ranking
 """
 
-from .audit_file import AuditFileTool
 from .excel_analyzer import ExcelAnalyzerTool
 from .viz_tool import VizTool
 from .deep_research_tool import DeepResearchTool
@@ -20,7 +18,6 @@ from .ingest_files import IngestFilesTool
 from .get_segments import GetRelevantSegmentsTool
 
 __all__ = [
-    "AuditFileTool",
     "ExcelAnalyzerTool",
     "VizTool",
     "DeepResearchTool",

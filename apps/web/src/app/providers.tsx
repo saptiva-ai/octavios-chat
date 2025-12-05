@@ -2,6 +2,7 @@
 
 import { ReactNode, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ThemeProvider } from "next-themes";
 import { CanvasProvider } from "@/context/CanvasContext";
 
 /**
@@ -29,8 +30,15 @@ export function Providers({ children }: { children: ReactNode }) {
   );
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <CanvasProvider>{children}</CanvasProvider>
-    </QueryClientProvider>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="dark"
+      enableSystem
+      disableTransitionOnChange={false}
+    >
+      <QueryClientProvider client={queryClient}>
+        <CanvasProvider>{children}</CanvasProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }

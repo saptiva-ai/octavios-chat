@@ -540,7 +540,7 @@ async def test_stress_new_tool_100_requests(
 
 ### Tier 2: Operaciones Normales
 - **Target**: p95 < 1s
-- **Examples**: document_extraction (pypdf), audit_file
+- **Examples**: document_extraction (pypdf), excel_analyzer
 
 ### Tier 3: Operaciones Pesadas
 - **Target**: p95 < 5s

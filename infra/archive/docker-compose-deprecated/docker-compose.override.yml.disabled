@@ -1,0 +1,14 @@
+version: "3.8"
+services:
+  api:
+    volumes:
+      # Montamos los tests para que Pytest pueda verlos dentro del contenedor
+      # Asumiendo que WORKDIR es /app y la estructura interna refleja el repo
+      - ../apps/api/tests:/app/apps/api/tests
+      - ../tests:/app/tests
+    environment:
+      # Aseguramos que Python encuentre los módulos
+      - PYTHONPATH=/app
+  web:
+    volumes:
+      - ../apps/web/src:/app/apps/web/src

@@ -13,18 +13,19 @@ export default function ToolMenu({ onSelect, onClose }: ToolMenuProps) {
   const toolVisibility = useSettingsStore((state) => state.toolVisibility);
 
   return (
-    <div className="w-72 max-h-[60vh] overflow-y-auto rounded-xl border border-zinc-700/60 bg-zinc-900/95 shadow-xl backdrop-blur-sm p-3 pointer-events-auto">
+    <div className="w-72 max-h-[60vh] overflow-y-auto rounded-xl border border-border bg-surface/95 shadow-xl backdrop-blur-sm p-3 pointer-events-auto">
       <div className="px-1 py-1 mb-2">
-        <h3 className="text-sm font-semibold text-zinc-300">Tools</h3>
+        <h3 className="text-sm font-semibold text-foreground">Tools</h3>
       </div>
       <div className="space-y-1">
         {Object.values(TOOL_REGISTRY)
           .filter((tool) => toolVisibility[tool.id])
+          .filter((tool) => tool.id !== "bank-advisor") // GLOBAL MODE: Bank Advisor is always active, hide from menu
           .map((tool) => (
             <button
               key={tool.id}
               type="button"
-              className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-zinc-800/70 text-zinc-200 transition-colors border border-transparent hover:border-zinc-700/40 cursor-pointer pointer-events-auto"
+              className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-surface-2 text-foreground transition-colors border border-transparent hover:border-border cursor-pointer pointer-events-auto"
               onMouseDown={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -32,15 +33,15 @@ export default function ToolMenu({ onSelect, onClose }: ToolMenuProps) {
               }}
               aria-label={`Add ${tool.label}`}
             >
-              <span className="grid h-9 w-9 place-items-center rounded-lg border border-zinc-700/60 bg-zinc-800/60 text-zinc-300">
+              <span className="grid h-9 w-9 place-items-center rounded-lg border border-border bg-surface-2 text-foreground">
                 <tool.Icon className="h-4 w-4" />
               </span>
               <div className="flex-1 text-left">
                 <p className="font-medium text-sm">{tool.label}</p>
-                <p className="text-xs text-zinc-400 mt-0.5">Click to add</p>
+                <p className="text-xs text-muted mt-0.5">Click to add</p>
               </div>
               <svg
-                className="h-4 w-4 text-zinc-400"
+                className="h-4 w-4 text-muted"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"

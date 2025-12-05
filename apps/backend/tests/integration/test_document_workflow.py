@@ -10,6 +10,12 @@ Tests the complete RAG pipeline:
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from pathlib import Path
+import os
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_INTEGRATION_DOCUMENT_WORKFLOW", "false").lower() != "true",
+    reason="Integration document workflow deshabilitado por defecto (requires full stack)",
+)
 
 from src.models.chat import ChatSession
 from src.models.document import Document

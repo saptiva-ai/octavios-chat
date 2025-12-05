@@ -23,7 +23,7 @@ import structlog
 from fastapi import APIRouter, HTTPException, status, Request, Response
 
 from ....core.redis_cache import get_redis_cache
-from ....schemas.chat import ChatSessionListResponse, ChatSessionUpdateRequest
+from ....schemas.chat import ChatSessionListResponse, ChatSessionUpdateRequest, CanvasStateUpdateRequest
 from ....schemas.common import ApiResponse
 from ....services.history_service import HistoryService
 from ....models.chat import ChatMessage as ChatMessageModel
@@ -364,4 +364,137 @@ async def delete_chat_session(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete chat session"
+        )
+
+@router.patch("/sessions/{session_id}/canvas", response_model=ApiResponse, tags=["chat"])
+async def update_canvas_state(
+    session_id: str,
+    canvas_update: CanvasStateUpdateRequest,
+    http_request: Request,
+    response: Response
+) -> ApiResponse:
+    """
+    Update canvas state for a chat session.
+    
+    Saves the current state of the canvas sidebar (open/closed, active chart, etc.)
+    to MongoDB for persistence across page refreshes.
+    
+    Args:
+        session_id: Chat session ID
+        canvas_update: Canvas state update request
+        http_request: HTTP request with user_id in state
+        response: HTTP response for headers
+        
+    Returns:
+        ApiResponse with success status
+    """
+    from ....models.chat import CanvasState
+    
+    response.headers.update(NO_STORE_HEADERS)
+    user_id = getattr(http_request.state, 'user_id', 'mock-user-id')
+    
+    try:
+        # Verify access
+        chat_session = await HistoryService.get_session_with_permission_check(
+            session_id, user_id
+        )
+        
+        # Create or update canvas state
+        canvas_state_data = canvas_update.model_dump(exclude_unset=True)
+        canvas_state_data['updated_at'] = datetime.utcnow()
+        
+        # Update the session
+        await chat_session.update({
+            "$set": {
+                "canvas_state": canvas_state_data,
+                "updated_at": datetime.utcnow()
+            }
+        })
+        
+        logger.info(
+            "Canvas state updated",
+            session_id=session_id,
+            user_id=user_id,
+            is_open=canvas_state_data.get('is_sidebar_open'),
+            has_chart=canvas_state_data.get('active_bank_chart') is not None
+        )
+        
+        return ApiResponse(
+            success=True,
+            message="Canvas state updated successfully",
+            data={"session_id": session_id}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(
+            "Failed to update canvas state",
+            error=str(exc),
+            exc_type=type(exc).__name__,
+            session_id=session_id,
+            user_id=user_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update canvas state"
+        )
+
+
+@router.get("/sessions/{session_id}/canvas", tags=["chat"])
+async def get_canvas_state(
+    session_id: str,
+    http_request: Request,
+    response: Response
+):
+    """
+    Get canvas state for a chat session.
+    
+    Retrieves the persisted canvas sidebar state from MongoDB.
+    
+    Args:
+        session_id: Chat session ID
+        http_request: HTTP request with user_id in state
+        response: HTTP response for headers
+        
+    Returns:
+        Canvas state data or null if not set
+    """
+    response.headers.update(NO_STORE_HEADERS)
+    user_id = getattr(http_request.state, 'user_id', 'mock-user-id')
+    
+    try:
+        # Verify access
+        chat_session = await HistoryService.get_session_with_permission_check(
+            session_id, user_id
+        )
+        
+        canvas_state = chat_session.canvas_state
+        
+        logger.info(
+            "Canvas state retrieved",
+            session_id=session_id,
+            user_id=user_id,
+            has_state=canvas_state is not None
+        )
+        
+        return ApiResponse(
+            success=True,
+            message="Canvas state retrieved",
+            data=canvas_state.model_dump() if canvas_state else None
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(
+            "Failed to retrieve canvas state",
+            error=str(exc),
+            exc_type=type(exc).__name__,
+            session_id=session_id,
+            user_id=user_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve canvas state"
         )

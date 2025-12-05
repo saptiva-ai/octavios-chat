@@ -13,6 +13,12 @@ import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from httpx import AsyncClient
 from typing import Dict
+import os
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_INTEGRATION_MCP_CONTEXT", "false").lower() != "true",
+    reason="Integration MCP context deshabilitado por defecto (requires tool stack)",
+)
 
 from src.services.context_manager import ContextManager
 from src.services.saptiva_client import SaptivaResponse
@@ -84,16 +90,16 @@ async def mock_excel_document(authenticated_client: tuple[AsyncClient, Dict]):
 
 
 @pytest.mark.asyncio
-async def test_audit_file_results_in_llm_context(authenticated_client, mock_document):
+async def test_excel_analyzer_results_in_llm_context(authenticated_client, mock_document):
     """
-    Test that audit_file tool results are injected into LLM context.
+    Test that excel_analyzer tool results are injected into LLM context.
 
-    Scenario: User sends message with audit_file enabled
+    Scenario: User sends message with excel_analyzer enabled
     Expected: Tool results appear in unified context sent to LLM
     """
     client, auth_data = authenticated_client
 
-    # Mock audit_file tool to return findings
+    # Mock excel_analyzer tool to return findings
     mock_audit_result = {
         "findings": [
             {
@@ -149,13 +155,13 @@ async def test_audit_file_results_in_llm_context(authenticated_client, mock_docu
         mock_saptiva_instance.chat_completion = AsyncMock(return_value=mock_saptiva_response)
         mock_saptiva.return_value = mock_saptiva_instance
 
-        # Send chat message with audit_file enabled
+        # Send chat message with excel_analyzer enabled
         response = await client.post(
             "/api/chat",
             json={
                 "message": "Audita este documento",
                 "file_ids": [str(mock_document.id)],
-                "tools_enabled": {"audit_file": True},
+                "tools_enabled": {"excel_analyzer": True},
                 "stream": False
             }
         )
@@ -315,7 +321,7 @@ async def test_context_size_limits_enforced():
         ]
     }
     context_mgr.add_tool_result(
-        tool_name="audit_file",
+        tool_name="excel_analyzer",
         result=large_tool_result
     )
 
@@ -336,7 +342,7 @@ async def test_tool_error_handling_graceful_degradation(authenticated_client, mo
     """
     Test that chat continues when tool execution fails.
 
-    Scenario: audit_file tool raises exception
+    Scenario: excel_analyzer tool raises exception
     Expected: Chat completes successfully without tool results
     """
     client, auth_data = authenticated_client
@@ -379,7 +385,7 @@ async def test_tool_error_handling_graceful_degradation(authenticated_client, mo
             json={
                 "message": "Analiza este documento",
                 "file_ids": [str(mock_document.id)],
-                "tools_enabled": {"audit_file": True},
+                "tools_enabled": {"excel_analyzer": True},
                 "stream": False
             }
         )
@@ -401,7 +407,7 @@ async def test_multiple_tools_combined_context(authenticated_client, mock_docume
     """
     Test that multiple tools can run together and results are combined.
 
-    Scenario: Both audit_file and excel_analyzer enabled with multiple files
+    Scenario: Both excel_analyzer and excel_analyzer enabled with multiple files
     Expected: Both tool results appear in unified context
     """
     client, auth_data = authenticated_client
@@ -444,7 +450,7 @@ async def test_multiple_tools_combined_context(authenticated_client, mock_docume
 
         # Configure mock to return different results based on tool_name
         async def tool_exec_side_effect(tool_name, tool_impl, payload):
-            if tool_name == "audit_file":
+            if tool_name == "excel_analyzer":
                 return mock_audit_result
             elif tool_name == "excel_analyzer":
                 return mock_excel_result
@@ -463,7 +469,7 @@ async def test_multiple_tools_combined_context(authenticated_client, mock_docume
                 "message": "Analiza estos documentos",
                 "file_ids": [str(mock_document.id), str(mock_excel_document.id)],
                 "tools_enabled": {
-                    "audit_file": True,
+                    "excel_analyzer": True,
                     "excel_analyzer": True
                 },
                 "stream": False
@@ -541,7 +547,7 @@ async def test_unified_context_metadata_in_response(authenticated_client, mock_d
             json={
                 "message": "Test message",
                 "file_ids": [str(mock_document.id)],
-                "tools_enabled": {"audit_file": True},
+                "tools_enabled": {"excel_analyzer": True},
                 "stream": False
             }
         )

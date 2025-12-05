@@ -20,20 +20,20 @@ from ..core.redis_cache import get_redis_cache
 from ..domain.chat_context import ChatContext
 from ..mcp import get_mcp_adapter
 from ..core.constants import (
-    TOOL_NAME_AUDIT,
     TOOL_NAME_EXCEL,
     TOOL_NAME_RESEARCH,
-    TOOL_NAME_EXTRACT
+    TOOL_NAME_EXTRACT,
+    TOOL_NAME_BANK_ANALYTICS
 )
 
 logger = structlog.get_logger(__name__)
 
 # TTL configuration for each tool (in seconds)
 TOOL_CACHE_TTL = {
-    TOOL_NAME_AUDIT: 3600,       # 1 hour (findings don't change)
     TOOL_NAME_EXCEL: 1800,   # 30 min (data might update)
     TOOL_NAME_RESEARCH: 86400,   # 24 hours (research is expensive)
     TOOL_NAME_EXTRACT: 3600,  # 1 hour (text is stable)
+    TOOL_NAME_BANK_ANALYTICS: 300,  # 5 min (queries may change)
 }
 
 class ToolExecutionService:
@@ -111,46 +111,17 @@ class ToolExecutionService:
                 cache_hit=False
             )
 
-            if tool_name == TOOL_NAME_AUDIT:
-                from ..mcp.tools.audit_file import AuditFileTool
-
-                logger.info(
-                    "⚡ [DIRECT BYPASS] Executing AuditFileTool directly",
-                    doc_id=doc_id,
-                    user_id=user_id
-                )
-                tool_instance = AuditFileTool()
-                result = await tool_instance.execute(
-                    {
-                        "doc_id": str(doc_id),
-                        "user_id": str(user_id),
-                        "policy_id": "auto",
-                        "enable_disclaimer": True,
-                        "enable_format": True,
-                        "enable_logo": True,
-                        "enable_grammar": True,
-                    }
-                )
-                debug_log = structlog.get_logger()
-                debug_log.info(
-                    "⚡ [BYPASS RESULT SPY]",
-                    result_type=str(type(result)),
-                    is_none=result is None,
-                    is_empty=not bool(result),
-                    preview=str(result)[:500]
-                )
-            else:
-                tool_impl = tool_map[tool_name]
-                result = await mcp_adapter._execute_tool_impl(
-                    tool_name=tool_name,
-                    tool_impl=tool_impl,
-                    payload={
-                        "doc_id": str(doc_id),
-                        "user_id": str(user_id),
-                        "policy_id": "auto"
-                    },
-                    context=None
-                )
+            tool_impl = tool_map[tool_name]
+            result = await mcp_adapter._execute_tool_impl(
+                tool_name=tool_name,
+                tool_impl=tool_impl,
+                payload={
+                    "doc_id": str(doc_id),
+                    "user_id": str(user_id),
+                    "policy_id": "auto"
+                },
+                context=None
+            )
 
             # Store in cache
             if cache:
@@ -220,40 +191,11 @@ class ToolExecutionService:
             logger.info(
                 "🔍 [TOOL DEBUG] Checking tool execution conditions",
                 tools_enabled_keys=list(context.tools_enabled.keys()),
-                audit_tool_name=TOOL_NAME_AUDIT,
-                audit_enabled=context.tools_enabled.get(TOOL_NAME_AUDIT, False),
                 tool_map_keys=list(tool_map.keys()),
-                audit_in_map=TOOL_NAME_AUDIT in tool_map,
                 document_ids=context.document_ids
             )
 
-            # 1. Audit File Tool
-            if context.tools_enabled.get(TOOL_NAME_AUDIT, False) and TOOL_NAME_AUDIT in tool_map:
-                for doc_id in context.document_ids:
-                    audit_result = await cls._execute_tool_with_cache(
-                        tool_name=TOOL_NAME_AUDIT,
-                        doc_id=doc_id,
-                        user_id=user_id,
-                        payload={
-                            "doc_id": doc_id,
-                            "policy_id": "auto",
-                            "user_id": user_id  # ✅ FIX: Explicit context injection for programmatic invocation
-                        },
-                        cache_params={"policy_id": "auto"},
-                        tool_map=tool_map,
-                        mcp_adapter=mcp_adapter,
-                        cache=cache
-                    )
-                    
-                    if audit_result:
-                        results[f"{TOOL_NAME_AUDIT}_{doc_id}"] = audit_result
-                        logger.info(
-                            f"{TOOL_NAME_AUDIT} tool succeeded",
-                            doc_id=doc_id,
-                            findings_count=len(audit_result.get("findings", []))
-                        )
-
-            # 2. Excel Analyzer Tool
+            # Excel Analyzer Tool
             if context.tools_enabled.get(TOOL_NAME_EXCEL, False) and TOOL_NAME_EXCEL in tool_map:
                 from ..models.document import Document
                 
@@ -318,3 +260,204 @@ class ToolExecutionService:
             # Return empty results on error
 
         return results
+
+    @classmethod
+    async def invoke_bank_analytics(
+        cls,
+        message: str,
+        user_id: str,
+        mode: str = "dashboard",
+        recent_messages: Optional[List[Dict[str, Any]]] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Invoke bank_analytics MCP tool if message appears to be a banking query.
+
+        This is a message-based tool (not document-based), so it uses the
+        bank_analytics_client directly instead of the MCP adapter.
+
+        Args:
+            message: User message text
+            user_id: User ID for logging
+            mode: Visualization mode (dashboard or timeline)
+            recent_messages: Optional list of recent messages for context combination
+
+        Returns:
+            BankChartData dict if successful, None otherwise
+        """
+        from .bank_analytics_client import (
+            is_bank_query,
+            query_bank_analytics,
+            BankAdvisorUnavailableError,
+            BankAdvisorQueryError
+        )
+
+        try:
+            # Check if there's a pending clarification in recent messages
+            # If so, combine original query with current message
+            combined_message = message
+            pending_clarification = None
+
+            if recent_messages:
+                pending_clarification = cls._find_pending_bank_clarification(recent_messages)
+                if pending_clarification:
+                    original_query = pending_clarification.get("original_query", "")
+                    if original_query:
+                        # Combine: "Reservas" + "de INVEX últimos 6 meses" → "Reservas de INVEX últimos 6 meses"
+                        combined_message = f"{original_query} {message}"
+                        logger.info(
+                            "bank_analytics.combined_with_clarification",
+                            original_query=original_query,
+                            user_response=message,
+                            combined_message=combined_message
+                        )
+
+            # Quick check if it's a banking query
+            if not await is_bank_query(combined_message):
+                logger.debug(
+                    "Message is not a banking query",
+                    message_preview=combined_message[:50]
+                )
+                return None
+
+            logger.info(
+                "bank_analytics.detected",
+                message_preview=combined_message[:100],
+                user_id=user_id,
+                has_clarification_context=pending_clarification is not None
+            )
+
+            # Try cache first
+            cache = None
+            cache_key = None
+            try:
+                cache = await get_redis_cache()
+                cache_key = cls._generate_cache_key(
+                    TOOL_NAME_BANK_ANALYTICS,
+                    combined_message[:100],  # Use combined message prefix as doc_id
+                    {"mode": mode}
+                )
+                cached_result = await cache.get(cache_key)
+                if cached_result:
+                    logger.info(
+                        "bank_analytics.cache_hit",
+                        message_preview=combined_message[:50]
+                    )
+                    return cached_result
+            except Exception as e:
+                logger.warning(
+                    "bank_analytics.cache_error",
+                    error=str(e)
+                )
+
+            # Query bank advisor with combined message
+            response = await query_bank_analytics(
+                metric_or_query=combined_message,
+                mode=mode
+            )
+
+            # HU3.1: Handle clarification response
+            if response.success and response.clarification:
+                clarification_result = {
+                    "type": "clarification",
+                    **response.clarification.model_dump()
+                }
+
+                logger.info(
+                    "bank_analytics.clarification_returned",
+                    message=response.clarification.message,
+                    options_count=len(response.clarification.options)
+                )
+
+                # Don't cache clarification responses (they're context-specific)
+                return clarification_result
+
+            if response.success and response.data:
+                result = response.data.model_dump()
+
+                # Cache the result
+                if cache and cache_key:
+                    try:
+                        ttl = TOOL_CACHE_TTL.get(TOOL_NAME_BANK_ANALYTICS, 300)
+                        await cache.set(cache_key, result, expire=ttl)
+                    except Exception as e:
+                        logger.warning(
+                            "bank_analytics.cache_set_error",
+                            error=str(e)
+                        )
+
+                logger.info(
+                    "bank_analytics.success",
+                    metric=result.get("metric_name"),
+                    banks=result.get("bank_names")
+                )
+
+                return result
+
+            return None
+
+        except (BankAdvisorUnavailableError, BankAdvisorQueryError) as e:
+            logger.warning(
+                "bank_analytics.query_failed",
+                message_preview=message[:50],
+                error=str(e)
+            )
+            return None
+
+        except Exception as e:
+            logger.error(
+                "bank_analytics.unexpected_error",
+                message_preview=message[:50],
+                error=str(e),
+                exc_info=True
+            )
+            return None
+
+    @classmethod
+    def _find_pending_bank_clarification(
+        cls,
+        recent_messages: List[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Search recent messages for a pending bank analytics clarification.
+
+        Looks for assistant messages with bank_clarification_data in metadata
+        that haven't been resolved yet.
+
+        Args:
+            recent_messages: List of recent messages (newest last)
+
+        Returns:
+            Clarification context dict with original_query, or None if not found
+        """
+        # Search from newest to oldest (reversed)
+        for msg in reversed(recent_messages):
+            # Check if it's an assistant message with clarification data
+            if msg.get("role") == "assistant":
+                metadata = msg.get("metadata", {})
+
+                # Check for bank_clarification_data in metadata
+                clarification_data = metadata.get("bank_clarification_data")
+                if clarification_data and isinstance(clarification_data, dict):
+                    context = clarification_data.get("context", {})
+                    original_query = context.get("original_query")
+
+                    if original_query:
+                        logger.debug(
+                            "bank_analytics.found_pending_clarification",
+                            original_query=original_query,
+                            detected_metric=context.get("detected_metric"),
+                            missing_fields=context.get("missing_fields")
+                        )
+                        return {
+                            "original_query": original_query,
+                            "detected_metric": context.get("detected_metric"),
+                            "missing_fields": context.get("missing_fields", [])
+                        }
+
+            # If we hit a user message after an assistant, stop searching
+            # (the clarification would have been in the assistant message before this user message)
+            elif msg.get("role") == "user":
+                # Continue searching - the clarification might be before this
+                pass
+
+        return None

@@ -24,6 +24,14 @@ from .settings import (
     SaptivaKeyUpdateResponse,
     SaptivaKeyDeleteResponse,
 )
+from .bank_chart import (
+    BankChartData,
+    BankAnalyticsRequest,
+    BankAnalyticsResponse,
+    PlotlyChartSpec,
+    PlotlyTrace,
+    PlotlyLayout,
+)
 
 __all__ = [
     # Auth
@@ -65,4 +73,11 @@ __all__ = [
     "SaptivaKeyUpdateRequest",
     "SaptivaKeyUpdateResponse",
     "SaptivaKeyDeleteResponse",
+    # Bank Analytics (BA-P0-003)
+    "BankChartData",
+    "BankAnalyticsRequest",
+    "BankAnalyticsResponse",
+    "PlotlyChartSpec",
+    "PlotlyTrace",
+    "PlotlyLayout",
 ]

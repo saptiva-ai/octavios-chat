@@ -1,14 +1,13 @@
 """
 Email Service for sending transactional emails.
 
-Uses Gmail SMTP for password reset and notifications.
+Uses fastapi-mail with Gmail SMTP for password reset and notifications.
 """
 
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from typing import Optional
+from typing import Optional, List
 import structlog
+from pydantic import EmailStr
+from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 
 from ..core.config import get_settings
 
@@ -16,69 +15,58 @@ logger = structlog.get_logger(__name__)
 
 
 class EmailService:
-    """Service for sending emails via Gmail SMTP."""
+    """Service for sending emails via Gmail SMTP using fastapi-mail."""
 
     def __init__(self):
         self.settings = get_settings()
-        self.smtp_host = "smtp.gmail.com"
-        self.smtp_port = 587
-        self.from_email = self.settings.smtp_from_email or "support@saptiva.com"
-        self.smtp_user = self.settings.smtp_user
-        self.smtp_password = self.settings.smtp_password
+        
+        # Validate configuration
+        if not self.settings.smtp_user or not self.settings.smtp_password:
+            logger.warning("SMTP credentials not configured. Emails will fail.")
 
-    def _create_smtp_connection(self):
-        """Create and return SMTP connection."""
-        try:
-            server = smtplib.SMTP(self.smtp_host, self.smtp_port)
-            server.starttls()
-            server.login(self.smtp_user, self.smtp_password)
-            return server
-        except Exception as e:
-            logger.error(
-                "Failed to connect to SMTP server",
-                error=str(e),
-                exc_type=type(e).__name__
-            )
-            raise
+        self.conf = ConnectionConfig(
+            MAIL_USERNAME=self.settings.smtp_user,
+            MAIL_PASSWORD=self.settings.smtp_password,
+            MAIL_FROM=self.settings.smtp_from_email,
+            MAIL_PORT=self.settings.smtp_port,
+            MAIL_SERVER=self.settings.smtp_host,
+            MAIL_FROM_NAME=self.settings.mail_from_name,
+            MAIL_STARTTLS=True,
+            MAIL_SSL_TLS=False,
+            USE_CREDENTIALS=True,
+            VALIDATE_CERTS=True
+        )
 
     async def send_email(
         self,
         to_email: str,
         subject: str,
         html_body: str,
-        text_body: Optional[str] = None
+        reply_to: Optional[List[str]] = None
     ) -> bool:
         """
-        Send email via Gmail SMTP.
+        Send email via fastapi-mail.
 
         Args:
             to_email: Recipient email address
             subject: Email subject
             html_body: HTML email body
-            text_body: Plain text fallback (optional)
+            reply_to: List of reply-to email addresses
 
         Returns:
             True if email sent successfully, False otherwise
         """
         try:
-            # Create message
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = subject
-            msg["From"] = f"Saptiva Support <{self.from_email}>"
-            msg["To"] = to_email
+            message = MessageSchema(
+                subject=subject,
+                recipients=[to_email],
+                body=html_body,
+                subtype=MessageType.html,
+                reply_to=reply_to
+            )
 
-            # Add plain text version if provided
-            if text_body:
-                part1 = MIMEText(text_body, "plain")
-                msg.attach(part1)
-
-            # Add HTML version
-            part2 = MIMEText(html_body, "html")
-            msg.attach(part2)
-
-            # Send email
-            with self._create_smtp_connection() as server:
-                server.send_message(msg)
+            fm = FastMail(self.conf)
+            await fm.send_message(message)
 
             logger.info(
                 "Email sent successfully",
@@ -104,7 +92,7 @@ class EmailService:
         reset_link: str
     ) -> bool:
         """
-        Send password reset email.
+        Send password reset email with reply-to configured to support team.
 
         Args:
             to_email: User's email address
@@ -114,7 +102,7 @@ class EmailService:
         Returns:
             True if email sent successfully
         """
-        subject = "Recuperación de Contraseña - Saptiva"
+        subject = "Octavios: Restablecer Contraseña"
 
         html_body = f"""
 <!DOCTYPE html>
@@ -177,66 +165,41 @@ class EmailService:
 <body>
     <div class="container">
         <div class="header">
-            <div class="logo">🤖 Saptiva</div>
+            <div class="logo">🤖 Octavios</div>
             <h2 style="color: #1F2937; margin-top: 10px;">Recuperación de Contraseña</h2>
         </div>
 
         <p>Hola <strong>{username}</strong>,</p>
 
-        <p>Recibimos una solicitud para restablecer la contraseña de tu cuenta de Saptiva.</p>
+        <p>Recibimos una solicitud para restablecer la contraseña de tu cuenta.</p>
 
-        <p>Para crear una nueva contraseña, haz clic en el siguiente botón:</p>
+        <p>Para crear una nueva contraseña, haz clic en el siguiente enlace:</p>
 
         <div style="text-align: center;">
             <a href="{reset_link}" class="button">Restablecer Contraseña</a>
         </div>
 
         <div class="warning">
-            <strong>⚠️ Importante:</strong> Este enlace es válido solo por <strong>1 hora</strong>.
+            <strong>⚠️ Importante:</strong> Este enlace es válido solo por <strong>30 minutos</strong>.
         </div>
 
-        <p>Si no solicitaste restablecer tu contraseña, puedes ignorar este correo de forma segura.</p>
-
-        <p>O copia y pega este enlace en tu navegador:</p>
-        <p style="background-color: #F3F4F6; padding: 10px; border-radius: 4px; word-break: break-all; font-size: 12px;">
-            {reset_link}
-        </p>
+        <p>Si no solicitaste esto, ignora este correo.</p>
 
         <div class="footer">
-            <p>Saludos,<br>El equipo de <strong>Saptiva</strong></p>
-            <p style="font-size: 12px; color: #9CA3AF;">
-                Este es un correo automático, por favor no respondas a este mensaje.
-            </p>
+            <p>Saludos,<br>El equipo de <strong>Octavios Support</strong></p>
         </div>
     </div>
 </body>
 </html>
 """
-
-        text_body = f"""
-Hola {username},
-
-Recibimos una solicitud para restablecer la contraseña de tu cuenta de Saptiva.
-
-Para crear una nueva contraseña, visita el siguiente enlace:
-{reset_link}
-
-IMPORTANTE: Este enlace es válido solo por 1 hora.
-
-Si no solicitaste restablecer tu contraseña, puedes ignorar este correo de forma segura.
-
-Saludos,
-El equipo de Saptiva
-
----
-Este es un correo automático, por favor no respondas a este mensaje.
-"""
+        # Reply-to configuration as requested
+        reply_to = ["support@saptiva.com"]
 
         return await self.send_email(
             to_email=to_email,
             subject=subject,
             html_body=html_body,
-            text_body=text_body
+            reply_to=reply_to
         )
 
 

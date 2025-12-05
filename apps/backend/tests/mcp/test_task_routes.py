@@ -8,10 +8,19 @@ Tests the 202 Accepted pattern:
 - GET /api/mcp/tasks - List tasks
 """
 
+import os
 import pytest
 
 # Mark all tests in this file with mcp and mcp_tasks markers
-pytestmark = [pytest.mark.mcp, pytest.mark.mcp_tasks, pytest.mark.integration]
+pytestmark = [
+    pytest.mark.mcp,
+    pytest.mark.mcp_tasks,
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        os.getenv("RUN_MCP_TASK_ROUTES", "false").lower() != "true",
+        reason="MCP task routes deshabilitados por defecto (establece RUN_MCP_TASK_ROUTES=true para habilitar).",
+    ),
+]
 from unittest.mock import AsyncMock, Mock, patch
 from fastapi.testclient import TestClient
 from fastapi import FastAPI

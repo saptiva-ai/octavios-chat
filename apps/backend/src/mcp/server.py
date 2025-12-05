@@ -13,12 +13,35 @@ Integration approach:
 3. Hybrid mode: Both MCP protocol and REST endpoints
 """
 
+import os
 from typing import Optional
+import sys
+
+if os.getenv("RUN_MCP_STACK", "true").lower() != "true":
+    # Allow backend to start without MCP stack (e.g., client without MCP support or test runs)
+    raise ModuleNotFoundError("MCP stack disabled via RUN_MCP_STACK=false")
+
+# Avoid clashing with the official `mcp` package used by fastmcp when this module is imported
+_local_mcp_module = sys.modules.get("mcp")
+_local_mcp_server = sys.modules.get("mcp.server")
+sys.modules.pop("mcp.server", None)
+sys.modules.pop("mcp", None)
+
 from fastmcp import FastMCP, Context
+
+# Restore local module references after fastmcp finishes importing protocol types
+if _local_mcp_module:
+    sys.modules["mcp"] = _local_mcp_module
+if _local_mcp_server:
+    sys.modules["mcp.server"] = _local_mcp_server
 import structlog
 from pydantic import BaseModel, Field
 
-from .tools.audit_file import AuditFileTool
+try:
+    from .tools.audit_file import AuditFileTool
+except ModuleNotFoundError:
+    # audit_file tool is optional for this client; keep server importable
+    AuditFileTool = None
 from ..services.minio_storage import get_minio_storage
 from ..models.document import Document
 
@@ -47,6 +70,9 @@ async def audit_file(args: AuditInput, ctx: Context = None) -> dict:
     """
     Validate PDF documents against COPILOTO_414 compliance policies.
     """
+    if AuditFileTool is None:
+        raise RuntimeError("audit_file tool no disponible en este entorno.")
+
     doc_id = args.doc_id
     user_id = args.user_id
     policy_id = args.policy_id

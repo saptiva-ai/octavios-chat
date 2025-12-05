@@ -110,11 +110,12 @@ class Settings(BaseSettings):
     jwt_refresh_token_expire_days: int = Field(default=7, description="Refresh token expiry")
 
     # Email (SMTP for password reset)
-    smtp_host: str = Field(default="smtp.gmail.com", description="SMTP server host")
-    smtp_port: int = Field(default=587, description="SMTP server port")
-    smtp_user: str = Field(default="", description="SMTP username (email)")
-    smtp_password: str = Field(default="", description="SMTP password (app password for Gmail)")
-    smtp_from_email: str = Field(default="support@saptiva.com", description="From email address")
+    smtp_host: str = Field(default="smtp.gmail.com", description="SMTP server host", alias="MAIL_SERVER")
+    smtp_port: int = Field(default=587, description="SMTP server port", alias="MAIL_PORT")
+    smtp_user: str = Field(default="", description="SMTP username (email)", alias="MAIL_USERNAME")
+    smtp_password: str = Field(default="", description="SMTP password (app password for Gmail)", alias="MAIL_PASSWORD")
+    smtp_from_email: str = Field(default="support@saptiva.com", description="From email address", alias="MAIL_FROM")
+    mail_from_name: str = Field(default="Octavios Support", description="From name", alias="MAIL_FROM_NAME")
     password_reset_url_base: str = Field(default="http://localhost:3000", description="Base URL for password reset links")
 
     # Aletheia
@@ -163,6 +164,11 @@ class Settings(BaseSettings):
         default=True,
         description="Expose unified Files tool in the UI",
         alias="TOOL_FILES_ENABLED",
+    )
+    tool_bank_advisor_enabled: bool = Field(
+        default=True,
+        description="Expose Bank Advisor analytics tool in the UI",
+        alias="TOOL_BANK_ADVISOR_ENABLED",
     )
     tool_flags_updated_at: Optional[datetime] = Field(
         default=None,
@@ -354,6 +360,20 @@ class Settings(BaseSettings):
     enable_model_system_prompt: bool = Field(
         default=True,
         description="Feature flag: habilitar system prompts por modelo"
+    )
+
+    # Simple Memory System (JSON-based fact recall)
+    memory_enabled: bool = Field(
+        default=True,
+        description="Enable simple memory system for fact recall"
+    )
+    memory_max_facts: int = Field(
+        default=50,
+        description="Max facts to store per session"
+    )
+    memory_recent_messages: int = Field(
+        default=10,
+        description="Recent messages to include in LLM context"
     )
 
     def log_config_safely(self) -> dict:

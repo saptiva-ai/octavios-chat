@@ -41,7 +41,6 @@ import {
 import { CanvasPanel } from "@/components/canvas/canvas-panel";
 import { useCanvas } from "@/context/CanvasContext";
 import { useCanvasStore } from "@/lib/stores/canvas-store";
-import { ResizableCanvas } from "@/components/ui/ResizableCanvas";
 // Files V1 imports
 import { useFiles } from "../../../hooks/useFiles";
 import type { FileAttachment } from "../../../types/files";
@@ -137,6 +136,10 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
   const isCanvasOpen = useCanvasStore((state) => state.isSidebarOpen);
   const toggleCanvas = useCanvasStore((state) => state.toggleSidebar);
   const resetCanvas = useCanvasStore((state) => state.reset);
+  const setCurrentSessionId = useCanvasStore(
+    (state) => state.setCurrentSessionId,
+  );
+  const loadFromMongoDB = useCanvasStore((state) => state.loadFromMongoDB);
   const { closeCanvas } = useCanvas();
 
   // DEBUG: Log canvas state in ChatView
@@ -144,11 +147,53 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
     logDebug("🏠 [ChatView] isCanvasOpen changed", { isCanvasOpen });
   }, [isCanvasOpen]);
 
-  // Close/reset canvas when switching conversations to avoid leaking artifacts across chats
+  // Track previous chatId to detect conversation changes
+  const prevChatIdRef = React.useRef<string | null>(null);
+
+  // Reset and close canvas when switching conversations
   React.useEffect(() => {
-    resetCanvas();
-    closeCanvas();
-  }, [resetCanvas, closeCanvas, resolvedChatId]);
+    const hasChanged = prevChatIdRef.current !== resolvedChatId;
+
+    if (hasChanged && prevChatIdRef.current !== null) {
+      // Conversation changed - FORCE close canvas immediately
+      // Close using all available methods to ensure it closes
+      if (isCanvasOpen) {
+        closeCanvas(); // Close via context
+      }
+      resetCanvas(); // Reset store state
+      logDebug(
+        "🎨 [ChatView] Canvas forced closed due to conversation change",
+        {
+          from: prevChatIdRef.current,
+          to: resolvedChatId,
+          wasOpen: isCanvasOpen,
+        },
+      );
+    }
+
+    prevChatIdRef.current = resolvedChatId;
+
+    if (resolvedChatId) {
+      // Set session ID for future syncs
+      setCurrentSessionId(resolvedChatId);
+      logDebug("🎨 [ChatView] Canvas session ID set", {
+        chatId: resolvedChatId,
+      });
+    } else {
+      // No chat selected, reset canvas
+      if (isCanvasOpen) {
+        closeCanvas(); // Close via context
+      }
+      resetCanvas();
+      setCurrentSessionId(null);
+    }
+  }, [
+    resolvedChatId,
+    resetCanvas,
+    setCurrentSessionId,
+    isCanvasOpen,
+    closeCanvas,
+  ]);
 
   // Files V1 state - MVP-LOCK: Pass chatId to persist attachments
   // FIX: Use resolvedChatId (from URL) instead of currentChatId (from async store)
@@ -678,20 +723,22 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
               });
             }
 
-            // Don't send temp IDs or phantom chat IDs to backend - they don't exist there yet
-            // A "phantom chat" is a UUID from URL that doesn't exist in the database yet
+            // Don't send temp IDs to backend - they don't exist there yet
             const wasTempId = currentChatId?.startsWith("temp-");
-            const isPhantomChat =
-              currentChatId && messages.length === 0 && !wasTempId;
 
-            // Send chat_id to backend only if:
-            // 1. NOT a temp ID (generated client-side)
-            // 2. NOT a phantom chat (UUID from URL with no messages loaded)
+            // CRITICAL FIX: Don't treat valid chat IDs as "phantom" just because messages haven't loaded yet
+            // Previous logic: isPhantomChat = currentChatId && messages.length === 0 && !wasTempId
+            // Problem: This caused follow-up messages to create new conversations because messages
+            // hadn't loaded yet from the backend (race condition)
+            //
+            // New logic: If we have a valid (non-temp) chat_id, ALWAYS use it
+            // The backend will handle whether the chat exists or needs to be created
+            //
+            // Send chat_id to backend only if it's NOT a temp ID
             // CRITICAL: Use `null` instead of `undefined`
             // - `null` serializes as "chat_id": null (backend knows to create new chat)
             // - `undefined` removes the key entirely (causes backend validation errors)
-            const chatIdForBackend =
-              wasTempId || isPhantomChat ? null : currentChatId || null;
+            const chatIdForBackend = wasTempId ? null : currentChatId || null;
 
             // OBS-1: Log payload before sending to backend
             logDebug("[ChatView] payload_outbound", {
@@ -711,6 +758,9 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
               // Streaming path: consume SSE chunks
               let accumulatedContent = "";
               // console.log("[DEBUG] Entering streaming path");
+
+              // 🆕 Phase 2: Track if canvas auto-opened in this session
+              let hasAutoOpenedCanvas = false;
 
               try {
                 const streamGenerator = apiClient.sendChatMessageStream(
@@ -746,6 +796,41 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                     if (!currentChatId && event.data.chat_id) {
                       setCurrentChatId(event.data.chat_id);
                     }
+                  } else if (event.type === "bank_chart") {
+                    // BA-P0-004: Handle bank_chart event from streaming
+                    // Store bank_chart data in metadata to be included in done event
+                    if (!metaData) metaData = {};
+                    metaData.bank_chart_data = event.data;
+                  } else if (event.type === "bank_clarification") {
+                    // HU3.1: Handle bank_clarification event from streaming
+                    // Store clarification data to display options to user
+                    if (!metaData) metaData = {};
+                    metaData.bank_clarification_data = event.data;
+                    console.warn(
+                      "[❓ BANK_CLARIFICATION] Storing clarification data:",
+                      event.data,
+                    );
+                  } else if (event.type === "artifact_created") {
+                    // 🆕 Phase 2: Handle artifact_created event (bank_chart persistence)
+                    // Store artifact_id in metadata
+                    if (!metaData) metaData = {};
+                    metaData.artifact_id = event.data.artifact_id;
+
+                    // Auto-open canvas for FIRST chart in session
+                    if (
+                      !hasAutoOpenedCanvas &&
+                      event.data.type === "bank_chart" &&
+                      metaData.bank_chart_data
+                    ) {
+                      useCanvasStore.getState().openBankChart(
+                        metaData.bank_chart_data,
+                        event.data.artifact_id,
+                        placeholderId, // Use placeholder ID as message ID
+                        true, // autoOpen flag
+                      );
+
+                      hasAutoOpenedCanvas = true;
+                    }
                   } else if (event.type === "chunk") {
                     accumulatedContent += event.data.content;
                     // console.log("[🔍 STREAMING DEBUG] Chunk received - content length:", event.data.content?.length, "accumulated:", accumulatedContent.length);
@@ -755,9 +840,13 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                     // console.log("[🔍 STREAMING DEBUG] Done event - has content:", !!event.data.content, "accumulated:", accumulatedContent.length);
                     response = {
                       ...event.data,
-                      // Ensure metadata from SSE is preserved for downstream (report_pdf_url, attachments, artifact)
-                      metadata:
-                        event.data?.metadata || (response as any)?.metadata,
+                      // BA-P0-004: Merge accumulated metaData (bank_chart_data, etc.) with event metadata
+                      metadata: {
+                        ...(event.data?.metadata ||
+                          (response as any)?.metadata ||
+                          {}),
+                        ...(metaData || {}),
+                      },
                     } as ChatResponse;
                   } else if (event.type === "error") {
                     // Handle both string and object error formats
@@ -783,7 +872,11 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                     role: "assistant" as const,
                     model: metaData?.model || backendModelId,
                     created_at: new Date().toISOString(),
-                    metadata: (response as any)?.metadata || metaData || {},
+                    // BA-P0-004 FIX: Merge metaData properly to include bank_chart_data
+                    metadata: {
+                      ...((response as any)?.metadata || {}),
+                      ...(metaData || {}),
+                    },
                   };
                 }
 
@@ -965,9 +1058,8 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
             if (wasNewConversation && response.chat_id) {
               (async () => {
                 try {
-                  const { generateTitleFromMessage } = await import(
-                    "@/lib/conversation-utils"
-                  );
+                  const { generateTitleFromMessage } =
+                    await import("@/lib/conversation-utils");
                   const aiTitle = await generateTitleFromMessage(
                     msg,
                     apiClient,
@@ -1074,6 +1166,16 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
             }
 
             // NOTE: Files were already cleared earlier (see line ~790)
+            // DEBUG: Log assistantMessage before returning to verify metadata
+            console.warn("[🔍 CHAT_VIEW] Returning assistantMessage:", {
+              id: assistantMessage.id,
+              hasMetadata: !!assistantMessage.metadata,
+              hasBankChartData: !!(assistantMessage.metadata as any)
+                ?.bank_chart_data,
+              metadataKeys: assistantMessage.metadata
+                ? Object.keys(assistantMessage.metadata)
+                : [],
+            });
             return assistantMessage;
           } catch (error) {
             logError("❌ [ChatView] Failed to send chat message", {
@@ -1725,8 +1827,13 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
             </div>
           }
         >
-          <div className="flex h-full min-h-0 gap-4">
-            <div className="flex-1 min-w-0 transition-[flex-basis] duration-300">
+          <div className="flex h-full min-h-0 gap-0">
+            <div
+              className={cn(
+                "transition-all duration-300",
+                isCanvasOpen ? "flex-1 min-w-0" : "w-full",
+              )}
+            >
               <ChatInterface
                 key={`chat-${currentChatId}-${selectionEpoch}`}
                 className="flex-1"
@@ -1761,29 +1868,13 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
                 onAuditError={handleAuditError}
               />
             </div>
-            {/* Canvas: Desktop - side by side with chat */}
-            {isCanvasOpen && (
-              <ResizableCanvas className="hidden h-full flex-shrink-0 lg:block" />
-            )}
+            {/* Canvas: Unified for both desktop and mobile, side by side with chat */}
+            <CanvasPanel
+              key={resolvedChatId || "no-chat"}
+              className="h-full"
+              reportPdfUrl={currentReportPdfUrl || undefined}
+            />
           </div>
-
-          {/* Canvas: Mobile - overlay */}
-          {isCanvasOpen && (
-            <div
-              className="lg:hidden fixed inset-0 z-40 bg-black/60"
-              onClick={toggleCanvas}
-            >
-              <div
-                className="absolute right-0 top-0 h-full w-[90%] max-w-md shadow-2xl"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <CanvasPanel
-                  className="h-full"
-                  reportPdfUrl={currentReportPdfUrl || undefined}
-                />
-              </div>
-            </div>
-          )}
         </ErrorBoundary>
       </div>
     </ChatShell>

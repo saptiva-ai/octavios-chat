@@ -263,7 +263,7 @@ class ApiClient {
       return (
         process.env.NEXT_PUBLIC_API_URL ||
         process.env.API_BASE_URL ||
-        "http://localhost:8001"
+        "http://localhost:8000"
       );
     }
 
@@ -589,6 +589,17 @@ class ApiClient {
         type: "meta";
         data: { chat_id: string; user_message_id: string; model: string };
       }
+    | { type: "bank_chart"; data: any }
+    | { type: "bank_clarification"; data: any }
+    | {
+        type: "artifact_created";
+        data: {
+          artifact_id: string;
+          type: string;
+          title: string;
+          created_at: string;
+        };
+      }
     | { type: "chunk"; data: { content: string } }
     | { type: "done"; data: ChatResponse }
     | { type: "error"; data: { error: string } },
@@ -786,17 +797,32 @@ class ApiClient {
 
                 // Use the event type from the "event:" line
                 if (currentEvent === "meta") {
-                  // console.log("[🔍 SSE DEBUG] Yielding meta event");
+                  console.warn("[🔍 SSE] Meta event received:", parsed);
                   yield { type: "meta", data: parsed };
+                } else if (currentEvent === "bank_chart") {
+                  console.warn(
+                    "[📊 BANK_CHART] Event received from SSE:",
+                    parsed,
+                  );
+                  yield { type: "bank_chart", data: parsed };
+                } else if (currentEvent === "bank_clarification") {
+                  console.warn(
+                    "[❓ BANK_CLARIFICATION] Event received from SSE:",
+                    parsed,
+                  );
+                  yield { type: "bank_clarification", data: parsed };
                 } else if (currentEvent === "chunk") {
-                  // console.log("[🔍 SSE DEBUG] Yielding chunk event");
+                  // Chunk logging disabled to avoid spam
                   yield { type: "chunk", data: parsed };
                 } else if (currentEvent === "done") {
-                  // console.log("[🔍 SSE DEBUG] Yielding done event");
+                  console.warn("[🔍 SSE] Done event received");
                   yield { type: "done", data: parsed as ChatResponse };
                 } else if (currentEvent === "error") {
-                  // console.log("[🔍 SSE DEBUG] Yielding error event");
+                  console.warn("[❌ SSE] Error event received:", parsed);
                   yield { type: "error", data: parsed };
+                } else if (currentEvent === "artifact_created") {
+                  console.warn("[🎨 ARTIFACT_CREATED] Event received:", parsed);
+                  yield { type: "artifact_created", data: parsed };
                 }
 
                 // Reset current event after processing
@@ -1271,6 +1297,24 @@ class ApiClient {
 
   async deleteChatSession(chatId: string): Promise<void> {
     await this.client.delete(`/api/sessions/${chatId}`);
+  }
+
+  // Canvas state persistence
+  async saveCanvasState(
+    sessionId: string,
+    canvasState: {
+      is_sidebar_open?: boolean;
+      active_artifact_id?: string | null;
+      active_message_id?: string | null;
+      active_bank_chart?: any | null;
+    },
+  ): Promise<void> {
+    await this.client.patch(`/api/sessions/${sessionId}/canvas`, canvasState);
+  }
+
+  async getCanvasState(sessionId: string): Promise<any> {
+    const response = await this.client.get(`/api/sessions/${sessionId}/canvas`);
+    return response.data?.data;
   }
 
   // P0-FLUJO-NEW-POST: Create conversation first (before any messages)

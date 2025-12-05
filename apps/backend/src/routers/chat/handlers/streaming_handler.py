@@ -48,6 +48,8 @@ from ....services.empty_response_handler import (
     EmptyResponseScenario,
     ensure_non_empty_content
 )
+from ....services.artifact_service import get_artifact_service
+from ....schemas.bank_chart import BankChartArtifactRequest
 
 logger = structlog.get_logger(__name__)
 
@@ -222,6 +224,68 @@ def build_auditor_breakdown_markdown(validation_event: dict) -> Optional[str]:
         return None
 
     return "### Análisis por auditor\n" + "\n".join(lines)
+
+
+def _extract_chart_statistics(bank_chart_data: dict) -> dict:
+    """
+    Extract key statistics from bank chart plotly_config for LLM context.
+
+    This provides summary statistics without sending full chart data,
+    optimizing context window usage (~200 tokens vs ~2000 tokens).
+
+    Args:
+        bank_chart_data: BankChartData dict with plotly_config
+
+    Returns:
+        Dict with statistics per bank: {bank_name: {min, max, avg, current, trend, change_pct}}
+    """
+    plotly_cfg = bank_chart_data.get("plotly_config", {})
+    traces = plotly_cfg.get("data", [])
+
+    if not traces:
+        return {}
+
+    stats_by_bank = {}
+    for trace in traces:
+        bank_name = trace.get("name", "N/A")
+        y_values = trace.get("y", [])
+
+        # Filter out None values and non-numeric values (strings, etc.)
+        valid_values = [v for v in y_values if v is not None and isinstance(v, (int, float))]
+
+        if valid_values:
+            first_val = valid_values[0]
+            current_val = valid_values[-1]
+            avg_val = sum(valid_values) / len(valid_values)
+
+            # Calculate change percentage safely
+            change_pct = 0.0
+            if first_val != 0:
+                change_pct = ((current_val - first_val) / first_val) * 100
+
+            # Determine trend
+            if len(valid_values) >= 2:
+                if current_val > first_val:
+                    trend = "creciente"
+                elif current_val < first_val:
+                    trend = "decreciente"
+                else:
+                    trend = "estable"
+            else:
+                trend = "N/A"
+
+            stats_by_bank[bank_name] = {
+                "min": min(valid_values),
+                "max": max(valid_values),
+                "avg": avg_val,
+                "current": current_val,
+                "first": first_val,
+                "trend": trend,
+                "change_pct": change_pct,
+                "data_points": len(valid_values)
+            }
+
+    return stats_by_bank
 
 
 class _InlineValidationReport:
@@ -516,12 +580,12 @@ def calculate_dynamic_max_tokens(
     optimal_tokens = max(min_tokens, min(available_tokens, max_tokens))
 
     logger.debug(
-        "Calculated dynamic max_tokens",
-        prompt_chars=total_chars,
-        estimated_prompt_tokens=estimated_prompt_tokens,
-        available_tokens=available_tokens,
-        optimal_max_tokens=optimal_tokens,
-        model_limit=model_limit
+        "Calculated dynamic max_tokens | prompt_chars=%s estimated_prompt_tokens=%s available_tokens=%s optimal_max_tokens=%s model_limit=%s",
+        total_chars,
+        estimated_prompt_tokens,
+        available_tokens,
+        optimal_tokens,
+        model_limit,
     )
 
     return optimal_tokens
@@ -758,6 +822,58 @@ class StreamingHandler:
                 metadata=user_message_metadata if user_message_metadata else None
             )
 
+            # BA-P0-004: Check for bank analytics query BEFORE streaming
+            # GLOBAL MODE: Bank Advisor is always active and automatically detects relevant queries
+            # The is_bank_query() function determines if the message is banking-related
+            bank_chart_data = None
+            from ....services.tool_execution_service import ToolExecutionService
+            from ....models.chat import ChatMessage as ChatMessageModel
+
+            logger.debug(
+                "Bank advisor global mode - checking for bank analytics query",
+                message_preview=context.message[:100],
+                request_id=context.request_id
+            )
+
+            # Get recent messages for clarification context detection
+            recent_messages = []
+            try:
+                recent_msgs = await ChatMessageModel.find(
+                    ChatMessageModel.chat_id == chat_session.id
+                ).sort(-ChatMessageModel.created_at).limit(5).to_list()
+
+                # Convert to dict format with metadata for clarification detection
+                for msg in reversed(recent_msgs):
+                    recent_messages.append({
+                        "role": msg.role.value,
+                        "content": msg.content,
+                        "metadata": msg.metadata if hasattr(msg, 'metadata') else {}
+                    })
+            except Exception as e:
+                logger.warning(
+                    "Failed to load recent messages for clarification context",
+                    error=str(e)
+                )
+
+            bank_chart_data = await ToolExecutionService.invoke_bank_analytics(
+                message=context.message,
+                user_id=user_id,
+                recent_messages=recent_messages if recent_messages else None
+            )
+
+            # Note: bank_chart_data will be passed to _stream_chat_response
+            if bank_chart_data:
+                logger.info(
+                    "Bank analytics result detected and will be streamed",
+                    metric=bank_chart_data.get("metric_name"),
+                    request_id=context.request_id
+                )
+            else:
+                logger.debug(
+                    "No bank analytics data returned (message not banking-related)",
+                    request_id=context.request_id
+                )
+
             # Check for audit command (NOW supported in streaming!)
             if context.message.strip().startswith("Auditar archivo:"):
                 async for event in self._stream_audit_response(
@@ -768,7 +884,8 @@ class StreamingHandler:
 
             # Stream chat response
             async for event in self._stream_chat_response(
-                context, chat_service, chat_session, cache, user_message
+                context, chat_service, chat_session, cache, user_message,
+                bank_chart_data=bank_chart_data  # BA-P0-004: Pass bank analytics result
             ):
                 yield event
 
@@ -1234,7 +1351,8 @@ class StreamingHandler:
         chat_service: ChatService,
         chat_session,
         cache,
-        user_message
+        user_message,
+        bank_chart_data=None  # BA-P0-004: Optional bank analytics result
     ) -> AsyncGenerator[dict, None]:
         """
         Stream chat response from Saptiva API.
@@ -1400,11 +1518,135 @@ class StreamingHandler:
             if document_context:
                 system_prompt += f"\n\n**Documentos adjuntos por el usuario:**\n{document_context}"
 
+            # BA-P0-004 + HU3.1: Add bank analytics context if available
+            if bank_chart_data:
+                # HU3.1: Check if this is a clarification response
+                if isinstance(bank_chart_data, dict) and bank_chart_data.get("type") == "clarification":
+                    # Build clarification context for LLM
+                    clarification_message = bank_chart_data.get("message", "")
+                    clarification_options = bank_chart_data.get("options", [])
+                    clarification_context_data = bank_chart_data.get("context", {})
+
+                    options_text = "\n".join([
+                        f"  - **{opt.get('label', opt.get('id', ''))}**: {opt.get('description', '')}"
+                        for opt in clarification_options
+                    ])
+
+                    bank_context = f"""
+
+**ACLARACIÓN REQUERIDA - Se está mostrando un selector de opciones al usuario:**
+
+Mensaje mostrado: "{clarification_message}"
+
+Opciones disponibles:
+{options_text}
+
+Contexto detectado:
+- Bancos mencionados: {', '.join(clarification_context_data.get('banks', [])) or 'No especificados'}
+- Consulta original: {clarification_context_data.get('original_query', 'N/A')}
+
+**IMPORTANTE**: El usuario está viendo un selector con las opciones de arriba.
+Genera una respuesta BREVE que:
+1. Confirme que necesitas más información para responder su consulta
+2. Mencione brevemente las opciones disponibles (sin repetir la lista completa)
+3. Invite al usuario a seleccionar una opción del selector mostrado
+
+NO intentes adivinar qué opción quiere el usuario. Espera a que seleccione una."""
+
+                    system_prompt += bank_context
+                else:
+                    # Regular chart data context
+                    metric_name = bank_chart_data.get("metric_name", "N/A")
+                    bank_names = ", ".join(bank_chart_data.get("bank_names", []))
+                    time_range = bank_chart_data.get("time_range", {})
+                    data_as_of = bank_chart_data.get("data_as_of", "N/A")
+
+                    # Extract SQL if available (from metadata or direct field)
+                    sql_query = None
+                    metadata = {}
+                    if isinstance(bank_chart_data, dict):
+                        metadata = bank_chart_data.get("metadata", {})
+                        sql_query = metadata.get("sql_generated") or bank_chart_data.get("sql_generated")
+
+                    # Extract statistics from plotly_config for enriched LLM context
+                    chart_stats = _extract_chart_statistics(bank_chart_data)
+                    is_ratio = metadata.get("type") == "ratio" or metadata.get("metric_type") == "ratio"
+                    unit_label = "%" if is_ratio else "MDP"
+
+                    bank_context = f"""
+
+**Análisis bancario disponible:**
+- Métrica consultada: {metric_name}
+- Bancos: {bank_names}
+- Período: {time_range.get('start', 'N/A')} a {time_range.get('end', 'N/A')}
+- Datos actualizados al: {data_as_of}"""
+
+                    # Add statistics by bank if available
+                    if chart_stats:
+                        bank_context += f"""
+
+**Estadísticas de {metric_name}:**"""
+                        for bank, stats in chart_stats.items():
+                            if is_ratio:
+                                # Format as percentage
+                                bank_context += f"""
+- **{bank}**:
+  - Actual: {stats['current']:.2f}{unit_label}
+  - Mín: {stats['min']:.2f}{unit_label} | Máx: {stats['max']:.2f}{unit_label}
+  - Promedio: {stats['avg']:.2f}{unit_label}
+  - Tendencia: {stats['trend']} ({stats['change_pct']:+.1f}%)"""
+                            else:
+                                # Format as MDP (thousands separator)
+                                bank_context += f"""
+- **{bank}**:
+  - Actual: {stats['current']:,.0f} {unit_label}
+  - Mín: {stats['min']:,.0f} {unit_label} | Máx: {stats['max']:,.0f} {unit_label}
+  - Promedio: {stats['avg']:,.0f} {unit_label}
+  - Tendencia: {stats['trend']} ({stats['change_pct']:+.1f}%)"""
+
+                    bank_context += f"""
+
+**IMPORTANTE**: Los datos del gráfico de {metric_name} ya están siendo enviados al usuario.
+Genera una respuesta COMPLETA que incluya:
+1. Confirma que se encontraron los datos solicitados sobre {metric_name}
+2. Menciona el período analizado ({time_range.get('start', 'N/A')} a {time_range.get('end', 'N/A')}) y que los datos están actualizados al {data_as_of}
+3. Indica que el gráfico interactivo con la evolución de la métrica ya ha sido generado y está disponible para visualización
+4. **ANALIZA las estadísticas proporcionadas**: compara los valores entre bancos, menciona tendencias y cambios porcentuales"""
+
+                    if sql_query:
+                        bank_context += f"""
+5. Proporciona una breve explicación de qué representa {metric_name} y por qué es importante
+6. Si es posible, menciona qué se puede observar o analizar con estos datos
+7. **AL FINAL del mensaje**, incluye la consulta SQL utilizada en el siguiente formato exacto:
+   "La consulta SQL utilizada fue:"
+   ```sql
+   {sql_query}
+   ```"""
+                    else:
+                        bank_context += f"""
+5. Proporciona una breve explicación de qué representa {metric_name} y por qué es importante"""
+
+                    bank_context += """
+
+NO digas que no tienes información - los datos YA ESTÁN disponibles en el gráfico.
+Usa las estadísticas proporcionadas para dar un análisis más profundo y contextualizado.
+Escribe la respuesta de forma fluida y profesional, como un analista financiero."""
+
+                    system_prompt += bank_context
+
+            # Determine if bank_chart_data is a clarification or chart
+            is_bank_clarification = (
+                isinstance(bank_chart_data, dict) and
+                bank_chart_data.get("type") == "clarification"
+            ) if bank_chart_data else False
+
             logger.info(
                 "Resolved system prompt for streaming",
                 model=context.model,
                 prompt_hash=model_params.get("_metadata", {}).get("system_hash"),
-                has_documents=bool(document_context)
+                has_documents=bool(document_context),
+                has_bank_chart=bool(bank_chart_data) and not is_bank_clarification,
+                has_bank_clarification=is_bank_clarification
             )
 
             # ISSUE-004: Implement backpressure with producer-consumer pattern
@@ -1440,14 +1682,103 @@ class StreamingHandler:
                         })
                     })
 
+                    # BA-P0-004 + HU3.1: Send bank_chart or bank_clarification event
+                    if bank_chart_data:
+                        # Serialize as dict, preserving all fields including nested xaxis
+                        chart_data_dict = bank_chart_data if isinstance(bank_chart_data, dict) else bank_chart_data.model_dump(mode='json')
+
+                        # HU3.1: Check if this is a clarification response
+                        if chart_data_dict.get("type") == "clarification":
+                            await event_queue.put({
+                                "event": "bank_clarification",
+                                "data": json.dumps(chart_data_dict)
+                            })
+                            logger.info(
+                                "Sent bank_clarification event to stream",
+                                message=chart_data_dict.get("message"),
+                                options_count=len(chart_data_dict.get("options", []))
+                            )
+                        else:
+                            await event_queue.put({
+                                "event": "bank_chart",
+                                "data": json.dumps(chart_data_dict)
+                            })
+                            logger.info(
+                                "Sent bank_chart event to stream",
+                                metric=chart_data_dict.get("metric_name")
+                            )
+
+                            # 🆕 Persist bank_chart artifact in background
+                            try:
+                                artifact_service = get_artifact_service()
+
+                                # Extract metadata for enrichment
+                                metadata = chart_data_dict.get("metadata", {})
+                                sql_query = metadata.get("sql_generated")
+                                metric_interpretation = metadata.get("metric_interpretation")
+
+                                # Create artifact request
+                                artifact_request = BankChartArtifactRequest(
+                                    user_id=context.user_id,
+                                    session_id=str(chat_session.id),
+                                    chart_data=chart_data_dict,
+                                    sql_query=sql_query,
+                                    metric_interpretation=metric_interpretation,
+                                )
+
+                                # Persist artifact
+                                artifact = await artifact_service.create_bank_chart_artifact(
+                                    artifact_request
+                                )
+
+                                # Send artifact_created event to frontend
+                                await event_queue.put({
+                                    "event": "artifact_created",
+                                    "data": json.dumps({
+                                        "artifact_id": artifact.id,
+                                        "type": "bank_chart",
+                                        "title": artifact.title,
+                                        "created_at": artifact.created_at.isoformat(),
+                                    })
+                                })
+
+                                logger.info(
+                                    "bank_chart_artifact_persisted",
+                                    artifact_id=artifact.id,
+                                    session_id=str(chat_session.id),
+                                    metric=chart_data_dict.get("metric_name"),
+                                )
+
+                            except Exception as artifact_exc:
+                                logger.error(
+                                    "Failed to persist bank_chart artifact",
+                                    error=str(artifact_exc),
+                                    exc_type=type(artifact_exc).__name__,
+                                    session_id=str(chat_session.id),
+                                    exc_info=True
+                                )
+                                # Don't block stream on artifact persistence failure
+                                # User will still see the chart preview in chat
+
                     # FIX-001: Use resolved system_prompt (not hardcoded system_message)
                     # Use model_params for temperature/max_tokens (registry overrides context)
 
-                    # Prepare messages for token calculation
-                    messages_for_api = [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": context.message}
-                    ]
+                    # FIX-002: Build context with MEMORY system
+                    # Includes: system_prompt + memory_facts + recent messages + current message
+                    # Falls back to legacy 20-message context if MEMORY_ENABLED=false
+                    messages_for_api = await chat_service.build_message_context_with_memory(
+                        chat_session=chat_session,
+                        current_message=context.message,
+                        system_prompt=system_prompt,
+                    )
+
+                    # Log para debugging de memoria
+                    logger.info(
+                        "Chat context built with memory system",
+                        total_messages=len(messages_for_api),
+                        session_id=str(chat_session.id),
+                        memory_enabled=getattr(chat_service.settings, 'memory_enabled', False)
+                    )
 
                     # Calculate dynamic max_tokens based on actual prompt size
                     dynamic_max_tokens = calculate_dynamic_max_tokens(
@@ -1462,21 +1793,41 @@ class StreamingHandler:
                     estimated_prompt_tokens = total_prompt_chars // 4
 
                     logger.info(
-                        "Token budget calculation",
-                        prompt_chars=total_prompt_chars,
-                        estimated_prompt_tokens=estimated_prompt_tokens,
-                        dynamic_max_tokens=dynamic_max_tokens,
-                        total_estimated=estimated_prompt_tokens + dynamic_max_tokens,
-                        model_limit=8192,
-                        will_exceed=estimated_prompt_tokens + dynamic_max_tokens > 8192
+                        "Token budget calculation | prompt_chars=%s estimated_prompt_tokens=%s dynamic_max_tokens=%s total_estimated=%s model_limit=%s will_exceed=%s",
+                        total_prompt_chars,
+                        estimated_prompt_tokens,
+                        dynamic_max_tokens,
+                        estimated_prompt_tokens + dynamic_max_tokens,
+                        8192,
+                        estimated_prompt_tokens + dynamic_max_tokens > 8192,
                     )
 
-                    # If prompt is too large, reject or truncate
+                    # FIX-002: Truncar historial si excede limite de tokens
+                    # Mantener system prompt (indice 0) y mensaje actual (ultimo)
+                    # Eliminar mensajes mas antiguos del medio hasta que quepa
+                    messages_truncated = 0
+                    while estimated_prompt_tokens > 6000 and len(messages_for_api) > 2:
+                        # Eliminar el mensaje mas antiguo (indice 1, despues del system prompt)
+                        removed_msg = messages_for_api.pop(1)
+                        messages_truncated += 1
+                        # Recalcular tokens
+                        total_prompt_chars = sum(len(str(msg.get("content", ""))) for msg in messages_for_api)
+                        estimated_prompt_tokens = total_prompt_chars // 4
+
+                    if messages_truncated > 0:
+                        logger.warning(
+                            "Historial truncado por limite de tokens",
+                            messages_removed=messages_truncated,
+                            remaining_messages=len(messages_for_api),
+                            estimated_tokens=estimated_prompt_tokens
+                        )
+
+                    # Si aun excede despues de truncar, log de advertencia
                     if estimated_prompt_tokens > 7500:
                         logger.error(
-                            "⚠️ Prompt exceeds safe token limit - request will likely fail",
-                            estimated_prompt_tokens=estimated_prompt_tokens,
-                            model_limit=8192
+                            "⚠️ Prompt exceeds safe token limit - request will likely fail | estimated_prompt_tokens=%s model_limit=%s",
+                            estimated_prompt_tokens,
+                            8192,
                         )
 
                     # Use non-streaming for RAG to avoid RemoteProtocolError
@@ -1717,16 +2068,39 @@ class StreamingHandler:
                         "data": json.dumps({"content": full_response})
                     }
 
+                # Prepare metadata for assistant message
+                assistant_metadata = {
+                    "streaming": True,
+                    "has_documents": bool(context.document_ids),
+                    "document_warnings": doc_warnings if doc_warnings else None
+                }
+
+                # BA-P0-004: Include bank_chart_data in metadata for persistence
+                if bank_chart_data:
+                    chart_data_dict = bank_chart_data if isinstance(bank_chart_data, dict) else bank_chart_data.model_dump(mode='json')
+
+                    # HU3.1: Check if this is a clarification response
+                    if chart_data_dict.get("type") == "clarification":
+                        assistant_metadata["bank_clarification_data"] = chart_data_dict
+                        logger.info(
+                            "💾 Saving bank_clarification_data in message metadata",
+                            original_query=chart_data_dict.get("context", {}).get("original_query"),
+                            options_count=len(chart_data_dict.get("options", []))
+                        )
+                    else:
+                        assistant_metadata["bank_chart_data"] = chart_data_dict
+                        logger.info(
+                            "💾 Saving bank_chart_data in message metadata",
+                            metric=chart_data_dict.get("metric_name"),
+                            has_sql=bool(chart_data_dict.get("metadata", {}).get("sql_generated"))
+                        )
+
                 # Save assistant message
                 assistant_message = await chat_service.add_assistant_message(
                     chat_session=chat_session,
                     content=full_response,
                     model=context.model,
-                    metadata={
-                        "streaming": True,
-                        "has_documents": bool(context.document_ids),
-                        "document_warnings": doc_warnings if doc_warnings else None
-                    }
+                    metadata=assistant_metadata
                 )
 
                 # Yield completion event

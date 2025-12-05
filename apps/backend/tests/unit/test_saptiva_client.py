@@ -374,6 +374,7 @@ class TestChatStreaming:
         ]
 
         mock_response = AsyncMock()
+        mock_response.status_code = 200
         mock_response.raise_for_status = Mock()
 
         async def mock_aiter_lines():
@@ -440,6 +441,7 @@ class TestChatStreaming:
         ]
 
         mock_response = AsyncMock()
+        mock_response.status_code = 200
         mock_response.raise_for_status = Mock()
 
         async def mock_aiter_lines():
@@ -512,6 +514,7 @@ class TestUnifiedInterface:
         ]
 
         mock_response = AsyncMock()
+        mock_response.status_code = 200
         mock_response.raise_for_status = Mock()
 
         async def mock_aiter_lines():

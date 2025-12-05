@@ -91,7 +91,11 @@ FROM base AS builder
 
 # Build-time environment variables (with production defaults)
 # IMPORTANT: Do NOT include /api suffix - routes already include it
-ARG NEXT_PUBLIC_API_URL=https://414.saptiva.com
+# API_BASE_URL: Internal Docker network URL for server-side proxy
+ARG API_BASE_URL=http://backend:8000
+# NEXT_PUBLIC_API_URL: Empty to use Next.js proxy (recommended for Docker)
+# Empty string = proxy /api/* to backend via rewrites
+ARG NEXT_PUBLIC_API_URL=
 ARG NEXT_PUBLIC_APP_NAME="Saptiva Copilot OS - Capital 414"
 ARG NEXT_PUBLIC_MAX_FILE_SIZE_MB=50
 ARG NEXT_PUBLIC_FEATURE_WEB_SEARCH=false
@@ -104,6 +108,7 @@ ARG NEXT_PUBLIC_FEATURE_MIC=false
 ARG NODE_ENV=production
 
 # Set environment variables for build
+ENV API_BASE_URL=$API_BASE_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
 ENV NEXT_PUBLIC_MAX_FILE_SIZE_MB=$NEXT_PUBLIC_MAX_FILE_SIZE_MB
@@ -149,8 +154,11 @@ RUN echo "# IMPORTANT: API URL should NOT include /api suffix - routes already i
     echo "NEXT_PUBLIC_FEATURE_MIC=$NEXT_PUBLIC_FEATURE_MIC" >> /app/apps/web/.env.production && \
     cat /app/apps/web/.env.production
 
-# Build application as non-root user
-RUN pnpm --filter web build
+# Install deps and build
+WORKDIR /app
+RUN pnpm install --frozen-lockfile
+WORKDIR /app/apps/web
+RUN pnpm build
 
 # =========================================
 # PRODUCTION STAGE
