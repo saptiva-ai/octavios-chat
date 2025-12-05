@@ -737,7 +737,8 @@ def aggregate_monthly_kpis(
         result = result.rename({"lib_castigos_comerc": "quebrantos_comerciales"})
 
     # Recalculate ct_etapa ratios after aggregation (FIX: don't sum ratios, recalculate from absolute values)
-    # ct_etapa_X should be ratio (0-1 scale, converted to percentage when displayed)
+    # ct_etapa_X should be ratio (0-1 scale, analytics_service will convert to percentage when displaying)
+    # FIX 2025-12-05: Store as 0-1 ratio (not 0-100 percentage) for consistency with other ratio metrics
     for etapa in [1, 2, 3]:
         etapa_abs_col = f"cartera_total_etapa_{etapa}"
         ratio_col = f"ct_etapa_{etapa}"
@@ -747,7 +748,7 @@ def aggregate_monthly_kpis(
             # Calculate ratio (for ct_etapa_X - used in queries)
             result = result.with_columns([
                 pl.when(pl.col("cartera_total") > 0)
-                .then(pl.col(etapa_abs_col) / pl.col("cartera_total") * 100)  # As percentage
+                .then(pl.col(etapa_abs_col) / pl.col("cartera_total"))  # As ratio (0-1)
                 .otherwise(None)
                 .alias(ratio_col)
             ])

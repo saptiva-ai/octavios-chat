@@ -370,6 +370,13 @@ def load_icap(paths: DataPaths) -> pl.LazyFrame:
     if "fecha" in col_names:
         df = df.with_columns([pl.col("fecha").str.to_date("%Y-%m-%d").alias("fecha")])
 
+    # FIX 2025-12-05: Normalize ICAP from percentage (0-100) to ratio (0-1) scale
+    # Root cause: Raw data is in percentages, but analytics_service expects ratios
+    if "icap_total" in get_schema_names(df):
+        df = df.with_columns([
+            (pl.col("icap_total") / 100.0).alias("icap_total")
+        ])
+
     return df
 
 
@@ -406,6 +413,13 @@ def load_tda(paths: DataPaths) -> pl.LazyFrame:
     if "fecha" in col_names:
         # TDA has dates in DD/MM/YYYY format (e.g., "12/01/2021")
         df = df.with_columns([pl.col("fecha").str.to_date("%d/%m/%Y").alias("fecha")])
+
+    # FIX 2025-12-05: Normalize TDA from percentage (0-100) to ratio (0-1) scale
+    # Root cause: Raw data is in percentages, but analytics_service expects ratios
+    if "tda_cartera_total" in get_schema_names(df):
+        df = df.with_columns([
+            (pl.col("tda_cartera_total") / 100.0).alias("tda_cartera_total")
+        ])
 
     return df
 
@@ -548,6 +562,13 @@ def load_corporate_loan(paths: DataPaths) -> pl.LazyFrame:
 
     # Select final columns
     df_final = df_agg.select(["fecha", "institucion", "tasa_mn", "tasa_me"])
+
+    # FIX 2025-12-05: Normalize tasa_mn/tasa_me from percentage (0-100) to ratio (0-1) scale
+    # Root cause: Raw data is in percentages, but analytics_service expects ratios
+    df_final = df_final.with_columns([
+        (pl.col("tasa_mn") / 100.0).alias("tasa_mn"),
+        (pl.col("tasa_me") / 100.0).alias("tasa_me")
+    ])
 
     logger.info("Corporate Loan processing complete")
     return df_final

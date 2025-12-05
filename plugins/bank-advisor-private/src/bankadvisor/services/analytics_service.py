@@ -950,11 +950,13 @@ class AnalyticsService:
         df = pd.DataFrame(rows, columns=['fecha', 'banco', 'value'])
 
         # Convert ratio metrics to percentage, currency to millions
+        # FIX 2025-12-05: ICOR is already in percentage scale (0-100+) in DB, don't multiply
         is_ratio = metric_type == "ratio"
+        is_icor = metric_id.lower() == "icor"
 
-        if is_ratio:
+        if is_ratio and not is_icor:
             df['value'] = df['value'] * 100
-        # else: Database values are ALREADY in millions (MDP), no conversion needed
+        # else: Database values are ALREADY in correct scale
 
         display_name = config.get_metric_display_name(metric_id)
 
@@ -1173,10 +1175,12 @@ class AnalyticsService:
         df = pd.DataFrame(rows, columns=['fecha', 'banco', 'value'])
 
         # Convert ratio metrics to percentage
+        # FIX 2025-12-05: ICOR is already in percentage scale (0-100+) in DB, don't multiply
         is_ratio = metric_type == "ratio"
         is_percentage = metric_type == "percentage"
+        is_icor = metric_id.lower() == "icor"
 
-        if is_ratio:
+        if is_ratio and not is_icor:
             df['value'] = df['value'] * 100
         # else: Database values are ALREADY in millions (MDP) or percentage, no conversion needed
 
@@ -1263,8 +1267,10 @@ class AnalyticsService:
         df = pd.DataFrame(rows, columns=['fecha', 'banco', 'value'])
 
         # Convert ratio metrics to percentage, currency to millions
+        # FIX 2025-12-05: ICOR is already in percentage scale (0-100+) in DB, don't multiply
         is_ratio = metric_type == "ratio"
-        if is_ratio:
+        is_icor = metric_id.lower() == "icor"
+        if is_ratio and not is_icor:
             df['value'] = df['value'] * 100
         # else: Database values are ALREADY in millions (MDP), no conversion needed
 
@@ -1454,8 +1460,10 @@ class AnalyticsService:
         df = pd.DataFrame(rows, columns=['fecha', 'banco', 'value'])
 
         # Convert ratio metrics to percentage, currency to millions
+        # FIX 2025-12-05: ICOR is already in percentage scale (0-100+) in DB, don't multiply
         is_ratio = metric_type == "ratio"
-        if is_ratio:
+        is_icor = metric_id.lower() == "icor"
+        if is_ratio and not is_icor:
             df['value'] = df['value'] * 100
         # else: Database values are ALREADY in millions (MDP), no conversion needed
 
@@ -1497,7 +1505,7 @@ class AnalyticsService:
 
         # Convert ratio metrics to percentage, currency already in millions
         is_ratio = metric_type == "ratio"
-        if is_ratio:
+        if is_ratio and not is_icor:
             df['value'] = df['value'] * 100
 
         display_name = config.get_metric_display_name(metric_id)
@@ -1586,7 +1594,7 @@ class AnalyticsService:
 
         # Convert ratio metrics to percentage
         is_ratio = metric_type == "ratio"
-        if is_ratio:
+        if is_ratio and not is_icor:
             df['value'] = df['value'] * 100
 
         # Determine if lower is better
@@ -1866,7 +1874,7 @@ class AnalyticsService:
         # Convert ratio metrics to percentage (ratios are 0-1, percentages are already 0-100)
         is_ratio = metric_type == "ratio"
         is_percentage = metric_type == "percentage"
-        if is_ratio:
+        if is_ratio and not is_icor:
             df['value'] = df['value'] * 100
 
         df = df.sort_values('fecha')
@@ -1930,7 +1938,7 @@ class AnalyticsService:
 
         # Convert ratio to percentage
         is_ratio = metric_type == "ratio"
-        if is_ratio:
+        if is_ratio and not is_icor:
             df['value'] = df['value'] * 100
 
         # Get latest date data
@@ -2002,7 +2010,7 @@ class AnalyticsService:
 
         # Convert ratio to percentage
         is_ratio = metric_type == "ratio"
-        if is_ratio:
+        if is_ratio and not is_icor:
             df['value'] = df['value'] * 100
 
         # Get last N months
@@ -2715,10 +2723,12 @@ class AnalyticsService:
             df = pd.DataFrame(rows, columns=['banco', 'value'])
 
             # Determine if ratio or currency
+            # FIX 2025-12-05: ICOR is already in percentage scale (0-100+) in DB, don't multiply
             is_ratio = metric_column in ['imor', 'icor', 'roa_12m', 'roe_12m', 'perdida_esperada']
+            is_icor = metric_column == 'icor'
             # Ensure Decimal is converted to float
             df['value'] = df['value'].astype(float)
-            if is_ratio:
+            if is_ratio and not is_icor:
                 df['value'] = df['value'] * 100  # Convert to percentage
 
             # Assign colors to each bank
@@ -2876,9 +2886,11 @@ class AnalyticsService:
             df['value'] = df['value'].astype(float)
 
             # For ratio metrics, convert to percentage if needed
+            # FIX 2025-12-05: ICOR is already in percentage scale (0-100+) in DB, don't multiply
             is_ratio = metric_type == "ratio"
-            if is_ratio and df['value'].max() < 1:
-                # If max is less than 1, it's a decimal that needs conversion
+            is_icor = metric_id.lower() == "icor"
+            if is_ratio and not is_icor:
+                # All ratios (except ICOR) are now stored in 0-1 scale, convert to percentage
                 df['value'] = df['value'] * 100
 
             # Calculate statistics
