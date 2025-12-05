@@ -11,6 +11,9 @@ Scripts de deployment para Octavios - Soporta deployments granulares y completos
 - [Workflow Recomendado](#-workflow-recomendado)
 - [Variables de Entorno](#-variables-de-entorno)
 - [Troubleshooting](#-troubleshooting)
+- [Mejores Prácticas](#-mejores-prácticas)
+- [Validación Pre-Deploy](#-validación-pre-deploy)
+- [Checklist Pre-Deploy](#-checklist-pre-deploy)
 
 ## 🛠️ Scripts Disponibles
 
@@ -332,6 +335,219 @@ Usar `envs/.env.prod` (en `.gitignore`).
 
 ---
 
-**Última actualización:** 2025-12-04  
-**Versión del sistema:** 2.0 (granular deployment)  
+## 🎯 Mejores Prácticas
+
+### Resumen de Incidentes y Soluciones
+
+**Incidente 2025-12-04**: Deploy fallido por:
+1. ❌ Variables de entorno (SECRET_KEY, JWT_SECRET_KEY) no propagándose correctamente
+2. ❌ Referencias a versiones de imágenes inexistentes en Docker Hub (web:0.2.2, file-manager:0.2.2)
+
+**Soluciones Implementadas**:
+- ✅ Validación automática pre-deploy con `validate-deploy.sh`
+- ✅ Variables de entorno explícitas en `docker-compose.production.yml`
+- ✅ Versionado flexible con variables de entorno en `docker-compose.registry.yml`
+
+### Gestión de Variables de Entorno
+
+#### ❌ Problema Anterior
+
+Las variables sensibles en `envs/.env` no se propagaban correctamente a los contenedores porque:
+- Valores con espacios/caracteres especiales causaban errores de parsing
+- `env_file` de Docker Compose no siempre funciona en producción
+- No había validación de que las variables llegaran a los contenedores
+
+#### ✅ Solución Implementada
+
+**1. Paso Explícito de Variables Críticas**
+
+En `infra/docker-compose.production.yml`:
+
+```yaml
+services:
+  backend:
+    environment:
+      # Critical secrets - must be set via environment or .env file
+      - SECRET_KEY=${SECRET_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+```
+
+**2. Cargar Variables Antes de Deploy**
+
+```bash
+# Método 1: Helper script (recomendado)
+source scripts/deploy/load-env.sh prod
+
+# Verificar que están cargadas
+echo "SECRET_KEY length: ${#SECRET_KEY}"
+echo "JWT_SECRET_KEY length: ${#JWT_SECRET_KEY}"
+```
+
+**DO** ✅:
+- Usar `source scripts/deploy/load-env.sh prod` antes de deploy
+- Validar con `validate-deploy.sh` antes de cambios
+- Mantener `envs/.env.prod` en `.gitignore`
+- Usar valores generados aleatoriamente para secrets (ej: `openssl rand -base64 32`)
+
+**DON'T** ❌:
+- Hardcodear secrets en archivos docker-compose
+- Commitear `envs/.env.prod` a git
+- Usar valores cortos o predecibles para SECRET_KEY/JWT_SECRET_KEY
+- Asumir que env_file funcionará en producción sin validar
+
+### Gestión de Versiones de Imágenes
+
+#### ❌ Problema Anterior
+
+Versiones hardcodeadas en `docker-compose.registry.yml`:
+
+```yaml
+# ANTES (hardcoded - malo)
+services:
+  web:
+    image: jazielflores1998/octavios-invex-web:0.2.2  # ❌ No existe!
+```
+
+**Problemas:**
+- Si la imagen no existe en Docker Hub → deploy falla
+- Cambiar versiones requiere editar archivo manualmente
+- No hay validación antes de deploy
+- Difícil hacer rollback rápido
+
+#### ✅ Solución Implementada
+
+**Versionado con Variables de Entorno**
+
+En `infra/docker-compose.registry.yml`:
+
+```yaml
+services:
+  backend:
+    image: jazielflores1998/octavios-invex-backend:${BACKEND_VERSION:-0.2.2}
+    build: null
+
+  web:
+    image: jazielflores1998/octavios-invex-web:${WEB_VERSION:-0.2.1}
+    build: null
+```
+
+**Ventajas:**
+- Valores por defecto seguros (`:-0.2.1`)
+- Override por servicio: `BACKEND_VERSION=0.2.3 docker compose up`
+- No necesitas editar archivos para cambiar versiones
+- Más fácil hacer rollback
+
+**Verificación Manual**
+
+Antes de cambiar versiones en producción:
+
+```bash
+# Verificar que la imagen existe
+docker manifest inspect jazielflores1998/octavios-invex-backend:0.2.3
+
+# Listar todas las versiones disponibles
+curl -s "https://hub.docker.com/v2/repositories/jazielflores1998/octavios-invex-backend/tags" | jq -r '.results[].name'
+```
+
+**DO** ✅:
+- Validar existencia de imágenes antes de deploy con `validate-deploy.sh`
+- Usar semantic versioning (0.2.3, no "latest")
+- Mantener versiones por defecto conservadoras
+- Documentar qué cambió en cada versión (CHANGELOG)
+
+**DON'T** ❌:
+- Usar tag `latest` en producción
+- Asumir que una versión existe sin verificar
+- Cambiar versiones directamente en servidor sin validar
+- Deployar versiones no probadas en staging
+
+---
+
+## 🔍 Validación Pre-Deploy
+
+### Script `validate-deploy.sh`
+
+Todos los scripts de deploy ahora ejecutan automáticamente validación que verifica:
+
+```bash
+./scripts/deploy/validate-deploy.sh 0.2.2
+```
+
+**Verificaciones realizadas:**
+
+1. **Variables de Entorno Críticas**
+   - `SECRET_KEY` (mínimo 32 caracteres)
+   - `JWT_SECRET_KEY` (mínimo 32 caracteres)
+   - `DEPLOY_SERVER` (servidor de producción)
+
+2. **Imágenes Docker Hub**
+   - Verifica que las imágenes existen en Docker Hub antes de intentar deploy
+   - Usa `docker manifest inspect` para validar cada versión
+
+3. **Estado de Git**
+   - Advierte si hay cambios uncommitted
+   - Muestra branch actual
+
+4. **Configuración Docker Compose**
+   - Valida sintaxis de archivos compose
+   - Verifica que los overlays se combinan correctamente
+
+5. **Conectividad SSH**
+   - Prueba conexión al servidor de producción
+   - Timeout de 5 segundos
+
+**Resultado:**
+- ❌ Exit code 1 si hay **errores** → Deploy bloqueado
+- ⚠️ Exit code 0 con **warnings** → Deploy permitido pero con advertencias
+- ✅ Exit code 0 sin warnings → Todo OK
+
+### Uso Manual
+
+```bash
+# Validar antes de deploy
+source scripts/deploy/load-env.sh prod
+./scripts/deploy/validate-deploy.sh 0.2.2
+
+# Si pasa validación, proceder con deploy
+./scripts/deploy/deploy-service.sh "backend" 0.2.2
+```
+
+---
+
+## ✅ Checklist Pre-Deploy
+
+### Antes de CUALQUIER Deploy
+
+- [ ] **Environment cargado**: `source scripts/deploy/load-env.sh prod`
+- [ ] **Validación pasada**: `./scripts/deploy/validate-deploy.sh <VERSION>`
+- [ ] **Imágenes existen en Docker Hub**: Validación automática + verificación manual
+- [ ] **Código commiteado**: `git status` limpio
+- [ ] **Branch correcto**: Normalmente `main`
+- [ ] **Changelog actualizado**: Documentar cambios en versión
+
+### Deploy Granular Adicional
+
+- [ ] **Servicios correctos identificados**: Usa `./scripts/deploy/detect-changes.sh`
+- [ ] **Build solo servicios necesarios**: `make prod.build SVC="backend web"`
+- [ ] **Versión incrementada apropiadamente**: Patch (0.2.2 → 0.2.3) para fixes
+
+### Deploy Completo Adicional
+
+- [ ] **Notificar stakeholders**: Deploy completo puede tener breve downtime
+- [ ] **Backup automático habilitado**: `BACKUP_DB=true`
+- [ ] **Todos los servicios built**: `make prod.build`
+- [ ] **Todas las imágenes pushed**: `./scripts/deploy/push-dockerhub.sh`
+
+### Post-Deploy
+
+- [ ] **Health checks OK**: Validación automática en script
+- [ ] **Endpoints responden 200**: Web, Backend API
+- [ ] **Prueba funcionalidad crítica**: Login, Bank Advisor query
+- [ ] **Revisar logs**: No errores en últimos minutos
+- [ ] **Verificar métricas**: Prometheus/Grafana si disponible
+
+---
+
+**Última actualización:** 2025-12-04
+**Versión del sistema:** 2.0 (granular deployment)
 **Servicios disponibles:** backend, web, file-manager, bank-advisor

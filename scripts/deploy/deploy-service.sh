@@ -87,6 +87,19 @@ log_info "Services: ${DEPLOY_SERVICES[*]}"
 log_info "Backup DB: $BACKUP_DB"
 echo ""
 
+# === VALIDACIÓN PRE-DEPLOY ===
+log_info "Running pre-deployment validation..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/validate-deploy.sh" ]; then
+    if ! "$SCRIPT_DIR/validate-deploy.sh" "$VERSION"; then
+        log_error "Pre-deployment validation failed. Fix errors before deploying."
+    fi
+    log_success "Pre-deployment validation passed"
+else
+    log_warning "Validation script not found at $SCRIPT_DIR/validate-deploy.sh"
+fi
+echo ""
+
 # Confirmar deploy
 read -p "Continue with deployment? (y/N): " -n 1 -r
 echo
