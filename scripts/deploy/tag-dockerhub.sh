@@ -10,7 +10,7 @@ set -e
 
 VERSION="0.2.1"
 DATETIME=$(date +%Y%m%d-%H%M)
-DOCKERHUB_USER="jazielflores1998"
+DOCKERHUB_USER="${DOCKER_REGISTRY_USER:-your_registry_user}"
 PROJECT="octavios-invex"
 
 SERVICES=("backend" "web" "file-manager" "bank-advisor")

@@ -10,7 +10,7 @@ set -e
 
 VERSION="0.1.2"
 DATETIME="20251202-1519"
-DOCKERHUB_USER="jazielflores1998"
+DOCKERHUB_USER="${DOCKER_REGISTRY_USER:-your_registry_user}"
 PROJECT="octavios-invex"
 
 SERVICES=("backend" "web" "file-manager" "bank-advisor")

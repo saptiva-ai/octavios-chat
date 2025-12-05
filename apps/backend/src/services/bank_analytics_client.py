@@ -30,7 +30,7 @@ logger = structlog.get_logger(__name__)
 # Configuration from environment
 BANK_ADVISOR_URL = os.getenv("BANK_ADVISOR_URL", "http://bank-advisor:8002")
 BANK_ADVISOR_TIMEOUT = int(os.getenv("BANK_ADVISOR_TIMEOUT", "30"))
-USE_BANK_ADVISOR = os.getenv("USE_BANK_ADVISOR", "true").lower() == "true"
+USE_BANK_ADVISOR = os.getenv("USE_BANK_ADVISOR", "false").lower() == "true"
 
 
 class BankAdvisorUnavailableError(Exception):

@@ -15,7 +15,7 @@ set -e
 
 # === CONFIGURACIÓN ===
 SERVER="${DEPLOY_SERVER}"
-PROJECT_DIR="${DEPLOY_PROJECT_DIR:-octavios-chat-bajaware_invex}"
+PROJECT_DIR="${DEPLOY_PROJECT_DIR:-octavios-chat}"
 
 # Validate required environment variables
 if [ -z "$SERVER" ]; then
@@ -139,7 +139,7 @@ log_info "Step 3/7: Updating service versions in docker-compose.registry.yml..."
 # Build sed command for each service
 for service in "${DEPLOY_SERVICES[@]}"; do
     ssh $SERVER "cd $PROJECT_DIR && \
-        sed -i '/jazielflores1998\/octavios-invex-${service}:/ s/:.*/:${VERSION}/g' infra/docker-compose.registry.yml"
+        sed -i '/octavios-invex-${service}:/ s/:.*/:${VERSION}/g' infra/docker-compose.registry.yml"
 done
 
 ssh $SERVER "cd $PROJECT_DIR && \
@@ -202,7 +202,7 @@ log_info "Running health checks..."
 for service in "${DEPLOY_SERVICES[@]}"; do
     case $service in
         "web")
-            WEB_STATUS=$(ssh $SERVER "curl -s -o /dev/null -w '%{http_code}' https://invex.saptiva.com" || echo "000")
+            WEB_STATUS=$(ssh $SERVER "curl -s -o /dev/null -w '%{http_code}' https://your-domain.com" || echo "000")
             if [ "$WEB_STATUS" = "200" ]; then
                 log_success "Web OK (HTTP $WEB_STATUS)"
             else

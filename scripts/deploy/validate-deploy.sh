@@ -9,7 +9,7 @@
 set -e
 
 VERSION="${1:-}"
-REGISTRY_USER="jazielflores1998"
+REGISTRY_USER="${DOCKER_REGISTRY_USER:-your_registry_user}"
 
 # Colors
 RED='\033[0;31m'

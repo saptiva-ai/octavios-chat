@@ -16,7 +16,7 @@ set -e
 SERVICES="${1:-}"
 VERSION="${2:-}"
 DATETIME=$(date +%Y%m%d-%H%M)
-DOCKERHUB_USER="jazielflores1998"
+DOCKERHUB_USER="${DOCKER_REGISTRY_USER:-your_registry_user}"
 PROJECT="octavios-invex"
 
 # Valid services
