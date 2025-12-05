@@ -23,7 +23,7 @@ import structlog
 from fastapi import APIRouter, HTTPException, status, Request, Response
 
 from ....core.redis_cache import get_redis_cache
-from ....schemas.chat import ChatSessionListResponse, ChatSessionUpdateRequest
+from ....schemas.chat import ChatSessionListResponse, ChatSessionUpdateRequest, CanvasStateUpdateRequest
 from ....schemas.common import ApiResponse
 from ....services.history_service import HistoryService
 from ....models.chat import ChatMessage as ChatMessageModel
@@ -369,7 +369,7 @@ async def delete_chat_session(
 @router.patch("/sessions/{session_id}/canvas", response_model=ApiResponse, tags=["chat"])
 async def update_canvas_state(
     session_id: str,
-    canvas_update: 'CanvasStateUpdateRequest',
+    canvas_update: CanvasStateUpdateRequest,
     http_request: Request,
     response: Response
 ) -> ApiResponse:
@@ -388,7 +388,6 @@ async def update_canvas_state(
     Returns:
         ApiResponse with success status
     """
-    from ....schemas.chat import CanvasStateUpdateRequest
     from ....models.chat import CanvasState
     
     response.headers.update(NO_STORE_HEADERS)
