@@ -11,7 +11,7 @@
 
 services:
   backend:
-    image: jazielflores1998/octavios-invex-backend:0.2.1
+    image: jazielflores1998/octavios-invex-backend:0.2.2
     build: null  # Desactiva el build
 
   web:
