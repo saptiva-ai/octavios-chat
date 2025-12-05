@@ -300,6 +300,16 @@ Responde SOLO con JSON válido:
                 explanation="Query mentions 'todos los bancos' - implies comparison over time"
             )
 
+        # Rule 4.5: "por banco" indicator -> comparison (not ranking)
+        # Queries like "Reservas totales por banco" should show temporal comparison, not ranking
+        # HIGH CONFIDENCE (0.96) to override LLM which interprets "por banco" as ranking
+        if "por banco" in query_lower or "por bancos" in query_lower:
+            return ParsedIntent(
+                intent=Intent.COMPARISON,
+                confidence=0.96,
+                explanation="Query mentions 'por banco' - implies comparison over time, not ranking"
+            )
+
         # Rule 5: Evolution keywords
         evolution_keywords = ["evolución", "evolucion", "tendencia", "histórico", "historico", "cambio", "variación", "variacion"]
         has_evolution_keyword = any(kw in query_lower for kw in evolution_keywords)
