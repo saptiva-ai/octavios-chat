@@ -287,7 +287,19 @@ Responde SOLO con JSON válido:
                 explanation="Detected date range - implies evolution over time"
             )
 
-        # Rule 4: Evolution keywords
+        # Rule 4: Multiple banks indicator -> comparison/evolution
+        # "todos los bancos", "todos bancos", "all banks" suggests showing all banks over time
+        multi_bank_keywords = ["todos los bancos", "todos bancos", "all banks", "múltiples bancos", "varios bancos"]
+        if any(kw in query_lower for kw in multi_bank_keywords):
+            # If has metric, assume they want evolution comparison
+            if hasattr(entities, 'metric') and entities.metric:
+                return ParsedIntent(
+                    intent=Intent.COMPARISON,
+                    confidence=0.85,
+                    explanation="Query mentions 'todos los bancos' with metric - implies comparison over time"
+                )
+
+        # Rule 5: Evolution keywords
         evolution_keywords = ["evolución", "evolucion", "tendencia", "histórico", "historico", "cambio", "variación", "variacion"]
         has_evolution_keyword = any(kw in query_lower for kw in evolution_keywords)
 
@@ -298,7 +310,7 @@ Responde SOLO con JSON válido:
                 explanation="Detected evolution keywords"
             )
 
-        # Rule 5: Default to point_value with medium confidence
+        # Rule 6: Default to point_value with medium confidence
         # This allows clarification to trigger if confidence threshold is high
         return ParsedIntent(
             intent=Intent.POINT_VALUE,
