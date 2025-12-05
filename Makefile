@@ -141,7 +141,7 @@ help.categories:
 	$(AT)echo "$(CYAN)📦 Categories:$(NC)"
 	$(AT)echo "  🚀 $(BOLD)Lifecycle:$(NC)     setup, dev, prod, stop, restart, clean"
 	$(AT)echo "  🧪 $(BOLD)Testing:$(NC)       test, test.<type>, test-local"
-	$(AT)echo "  💾 $(BOLD)Database:$(NC)      db.<cmd>, init-bank-advisor"
+	$(AT)echo "  💾 $(BOLD)Database:$(NC)      db.<cmd>"
 	$(AT)echo "  🚢 $(BOLD)Deployment:$(NC)    deploy, prod-deploy, registry-deploy"
 	$(AT)echo "  🔧 $(BOLD)Development:$(NC)   logs, shell, health, reload-env"
 	$(AT)echo "  📊 $(BOLD)Monitoring:$(NC)    status, health, logs-follow"

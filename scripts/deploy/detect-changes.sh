@@ -16,7 +16,6 @@ declare -A SERVICE_PATHS=(
     ["backend"]="apps/backend"
     ["web"]="apps/web packages"
     ["file-manager"]="plugins/public/file-manager"
-    ["bank-advisor"]="plugins/bank-advisor-private"
 )
 
 echo "🔍 Detecting changes since $BASE_REF..."

@@ -355,8 +355,10 @@ debug_tool.py
 .logs/
 
 # Large data files (>100MB)
-plugins/bank-advisor-private/data/raw/
+plugins/bank-advisor-private/
 /plugins/data
+bank-advisor/
+bank_advisor/
 
 # Client-specific test data (sensitive)
 tests/data/capital414/
