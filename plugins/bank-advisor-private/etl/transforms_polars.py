@@ -666,8 +666,9 @@ def aggregate_monthly_kpis(
         "entidades_gubernamentales_total", "cartera_vencida",
         # Reservas
         "reservas_etapa_todas", "reservas_variacion_mm",
-        # Etapas de Deterioro (IFRS9)
-        "ct_etapa_1", "ct_etapa_2", "ct_etapa_3",
+        # Etapas de Deterioro (IFRS9) - NOTE: ct_etapa_X are RATIOS, not absolute values
+        # DO NOT SUM RATIOS - they should be recalculated after summing absolute values
+        # "ct_etapa_1", "ct_etapa_2", "ct_etapa_3",  # REMOVED - will be recalculated
         "cartera_total_etapa_1", "cartera_total_etapa_2", "cartera_total_etapa_3",
         # Quebrantos
         "quebrantos_cc", "lib_castigos_comerc",
@@ -735,13 +736,25 @@ def aggregate_monthly_kpis(
     if "lib_castigos_comerc" in result_cols:
         result = result.rename({"lib_castigos_comerc": "quebrantos_comerciales"})
 
-    # Calculate etapa ratios (% of total portfolio in each stage)
+    # Recalculate ct_etapa ratios after aggregation (FIX: don't sum ratios, recalculate from absolute values)
+    # ct_etapa_X should be ratio (0-1 scale, converted to percentage when displayed)
     for etapa in [1, 2, 3]:
-        etapa_col = f"cartera_total_etapa_{etapa}"
-        ratio_col = f"pct_etapa_{etapa}"
-        if etapa_col in result_cols and "cartera_total" in result_cols:
+        etapa_abs_col = f"cartera_total_etapa_{etapa}"
+        ratio_col = f"ct_etapa_{etapa}"
+        pct_col = f"pct_etapa_{etapa}"
+
+        if etapa_abs_col in result_cols and "cartera_total" in result_cols:
+            # Calculate ratio (for ct_etapa_X - used in queries)
             result = result.with_columns([
-                (pl.col(etapa_col) / pl.col("cartera_total") * 100).alias(ratio_col)
+                pl.when(pl.col("cartera_total") > 0)
+                .then(pl.col(etapa_abs_col) / pl.col("cartera_total") * 100)  # As percentage
+                .otherwise(None)
+                .alias(ratio_col)
+            ])
+
+            # Also keep pct_etapa_X for backward compatibility
+            result = result.with_columns([
+                pl.col(ratio_col).alias(pct_col)
             ])
 
     # Add banco_norm
