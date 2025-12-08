@@ -1402,6 +1402,13 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
       setIsSending(true);
 
       try {
+        // Hard preference: if Deep Research tool is enabled, route directly to research
+        // to avoid falling back to plain chat when intent classifier is ambiguous.
+        if (deepResearchEnabled) {
+          await startDeepResearchFlow(effectiveMessage, undefined, attachments);
+          return;
+        }
+
         await researchGate(effectiveMessage, {
           deepResearchOn: deepResearchEnabled,
           openWizard: (userText) =>
