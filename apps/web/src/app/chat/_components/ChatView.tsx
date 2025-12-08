@@ -38,6 +38,7 @@ import {
   legacyKeyToToolId,
   toolIdToLegacyKey,
 } from "@/lib/tool-mapping";
+import { featureFlags as envFeatureFlags } from "@/lib/feature-flags";
 import { CanvasPanel } from "@/components/canvas/canvas-panel";
 import { useCanvas } from "@/context/CanvasContext";
 import { useCanvasStore } from "@/lib/stores/canvas-store";
@@ -258,6 +259,20 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
     }
     return selectedTools.includes("deep-research");
   }, [selectedTools, featureFlags]);
+
+  // Ensure research/search tools are enabled when feature flags allow it
+  React.useEffect(() => {
+    if (envFeatureFlags.webSearch && !toolsEnabled.web_search) {
+      void setToolEnabled("web_search", true);
+    }
+    if (
+      envFeatureFlags.deepResearch &&
+      !featureFlags?.deep_research_kill_switch &&
+      !toolsEnabled.deep_research
+    ) {
+      void setToolEnabled("deep_research", true);
+    }
+  }, [toolsEnabled, setToolEnabled, featureFlags]);
 
   const handleAddTool = React.useCallback(
     (id: ToolId) => {
