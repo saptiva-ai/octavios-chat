@@ -233,29 +233,30 @@ export function ChatMessage({
 
   // Debug logging for bank chart data
   // Log every assistant message render to debug missing button issue
-  if (isAssistant) {
-    console.warn("[🔍 BANK_CHART DEBUG] Assistant message render:", {
-      messageId: id,
-      hasMetadata: !!metadata,
-      hasBankChartData: !!metadata?.bank_chart_data,
-      bankChartDataResolved: !!bankChartData,
-      willRenderButton: isAssistant && !!bankChartData,
-      metadataKeys: metadata ? Object.keys(metadata) : [],
-      isStreaming,
-      status,
-    });
-  }
-  if (metadata?.bank_chart_data) {
-    console.warn("[🔍 BANK_CHART DEBUG] Found bank_chart_data in metadata:", {
-      isBankChart,
-      hasData: !!bankChartData,
-      isAssistant,
-      willRender: isAssistant && !!bankChartData,
-      plotlyData: metadata.bank_chart_data.plotly_config?.data,
-      plotlyLayout: metadata.bank_chart_data.plotly_config?.layout,
-      fullMetadata: metadata.bank_chart_data,
-    });
-  }
+  // BANK_CHART_DEBUG logs silenced to reduce console noise in production
+  // if (isAssistant) {
+  //   console.warn("[🔍 BANK_CHART DEBUG] Assistant message render:", {
+  //     messageId: id,
+  //     hasMetadata: !!metadata,
+  //     hasBankChartData: !!metadata?.bank_chart_data,
+  //     bankChartDataResolved: !!bankChartData,
+  //     willRenderButton: isAssistant && !!bankChartData,
+  //     metadataKeys: metadata ? Object.keys(metadata) : [],
+  //     isStreaming,
+  //     status,
+  //   });
+  // }
+  // if (metadata?.bank_chart_data) {
+  //   console.warn("[🔍 BANK_CHART DEBUG] Found bank_chart_data in metadata:", {
+  //     isBankChart,
+  //     hasData: !!bankChartData,
+  //     isAssistant,
+  //     willRender: isAssistant && !!bankChartData,
+  //     plotlyData: metadata.bank_chart_data.plotly_config?.data,
+  //     plotlyLayout: metadata.bank_chart_data.plotly_config?.layout,
+  //     fullMetadata: metadata.bank_chart_data,
+  //   });
+  // }
 
   // Identify audit messages to append inline audit card after content
   const isAuditMessage =
