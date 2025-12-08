@@ -205,6 +205,10 @@ class Settings(BaseSettings):
         default="http://file-manager:8001",
         description="File Manager plugin URL for file operations"
     )
+    attachments_v2: bool = Field(
+        default=False,
+        description="Route attachment normalization and context building through the File Manager plugin"
+    )
 
     # SAPTIVA
     saptiva_base_url: str = Field(default="https://api.saptiva.com", description="SAPTIVA API base URL")

@@ -297,7 +297,13 @@ async def test_message_without_files_reuses_previous_context(
                 json={
                     "message": "Analiza esta imagen",
                     "file_ids": [str(first_image.id)],
-                    "model": "Saptiva Turbo"
+                    "model": "Saptiva Turbo",
+                    # Disable bank analytics to avoid extra LLM classification calls
+                    "tools_enabled": {
+                        "bank_analytics": False,
+                        "web_search": False,
+                        "deep_research": False,
+                    },
                 }
             )
             assert response1.status_code == status.HTTP_200_OK
@@ -310,7 +316,12 @@ async def test_message_without_files_reuses_previous_context(
                 json={
                     "chat_id": chat_id,
                     "message": "Dame más detalles",  # No file_ids
-                    "model": "Saptiva Turbo"
+                    "model": "Saptiva Turbo",
+                    "tools_enabled": {
+                        "bank_analytics": False,
+                        "web_search": False,
+                        "deep_research": False,
+                    },
                 }
             )
             assert response2.status_code == status.HTTP_200_OK
@@ -414,7 +425,12 @@ async def test_three_images_each_turn_has_only_its_own(
                     payload = {
                         "message": f"Analiza imagen {chr(65 + i)}",  # A, B, C
                         "file_ids": [str(image.id)],
-                        "model": "Saptiva Turbo"
+                        "model": "Saptiva Turbo",
+                        "tools_enabled": {
+                            "bank_analytics": False,
+                            "web_search": False,
+                            "deep_research": False,
+                        },
                     }
                     if chat_id:
                         payload["chat_id"] = chat_id
@@ -492,4 +508,3 @@ async def test_three_images_each_turn_has_only_its_own(
                     await redis_client.delete(f"doc:text:{str(image.id)}")
             except Exception:
                 pass
-
