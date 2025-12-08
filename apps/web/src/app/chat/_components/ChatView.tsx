@@ -257,7 +257,10 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
     if (featureFlags?.deep_research_kill_switch) {
       return false;
     }
-    return selectedTools.includes("deep-research");
+    // Allow env flag to force-enable even if toggle persisted as off
+    return (
+      selectedTools.includes("deep-research") || envFeatureFlags.deepResearch
+    );
   }, [selectedTools, featureFlags]);
 
   // Ensure research/search tools are enabled when feature flags allow it
