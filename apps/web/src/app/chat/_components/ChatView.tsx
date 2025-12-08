@@ -140,6 +140,9 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
     (state) => state.setCurrentSessionId,
   );
   const loadFromMongoDB = useCanvasStore((state) => state.loadFromMongoDB);
+  const openResearchReport = useCanvasStore(
+    (state) => state.openResearchReport,
+  );
   const { closeCanvas } = useCanvas();
 
   // DEBUG: Log canvas state in ChatView
@@ -286,6 +289,37 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
     stop: stopResearchStream,
     reset: resetResearchState,
   } = researchState;
+
+  // 🆕 Auto-open Canvas with research report when completed
+  React.useEffect(() => {
+    if (
+      researchPhase === "COMPLETED" &&
+      researchReport &&
+      activeResearch?.taskId
+    ) {
+      openResearchReport({
+        taskId: activeResearch.taskId,
+        query: activeResearch.query,
+        report: researchReport,
+        sources: researchSources,
+        evidences: researchEvidences,
+        completedAt: new Date().toISOString(),
+      });
+
+      logDebug("[ChatView] Deep Research completed, opening Canvas", {
+        taskId: activeResearch.taskId,
+        sourcesCount: researchSources.length,
+        evidencesCount: researchEvidences.length,
+      });
+    }
+  }, [
+    researchPhase,
+    researchReport,
+    activeResearch,
+    researchSources,
+    researchEvidences,
+    openResearchReport,
+  ]);
 
   const startDeepResearchFlow = React.useCallback(
     async (

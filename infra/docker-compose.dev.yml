@@ -52,7 +52,19 @@ services:
       # Mount source code for hot reload
       - ../plugins/public/file-manager/src:/app/src
 
-
+  # Aletheia - Deep Research development configuration
+  aletheia:
+    build:
+      target: development
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+    volumes:
+      # Mount source code for hot reload
+      - ../plugins/private/aletheia/domain:/app/domain
+      - ../plugins/private/aletheia/adapters:/app/adapters
+      - ../plugins/private/aletheia/apps:/app/apps
+      - ../plugins/private/aletheia/ports:/app/ports
 
 volumes:
   web_node_modules:

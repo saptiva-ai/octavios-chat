@@ -1,0 +1,388 @@
+El objetivo es no romper nada, mantener la deuda técnica en cero y asegurar la escalabilidad mediante el desacoplamiento.
+
+He definido dos variables de entorno conceptuales para los paths absolutos que deberás ajustar en tu terminal antes de empezar:
+
+$ALETHEIA_PATH: /home/jazielflo/Proyects/deepresearch-api
+
+$OCTAVIUS_PATH: /home/jazielflo/Proyects/octavios-chat-capital414
+
+Aquí tienes el plan maestro.
+
+📋 Plan Maestro de Integración: Aletheia (Microservicio) -> Octavius (Cliente)
+Fase 0: Preparación y Hardening de Aletheia
+Objetivo: Asegurar que la "Caja Negra" de investigación sea robusta, estanca y desplegable antes de intentar conectarla.
+
+Paso 1: Auditoría de Calidad y Testing Unitario
+
+Navegar a $ALETHEIA_PATH.
+
+Ejecutar suite de pruebas existente para asegurar "Green State": pytest tests/unit/.
+
+Acción de Agente: Si la cobertura es <80%, generar tests unitarios adicionales para domain/services/plan.py y domain/services/research.py.
+
+Validar Typing estricto: Ejecutar mypy . y corregir errores de tipos.
+
+Paso 2: Optimización de Docker (Multi-stage Build)
+
+Revisar Dockerfile en $ALETHEIA_PATH.
+
+Acción de Agente: Refactorizar a Multi-stage build (Builder vs Runner) para reducir el tamaño de la imagen (eliminar compiladores, caches de pip, etc.).
+
+Asegurar que el usuario no sea root (useradd -m appuser).
+
+Construir imagen localmente: docker build -t saptiva/aletheia:latest .
+
+Paso 3: Smoke Test del Contenedor Aislado
+
+Levantar contenedor: docker run --env-file .env -p 8000:8000 saptiva/aletheia:latest.
+
+Ejecutar script de validación (curl) contra /health y /research (usando mocks de LLM para no gastar tokens).
+
+Fase 1: Capa de Adaptación en Octavius (Backend)
+Objetivo: Que Octavius hable con Aletheia sin acoplarse a su implementación (Principio de Inversión de Dependencias).
+
+Paso 4: Definición del Contrato (Interface)
+
+Navegar a $OCTAVIUS_PATH.
+
+Crear interfaz en src/core/ports/DeepResearchProvider.ts (Asumiendo TS).
+
+Debe incluir métodos: startResearch(query: string), getTaskStatus(taskId: string), getArtifacts(taskId: string).
+
+Principio SOLID (ISP): Mantener la interfaz pequeña y específica.
+
+Paso 5: Implementación del Adaptador HTTP (Infrastructure)
+
+Crear src/infrastructure/adapters/AletheiaAdapter.ts.
+
+Patrón de Diseño: Usar Circuit Breaker (ej. usando opossum o lógica custom) para manejar fallos si Aletheia está caído.
+
+Implementar la lógica de mapeo: Convertir el JSON de Aletheia al modelo de dominio de Octavius.
+
+Paso 6: Contract Testing (Mock Server)
+
+Crear un test de integración en Octavius que levante un servidor mock simulando ser Aletheia.
+
+Validar que AletheiaAdapter maneja correctamente:
+
+Respuestas 202 Accepted.
+
+Respuestas de Polling (status: running vs completed).
+
+Errores 500 o Timeouts.
+
+Fase 2: Integración en Tiempo Real (Open Canvas)
+Objetivo: Visualización fluida sin bloquear el hilo principal del chat.
+
+Paso 7: Backend Proxy & Polling Manager Nota: Aletheia no tiene WebSockets nativos aún, Octavius debe hacer el puente.
+
+En el backend de Octavius, crear un servicio ResearchOrchestrator.
+
+Lógica:
+
+Recibe petición del usuario.
+
+Llama a AletheiaAdapter.startResearch().
+
+Inicia un "Smart Polling" (cada 2s, luego 5s, luego 10s) hacia Aletheia.
+
+Emitir eventos: Cuando detecta cambios en Aletheia, emite eventos via Server-Sent Events (SSE) o WebSockets al frontend de Octavius.
+
+Paso 8: Frontend Hook (React/Next.js)
+
+Crear Hook custom: useDeepResearch(taskId).
+
+Este hook se suscribe al canal de WS/SSE de Octavius.
+
+Gestionar estados de UI: IDLE, NEGOTIATING, RESEARCHING (con logs), SYNTHESIZING, COMPLETE.
+
+Paso 9: Componente Open Canvas
+
+Crear componente ResearchCanvas.tsx.
+
+Visualizar los "Traces" que llegan de Aletheia (ej. "Buscando en Tavily...", "Leyendo PDF...").
+
+Renderizar Markdown final cuando el estado sea COMPLETE.
+
+Fase 3: Despliegue y Orquestación Local
+Paso 10: Docker Compose Unificado
+
+Crear docker-compose.dev.yml en la raíz del workspace (o en Octavius).
+
+Definir servicios:
+
+octavius-app (depende de aletheia).
+
+aletheia-service (imagen construida en Paso 2).
+
+redis (para cola de tareas si es necesario).
+
+Configurar red interna saptiva-network para que se hablen por DNS (http://aletheia-service:8000).
+
+🛠️ Archivos para generar ahora
+Para arrancar este plan, voy a generar los archivos críticos que definen esta arquitectura sólida.
+
+Dockerfile optimizado para Aletheia (Production Ready).
+
+DeepResearchPort.ts y AletheiaAdapter.ts (Para Octavius, aplicando SOLID).
+
+docker-compose.yml (El pegamento de la arquitectura).
+
+¿Te parece bien comenzar generando estos tres artefactos clave para que el agente codificador los tome como base?
+Aletheia Production Dockerfile
+20 nov, 21:41
+
+Abrir
+Octavius Adapter Pattern
+20 nov, 21:41
+
+Abrir
+Orchestration
+20 nov, 21:41
+
+Resumen de lo generado y siguientes pasos
+Dockerfile (Aletheia): He creado un Dockerfile multi-stage que garantiza que la imagen sea ligera y segura (sin correr como root). Esto es vital para producción.
+
+aletheia.adapter.ts (Octavius): He implementado el patrón Adapter. Octavius ya no sabrá "cómo" funciona Aletheia, solo sabrá que existe una interfaz DeepResearchPort. Si mañana cambias Aletheia por otra cosa, Octavius no se rompe.
+
+docker-compose.integration.yml: Este archivo orquesta ambos proyectos usando variables de entorno para los paths.
+
+Instrucciones para tu Agente Codificador:
+
+Copia el Dockerfile a la raíz de Aletheia ($ALETHEIA_PATH/apps/api/Dockerfile).
+
+Integra el código TypeScript en la estructura de carpetas de Octavius.
+
+
+Anexo:
+--- Stage 1: Builder ---
+
+FROM python:3.11-slim as builder
+
+WORKDIR /app
+
+Variables de entorno para optimizar Python
+
+ENV PYTHONDONTWRITEBYTECODE=1 
+
+PYTHONUNBUFFERED=1 
+
+PIP_NO_CACHE_DIR=1
+
+Instalar dependencias del sistema necesarias para compilar
+
+RUN apt-get update && apt-get install -y --no-install-recommends 
+
+gcc 
+
+g++ 
+
+libffi-dev 
+
+curl 
+
+&& rm -rf /var/lib/apt/lists/*
+
+Crear virtualenv
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+Copiar requirements e instalar
+
+COPY requirements.txt .
+RUN pip install --upgrade pip && 
+
+pip install -r requirements.txt
+
+--- Stage 2: Runner (Imagen Final Limpia) ---
+
+FROM python:3.11-slim as runner
+
+WORKDIR /app
+
+Crear usuario no-root por seguridad
+
+RUN useradd -m -u 1000 saptiva
+USER saptiva
+
+Copiar entorno virtual del builder
+
+COPY --from=builder --chown=saptiva:saptiva /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+Copiar código fuente (respetando .dockerignore)
+
+COPY --chown=saptiva:saptiva . .
+
+Variables de entorno default (pueden sobreescribirse)
+
+ENV PORT=8000 
+
+ENVIRONMENT=production 
+
+WORKERS=4
+
+Healthcheck nativo
+
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 
+
+CMD curl -f http://localhost:${PORT}/health || exit 1
+
+Entrypoint
+
+EXPOSE 8000
+CMD ["sh", "-c", "uvicorn apps.api.main:app --host 0.0.0.0 --port ${PORT} --workers ${WORKERS}"]
+
+
+
+
+Anexo:
+/**
+ * Principio de Inversión de Dependencias (DIP):
+ * Octavius depende de una abstracción (DeepResearchPort), no de la implementación concreta de Aletheia.
+ */
+
+// 1. El Puerto (Interfaz del Dominio)
+export interface DeepResearchPort {
+  startDeepResearch(params: ResearchParams): Promise<string>; // Retorna TaskID
+  getTaskStatus(taskId: string): Promise<ResearchStatus>;
+  getResearchReport(taskId: string): Promise<ResearchReport>;
+}
+
+export interface ResearchParams {
+  query: string;
+  budget: number;
+  maxIterations?: number;
+}
+
+export interface ResearchStatus {
+  state: 'starting' | 'processing' | 'completed' | 'failed';
+  progress?: number;
+  currentStep?: string;
+  logs?: string[]; // Para el Open Canvas
+}
+
+export interface ResearchReport {
+  markdownContent: string;
+  sources: Array<{ title: string; url: string }>;
+}
+
+// 2. El Adaptador (Implementación Concreta)
+import axios, { AxiosInstance } from 'axios';
+
+export class AletheiaHttpAdapter implements DeepResearchPort {
+  private client: AxiosInstance;
+
+  constructor(private readonly baseUrl: string, private readonly apiKey: string) {
+    this.client = axios.create({
+      baseURL: baseUrl,
+      timeout: 10000, // 10s timeout para llamadas de control
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
+  }
+
+  async startDeepResearch(params: ResearchParams): Promise<string> {
+    try {
+      // Mapeo de DTO Octavius -> DTO Aletheia
+      const response = await this.client.post('/deep-research', {
+        query: params.query,
+        budget: params.budget,
+        max_iterations: params.maxIterations || 3,
+      });
+      
+      // Aletheia retorna { task_id: "..." }
+      return response.data.task_id;
+    } catch (error) {
+      console.error('Error starting research in Aletheia:', error);
+      throw new Error('Deep Research Service Unavailable');
+    }
+  }
+
+  async getTaskStatus(taskId: string): Promise<ResearchStatus> {
+    try {
+      const response = await this.client.get(`/tasks/${taskId}/status`);
+      const data = response.data;
+
+      // Transformación de estado externo a interno
+      return {
+        state: this.mapExternalStatus(data.status),
+        currentStep: data.current_step_description,
+        logs: data.recent_logs || []
+      };
+    } catch (error) {
+        // Manejo de errores resiliente
+        return { state: 'failed', currentStep: 'Connection error' };
+    }
+  }
+
+  async getResearchReport(taskId: string): Promise<ResearchReport> {
+     const response = await this.client.get(`/reports/${taskId}`);
+     return {
+         markdownContent: response.data.report_markdown,
+         sources: response.data.sources
+     };
+  }
+
+  private mapExternalStatus(external: string): ResearchStatus['state'] {
+    const map: Record<string, ResearchStatus['state']> = {
+      'created': 'starting',
+      'in_progress': 'processing',
+      'completed': 'completed',
+      'failed': 'failed'
+    };
+    return map[external] || 'processing';
+  }
+}
+
+
+Anexo:
+
+version: '3.8'
+
+services:
+  # --- Servicio 1: Aletheia (Deep Research Microservice) ---
+  aletheia-api:
+    build: 
+      context: ${ALETHEIA_PATH} # Variable de entorno
+      dockerfile: apps/api/Dockerfile
+    container_name: aletheia-engine
+    ports:
+      - "8001:8000" # Mapeo puerto host:container
+    environment:
+      - ENVIRONMENT=production
+      - SAPTIVA_API_KEY=${SAPTIVA_API_KEY}
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
+      - WORKERS=4
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - saptiva-mesh
+
+  # --- Servicio 2i: Octavios (Web Application) ---
+  octavius-chat:
+    build:
+      context: ${OCTAVIUS_PATH}
+      dockerfile: Dockerfile
+    container_name: octavius-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - ALETHEIA_API_URL=http://aletheia-engine:8000 # Comunicación interna Docker DNS
+      - NODE_ENV=production
+    depends_on:
+      aletheia-api:
+        condition: service_healthy
+    networks:
+      - saptiva-mesh
+
+# Red privada para comunicación segura entre contenedores
+networks:
+  saptiva-mesh:
+    driver: bridge

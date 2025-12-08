@@ -1,0 +1,100 @@
+name: ✨ Feature Request
+description: Sugerir una nueva funcionalidad para Aletheia
+title: "[FEATURE] "
+labels: ["enhancement", "feature-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por sugerir una nueva funcionalidad. Tu input nos ayuda a mejorar Aletheia.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 🤔 ¿Qué problema resuelve esta funcionalidad?
+      description: Describe el problema o necesidad que esta funcionalidad abordaría
+      placeholder: Actualmente es difícil/imposible hacer... porque...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: 💡 Solución Propuesta
+      description: Describe la funcionalidad que te gustaría ver implementada
+      placeholder: Me gustaría que Aletheia pudiera...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 🔄 Alternativas Consideradas
+      description: Describe otras soluciones o funcionalidades que consideraste
+      placeholder: También pensé en... pero prefiero la propuesta porque...
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: 🏗️ Componente Afectado
+      description: ¿Qué parte del sistema sería afectada?
+      options:
+        - API Endpoints
+        - Planner Agent
+        - Research Agent
+        - Evaluation Agent
+        - Writer Agent
+        - Iterative Orchestrator
+        - Vector Storage (RAG)
+        - External Adapters (Saptiva/Tavily)
+        - Testing/CI/CD
+        - Documentation
+        - Infrastructure/Deployment
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 📈 Prioridad
+      description: ¿Qué tan importante es esta funcionalidad?
+      options:
+        - Low - Nice to have
+        - Medium - Would improve workflow
+        - High - Needed for production use
+        - Critical - Blocking current usage
+    validations:
+      required: true
+
+  - type: textarea
+    id: use_cases
+    attributes:
+      label: 🎯 Casos de Uso
+      description: Describe escenarios específicos donde usarías esta funcionalidad
+      placeholder: |
+        1. Como usuario, quiero... para poder...
+        2. Cuando estoy haciendo... necesito... porque...
+    validations:
+      required: true
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: 🛠️ Sugerencias de Implementación
+      description: Si tienes ideas sobre cómo implementarlo, compártelas
+      placeholder: Podría implementarse usando... o modificando...
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: ✅ Checklist
+      options:
+        - label: He buscado si esta funcionalidad ya existe o está planeada
+          required: true
+        - label: He considerado el impacto en performance
+          required: false
+        - label: He pensado en cómo esto afectaría la API actual
+          required: false
+        - label: Estoy dispuesto a contribuir con la implementación
+          required: false
