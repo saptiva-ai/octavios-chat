@@ -1,0 +1,128 @@
+name: "PR Review - Quality Gate"
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+
+env:
+  PYTHON_VERSION: "3.11"
+  FORCE_COLOR: "1"
+  CI: true
+
+jobs:
+  review:
+    name: "Static Analysis & Tests"
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          pip install -e .[dev]
+          pip install radon xenon
+
+      - name: Lint with Ruff
+        run: ruff check . --output-format=github
+
+      - name: Format check with Black
+        run: black --check --diff .
+
+      - name: Type check with MyPy
+        run: mypy domain/models --ignore-missing-imports
+
+      - name: Security scan with Bandit
+        run: bandit -r apps adapters domain ports -x tests
+
+      - name: Dependency vulnerabilities with Safety
+        run: safety check --full-report --ignore-unpinned-requirements
+
+      - name: Complexity report (Radon)
+        id: radon
+        continue-on-error: true
+        run: |
+          radon cc adapters apps domain ports -nc --show-complexity --total-average | tee radon-report.txt
+          radon raw adapters apps domain ports > radon-raw.txt
+
+      - name: Complexity threshold (Xenon)
+        id: xenon
+        continue-on-error: true
+        run: xenon adapters apps domain ports --max-absolute B --max-modules B --max-average B
+
+      - name: Run unit tests with coverage
+        env:
+          SAPTIVA_API_KEY: mock_saptiva_key
+          TAVILY_API_KEY: mock_tavily_key
+          VECTOR_BACKEND: none
+          ENVIRONMENT: test
+          LOCAL_STORAGE_ROOT: ./runs/storage
+        run: |
+          pytest tests/unit -v --maxfail=1
+
+      - name: Run integration tests (quick smoke)
+        env:
+          SAPTIVA_API_KEY: mock_saptiva_key
+          TAVILY_API_KEY: mock_tavily_key
+          VECTOR_BACKEND: none
+          ENVIRONMENT: test
+          LOCAL_STORAGE_ROOT: ./runs/storage
+        run: |
+          pytest tests/integration -m "not external_api" -v
+        continue-on-error: true
+
+      - name: Upload unit test artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr-review-artifacts
+          path: |
+            htmlcov/
+            coverage.xml
+            radon-report.txt
+            radon-raw.txt
+            .pytest_cache
+          if-no-files-found: ignore
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        if: always()
+        with:
+          files: ./coverage.xml
+          flags: pr-review
+          fail_ci_if_error: false
+
+      - name: Publish review summary
+        if: always()
+        run: |
+          echo "## ✅ PR Review summary" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.radon.outcome }}" != "success" ]; then
+            echo "- ⚠️ Radon reported high complexity (see artifact)." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- 📊 Radon complexity report generated." >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ steps.xenon.outcome }}" != "success" ]; then
+            echo "- ⚠️ Xenon thresholds exceeded (review complexity findings)." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ✅ Complexity thresholds within limits." >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "- 🧪 Unit tests: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 📦 Coverage & reports uploaded as artifacts." >> $GITHUB_STEP_SUMMARY

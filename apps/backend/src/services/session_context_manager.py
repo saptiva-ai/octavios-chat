@@ -20,9 +20,12 @@ from bson import ObjectId
 
 from ..models.chat import ChatSession as ChatSessionModel
 from ..core.redis_cache import RedisCache
+from ..core.config import get_settings
+from ..clients.file_manager import FileManagerClient
 from .chat_helpers import wait_for_documents_ready
 
 logger = structlog.get_logger(__name__)
+settings = get_settings()
 
 
 class SessionContextManager:
@@ -262,6 +265,45 @@ class SessionContextManager:
         Returns:
             List of file IDs to use for this message
         """
+        session_file_ids = list(
+            getattr(chat_session, 'attached_file_ids', []) or []
+        )
+
+        # Delegate to File Manager plugin when enabled
+        if settings.attachments_v2:
+            normalized_request_files = SessionContextManager.normalize_file_ids(
+                request_file_ids
+            )
+
+            client = FileManagerClient(settings.file_manager_url)
+            ctx = await client.prepare_context(
+                user_id=user_id,
+                session_id=str(chat_session.id) if chat_session.id else None,
+                request_file_ids=normalized_request_files,
+                previous_file_ids=session_file_ids,
+                max_docs=3,
+                max_chars_per_doc=8000,
+                max_total_chars=16000,
+            )
+
+            current_file_ids = ctx.current_file_ids
+
+            await SessionContextManager.update_session_files(
+                chat_session,
+                current_file_ids,
+                session_file_ids
+            )
+
+            logger.info(
+                "Attachments resolved via file-manager plugin",
+                session_id=chat_session.id,
+                file_count=len(current_file_ids),
+                warnings=ctx.warnings,
+                request_id=request_id[:8]
+            )
+
+            return current_file_ids
+
         # 1. Normalize request files
         normalized_request_files = SessionContextManager.normalize_file_ids(
             request_file_ids
@@ -291,10 +333,6 @@ class SessionContextManager:
             )
 
         # 3. Get session files
-        session_file_ids = list(
-            getattr(chat_session, 'attached_file_ids', []) or []
-        )
-
         # 4. Determine current files
         current_file_ids = SessionContextManager.determine_current_files(
             normalized_request_files,

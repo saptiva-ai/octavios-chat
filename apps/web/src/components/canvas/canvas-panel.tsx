@@ -13,6 +13,7 @@ import { MermaidGraph } from "./mermaid-graph";
 import { graphToMermaid } from "@/lib/utils/graph-to-mermaid";
 import { AuditDetailView } from "./views/AuditDetailView";
 import { BankChartCanvasView } from "./BankChartCanvasView";
+import { ResearchReportCanvasView } from "./ResearchReportCanvasView";
 import { CanvasErrorBoundary } from "./CanvasErrorBoundary";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 
@@ -55,6 +56,10 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
   );
   // 🆕 Bank chart state for canvas visualization
   const activeBankChart = useCanvasStore((state) => state.activeBankChart);
+  // 🆕 Deep Research report state
+  const activeResearchReport = useCanvasStore(
+    (state) => state.activeResearchReport,
+  );
   const canvasWidthPercent = useCanvasStore(
     (state) => state.canvasWidthPercent,
   );
@@ -120,6 +125,14 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
       return;
     }
 
+    // 🆕 If showing research report, don't fetch artifact
+    if (activeResearchReport) {
+      setArtifact(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     if (!activeArtifactId) {
       setArtifact(null);
       setError(null);
@@ -161,9 +174,14 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [activeArtifactId, reportPdfUrl, activeBankChart]);
+  }, [activeArtifactId, reportPdfUrl, activeBankChart, activeResearchReport]);
 
   const renderContent = () => {
+    // 🆕 Priority 0: activeResearchReport (deep research reports)
+    if (activeResearchReport) {
+      return <ResearchReportCanvasView data={activeResearchReport} />;
+    }
+
     // 🆕 Priority 1: activeBankChart (bank chart visualizations)
     if (activeBankChart) {
       return <BankChartCanvasView data={activeBankChart} />;
@@ -305,6 +323,7 @@ export function CanvasPanel({ className, reportPdfUrl }: CanvasPanelProps) {
           artifact={artifact}
           activeArtifactData={activeArtifactData}
           activeBankChart={activeBankChart}
+          activeResearchReport={activeResearchReport}
           onToggle={toggleSidebar}
           isSidebarOpen={isSidebarOpen}
         />
@@ -322,6 +341,7 @@ function Header({
   artifact,
   activeArtifactData,
   activeBankChart,
+  activeResearchReport,
   onToggle,
   isSidebarOpen,
 }: {
@@ -329,6 +349,7 @@ function Header({
   artifact: ArtifactRecord | null;
   activeArtifactData: any;
   activeBankChart: any;
+  activeResearchReport: any;
   onToggle: () => void;
   isSidebarOpen: boolean;
 }) {
@@ -339,6 +360,11 @@ function Header({
   }, [activeArtifactData]);
 
   const displayName = React.useMemo(() => {
+    // Deep Research report takes highest priority
+    if (activeResearchReport?.query) {
+      const query = activeResearchReport.query;
+      return query.length > 60 ? `${query.slice(0, 60)}...` : query;
+    }
     // Bank chart takes priority
     if (activeBankChart?.metric_name) {
       return activeBankChart.metric_name.toUpperCase();
@@ -353,13 +379,14 @@ function Header({
     if (reportPdfUrl) return "Reporte de Auditoría";
     if (artifact?.title) return artifact.title;
     return "Sin selección";
-  }, [auditPayload, reportPdfUrl, artifact, activeBankChart]);
+  }, [auditPayload, reportPdfUrl, artifact, activeBankChart, activeResearchReport]);
 
   const headerLabel = React.useMemo(() => {
+    if (activeResearchReport) return "Deep Research";
     if (activeBankChart) return "Gráfica";
     if (auditPayload) return "Auditoría";
     return "Canvas";
-  }, [activeBankChart, auditPayload]);
+  }, [activeBankChart, auditPayload, activeResearchReport]);
 
   const stats = (auditPayload as any)?.stats;
   const policy =

@@ -10,9 +10,10 @@ Usage:
     content = await client.download(file_path)
     text = await client.get_extracted_text(file_path)
 """
+from __future__ import annotations
 
 import os
-from typing import Optional, BinaryIO
+from typing import Optional, BinaryIO, List, Dict, Any
 from pathlib import Path
 import tempfile
 
@@ -34,6 +35,19 @@ class FileMetadata(BaseModel):
     sha256: str
     extracted_text: Optional[str] = None
     pages: Optional[int] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class PreparedContext(BaseModel):
+    """Context payload returned by file-manager."""
+
+    current_file_ids: List[str]
+    documents: List[Dict[str, Any]]
+    warnings: List[str]
+    stats: Dict[str, Any]
+    combined_text: str
+    session_id: Optional[str] = None
+    user_id: str
 
 
 class FileManagerClient:
@@ -198,6 +212,44 @@ class FileManagerClient:
         """
         metadata = await self.get_metadata(file_path, include_text=True)
         return metadata.get("extracted_text", "")
+
+    async def prepare_context(
+        self,
+        *,
+        user_id: str,
+        session_id: Optional[str],
+        request_file_ids: list[str],
+        previous_file_ids: Optional[list[str]] = None,
+        max_docs: int = 3,
+        max_chars_per_doc: int = 8000,
+        max_total_chars: int = 16000,
+    ) -> PreparedContext:
+        """
+        Delegate attachment normalization and context building to the file-manager.
+        """
+        client = await self._get_client()
+
+        payload = {
+            "user_id": user_id,
+            "session_id": session_id,
+            "request_file_ids": request_file_ids,
+            "previous_file_ids": previous_file_ids or [],
+            "max_docs": max_docs,
+            "max_chars_per_doc": max_chars_per_doc,
+            "max_total_chars": max_total_chars,
+        }
+
+        response = await client.post("/context/prepare", json=payload)
+        response.raise_for_status()
+
+        data = response.json()
+        logger.info(
+            "File-manager prepared attachment context",
+            session_id=session_id,
+            file_count=len(data.get("current_file_ids", [])),
+            warnings=len(data.get("warnings", [])),
+        )
+        return PreparedContext(**data)
 
     async def extract_text(self, file_path: str, force: bool = False) -> dict:
         """

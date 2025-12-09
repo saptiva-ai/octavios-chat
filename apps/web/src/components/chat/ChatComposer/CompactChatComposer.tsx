@@ -737,7 +737,7 @@ export function CompactChatComposer({
                             }
                           : undefined
                       }
-                      showAuditButton={deduplicatedAttachments.length === 1}
+                      showAuditButton={false}
                     />
                   ))}
                 </div>

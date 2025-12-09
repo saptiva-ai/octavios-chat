@@ -1,0 +1,83 @@
+name: 🐛 Bug Report
+description: Reportar un bug o comportamiento inesperado
+title: "[BUG] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por reportar este bug. Por favor llena la información solicitada para ayudarnos a reproducir y arreglar el issue.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 📋 Descripción del Bug
+      description: Describe claramente qué está pasando
+      placeholder: Describe el bug...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: ✅ Comportamiento Esperado
+      description: Describe qué esperabas que pasara
+      placeholder: Esperaba que...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: ❌ Comportamiento Actual
+      description: Describe qué está pasando realmente
+      placeholder: Pero en su lugar...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 🔄 Pasos para Reproducir
+      description: Lista los pasos para reproducir el comportamiento
+      placeholder: |
+        1. Ejecutar comando '...'
+        2. Enviar request a '...'
+        3. Ver error...
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 🌍 Entorno
+      description: Información sobre tu entorno
+      value: |
+        - OS: [e.g., Ubuntu 20.04, Windows 11, macOS 12]
+        - Python Version: [e.g., 3.11.5]
+        - Aletheia Version: [e.g., v0.2.0]
+        - API Keys configuradas: [Saptiva: ✅/❌, Tavily: ✅/❌]
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 📊 Logs y Traces
+      description: Incluye logs relevantes, stack traces, o output de error
+      render: shell
+      placeholder: Pega aquí los logs...
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: ✅ Checklist
+      options:
+        - label: He buscado issues similares existentes
+          required: true
+        - label: He verificado que tengo las API keys configuradas correctamente
+          required: false
+        - label: He probado con la última versión del código
+          required: false
+        - label: He incluido logs/traces relevantes
+          required: false

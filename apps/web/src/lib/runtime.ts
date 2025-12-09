@@ -17,7 +17,7 @@ export function assertProdNoMock() {
       process.env.VERCEL === "1" || process.env.VERCEL === "true";
     const fallbackApiBase =
       process.env.NEXT_PUBLIC_API_URL ??
-      (isCI || !isVercel ? "http://localhost:8001" : undefined);
+      (isCI || !isVercel ? "http://localhost:8000" : undefined);
 
     const resolvedApiBase = fallbackApiBase;
 

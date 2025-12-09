@@ -3,6 +3,7 @@ Document text extraction service.
 
 Supports PDF and image files with OCR fallback.
 """
+from __future__ import annotations
 
 import re
 from pathlib import Path

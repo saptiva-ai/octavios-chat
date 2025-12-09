@@ -1,0 +1,9 @@
+/usr/lib/python3/dist-packages/apport/report.py:13: DeprecationWarning: the imp module is deprecated in favour of importlib; see the module's documentation for alternative uses
+  import fnmatch, glob, traceback, errno, sys, atexit, imp, stat
+Traceback (most recent call last):
+  File "<string>", line 2, in <module>
+  File "/home/jazielflo/Proyects/alethia_deepresearch/apps/api/main.py", line 55, in <module>
+    class WebSearchRequest(BaseModel):
+  File "/home/jazielflo/Proyects/alethia_deepresearch/apps/api/main.py", line 57, in WebSearchRequest
+    allowed_domains: Optional[list[str]] = None
+TypeError: 'type' object is not subscriptable

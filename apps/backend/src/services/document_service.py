@@ -9,6 +9,7 @@ Provides methods for:
 - Formatting content for RAG context
 - Validating document ownership
 """
+from __future__ import annotations
 
 from datetime import datetime
 from typing import List, Optional, Dict, Any, Set
@@ -19,8 +20,11 @@ from beanie import PydanticObjectId
 
 from ..models.document import Document, DocumentStatus
 from ..core.redis_cache import get_redis_cache
+from ..core.config import get_settings
+from ..clients.file_manager import FileManagerClient
 
 logger = structlog.get_logger(__name__)
+settings = get_settings()
 
 
 class DocumentService:
@@ -43,6 +47,40 @@ class DocumentService:
         """
         if not document_ids:
             return {}
+
+        # Attachments V2: delegate to file-manager for context resolution
+        if settings.attachments_v2:
+            client = FileManagerClient(settings.file_manager_url)
+            ctx = await client.prepare_context(
+                user_id=user_id,
+                session_id=None,
+                request_file_ids=document_ids,
+                previous_file_ids=[],
+                max_docs=len(document_ids),
+                max_chars_per_doc=8000,
+                max_total_chars=16000,
+            )
+
+            doc_texts: Dict[str, Dict[str, Any]] = {}
+            for doc in ctx.documents:
+                doc_id = doc.get("file_id")
+                if not doc_id:
+                    continue
+                doc_texts[str(doc_id)] = {
+                    "text": doc.get("text") or "",
+                    "filename": doc.get("filename") or str(doc_id),
+                    "content_type": doc.get("content_type") or "application/octet-stream",
+                    "ocr_applied": bool(doc.get("metadata", {}).get("ocr_applied", False)),
+                }
+
+            if not doc_texts and ctx.warnings:
+                logger.warning(
+                    "No documents resolved via file-manager",
+                    warnings=ctx.warnings,
+                    requested=len(document_ids),
+                )
+
+            return doc_texts
 
         logger.info(
             "Retrieving documents from Redis cache",

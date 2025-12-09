@@ -176,8 +176,8 @@ services:
     environment:
       - PORT=8000
       # Base de datos
-      - MONGODB_URL=mongodb://${MONGODB_USER:-octavios_user}:${MONGODB_PASSWORD:-secure_password_change_me}@mongodb:27017/${MONGODB_DATABASE:-octavios}?authSource=admin
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_password_change_me}@redis:6379/0
+      - MONGODB_URL=mongodb://${MONGODB_USER:-octavios_user}:${MONGODB_PASSWORD:-secure_password_change_me}@mongodb:27017/${MONGODB_DATABASE:-octavios}?authSource=admin # example default for local dev
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_password_change_me}@redis:6379/0 # example default for local dev
 
       # Autenticación
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-jwt-secret-change-in-production}
@@ -194,8 +194,8 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - DEBUG=${DEBUG:-false}
 
-      # Integraciones externas
-      - ALETHEIA_BASE_URL=${ALETHEIA_BASE_URL:-http://localhost:8000}
+      # Integraciones externas - Aletheia Deep Research
+      - ALETHEIA_BASE_URL=${ALETHEIA_BASE_URL:-http://aletheia:8000}
       - ALETHEIA_API_KEY=${ALETHEIA_API_KEY:-}
       - ALETHEIA_TIMEOUT=${ALETHEIA_TIMEOUT:-120}
       - ALETHEIA_MAX_RETRIES=${ALETHEIA_MAX_RETRIES:-3}
@@ -218,10 +218,10 @@ services:
       - RAG_CLEANUP_INTERVAL_HOURS=${RAG_CLEANUP_INTERVAL_HOURS:-1}
 
       # Deep Research Feature Flags (P0-DR-KILL-001)
-      # GLOBAL KILL SWITCH - dominates all other flags
-      - DEEP_RESEARCH_KILL_SWITCH=${DEEP_RESEARCH_KILL_SWITCH:-true}
-      # Legacy flags (only active when kill switch is false)
-      - DEEP_RESEARCH_ENABLED=${DEEP_RESEARCH_ENABLED:-false}
+      # GLOBAL KILL SWITCH - set to false to enable Deep Research
+      - DEEP_RESEARCH_KILL_SWITCH=${DEEP_RESEARCH_KILL_SWITCH:-false}
+      # Feature flags (active when kill switch is false)
+      - DEEP_RESEARCH_ENABLED=${DEEP_RESEARCH_ENABLED:-true}
       - DEEP_RESEARCH_AUTO=${DEEP_RESEARCH_AUTO:-false}
       - DEEP_RESEARCH_COMPLEXITY_THRESHOLD=${DEEP_RESEARCH_COMPLEXITY_THRESHOLD:-0.7}
 
@@ -259,6 +259,8 @@ services:
         condition: service_started
       file-manager:
         condition: service_healthy
+      aletheia:
+        condition: service_healthy
 
     ports:
       - "${API_PORT:-8000}:8000"
@@ -290,6 +292,13 @@ services:
         # Override with public domain for production deployments without proxy
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
         NEXT_PUBLIC_MAX_FILE_SIZE_MB: ${NEXT_PUBLIC_MAX_FILE_SIZE_MB:-50}
+        NEXT_PUBLIC_FEATURE_WEB_SEARCH: ${NEXT_PUBLIC_FEATURE_WEB_SEARCH:-false}
+        NEXT_PUBLIC_FEATURE_DEEP_RESEARCH: ${NEXT_PUBLIC_FEATURE_DEEP_RESEARCH:-false}
+        NEXT_PUBLIC_FEATURE_ADD_FILES: ${NEXT_PUBLIC_FEATURE_ADD_FILES:-true}
+        NEXT_PUBLIC_FEATURE_GOOGLE_DRIVE: ${NEXT_PUBLIC_FEATURE_GOOGLE_DRIVE:-false}
+        NEXT_PUBLIC_FEATURE_CANVAS: ${NEXT_PUBLIC_FEATURE_CANVAS:-false}
+        NEXT_PUBLIC_FEATURE_AGENT_MODE: ${NEXT_PUBLIC_FEATURE_AGENT_MODE:-false}
+        NEXT_PUBLIC_FEATURE_MIC: ${NEXT_PUBLIC_FEATURE_MIC:-false}
         NODE_ENV: production
         UID: ${UID:-1000}
         GID: ${GID:-1000}
@@ -302,7 +311,8 @@ services:
       - PORT=3000
       - NODE_ENV=${NODE_ENV:-development}
       - API_BASE_URL=http://backend:8000
-      # NEXT_PUBLIC_API_URL not set to enable Next.js proxy (/api/* -> http://backend:8000/api/*)
+      # Force proxy by default (empty = use Next.js rewrites). Override via env when needed.
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-}
       - NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME:-Saptiva Copilot OS}
       - NEXT_PUBLIC_APP_VERSION=${NEXT_PUBLIC_APP_VERSION:-1.0.0}
       - NEXT_PUBLIC_ENABLE_STREAMING=${NEXT_PUBLIC_ENABLE_STREAMING:-true}
@@ -399,6 +409,37 @@ services:
 
 
   # ========================================
+  # ALETHEIA - Deep Research Microservice
+  # ========================================
+  # Private Plugin: Multi-step research with web search and synthesis
+  # Endpoints: /research, /deep-research, /web-search, /health
+  aletheia:
+    build:
+      context: ../plugins/private/aletheia
+      dockerfile: Dockerfile
+      target: production
+    container_name: ${COMPOSE_PROJECT_NAME:-octavios-chat}-aletheia
+    restart: unless-stopped
+    env_file:
+      - ../envs/.env
+    environment:
+      - PORT=8003
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - WEB_SEARCH_ENABLED=${WEB_SEARCH_ENABLED:-true}
+      - CORS_ALLOW_ORIGINS=http://localhost:3000,http://backend:8000
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "${ALETHEIA_PORT:-8003}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - octavios-network
+
+  # ========================================
   # FILE MANAGER - Public Plugin Service
   # ========================================
   # Plugin-First Architecture: Public plugin for file operations
@@ -417,7 +458,7 @@ services:
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin123}
       - MINIO_BUCKET_DOCUMENTS=documents
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_password_change_me}@redis:6379/0
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_password_change_me}@redis:6379/0 # example default for local dev
       - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-50}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:

@@ -1,0 +1,423 @@
+openapi: 3.0.3
+info:
+  title: Aletheia Deep Research API
+  description: |
+    API para análisis e investigación profunda con Web Search.
+
+    ## Características
+    - **Web Search**: Búsqueda web con síntesis inteligente y citaciones
+    - **Research**: Investigación básica secuencial
+    - **Deep Research**: Investigación iterativa con patrón Together AI
+    - **Trazabilidad**: Completa trazabilidad de fuentes y evidencias
+  version: v1alpha1
+  contact:
+    name: Aletheia Team
+    email: support@aletheia.example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:7070
+    description: Development server (local)
+  - url: http://localhost:8000
+    description: Production server
+
+tags:
+  - name: System
+    description: System health and status endpoints
+  - name: Web Search
+    description: Web search with synthesis and citations
+  - name: Research
+    description: Basic research workflows
+  - name: Deep Research
+    description: Iterative deep research with Together AI pattern
+
+paths:
+  /health:
+    get:
+      operationId: health_check
+      summary: Health check
+      description: Returns API status, version, uptime, and service availability
+      tags:
+        - System
+      responses:
+        '200':
+          description: Successful health check
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: ok
+                version: v1alpha1
+                uptime_seconds: 3600.5
+                environment: development
+                services:
+                  saptiva: true
+                  tavily: true
+                  web_search: true
+                  vector_store: false
+                  telemetry: false
+
+  /web-search:
+    post:
+      operationId: web_search
+      summary: Web search with synthesis
+      description: |
+        Performs a web search and returns a synthesized answer with sources.
+
+        **Process:**
+        1. **Fetch**: Search web with Tavily API
+        2. **Extract**: Normalize and clean results
+        3. **Rank**: Score sources by relevance (BM25-like)
+        4. **Synthesize**: Generate answer with citations using Saptiva
+
+        **Constraints:**
+        - Respects robots.txt
+        - No paywall bypass
+        - Configurable timeouts and limits
+        - Domain filtering support
+      tags:
+        - Web Search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebSearchRequest'
+            examples:
+              basic:
+                summary: Basic search
+                value:
+                  query: "¿Cuáles son los principales bancos digitales en México?"
+                  max_uses: 6
+                  locale: es
+              advanced:
+                summary: Search with domain filters
+                value:
+                  query: "Regulación fintech en México 2024"
+                  allowed_domains:
+                    - "gob.mx"
+                    - "forbes.com.mx"
+                  max_uses: 10
+                  locale: es
+                  time_window: year
+      responses:
+        '200':
+          description: Successful search with synthesized answer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebSearchResponse'
+              example:
+                answer: |
+                  Los principales bancos digitales en México son Nu (Nubank) [1],
+                  Albo [2], y Klar [3]. Nu lidera el mercado con más de 5 millones
+                  de usuarios en 2024 [1][4].
+                confidence: 0.85
+                sources:
+                  - url: "https://example.com/fintech-mexico"
+                    title: "Principales Bancos Digitales en México 2024"
+                    snippet: "Nu (Nubank) es el líder del mercado..."
+                    published_at: "2024-01-15T10:00:00Z"
+                    first_seen_at: "2025-10-02T12:30:00Z"
+                    source_type: WEB
+                diagnostics:
+                  fetches: 15
+                  elapsed_ms: 2340
+        '503':
+          description: Service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPError'
+              examples:
+                web_search_disabled:
+                  value:
+                    detail: "Web search is not enabled. Set WEB_SEARCH_ENABLED=true"
+                tavily_not_configured:
+                  value:
+                    detail: "Tavily API key not configured"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPError'
+
+  /research:
+    post:
+      operationId: start_research
+      summary: Start basic research task
+      description: Starts a new research task in the background
+      tags:
+        - Research
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResearchRequest'
+      responses:
+        '202':
+          description: Research task accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskStatus'
+
+  /reports/{task_id}:
+    get:
+      operationId: get_report
+      summary: Get research report
+      description: Retrieves the status and result of a research task
+      tags:
+        - Research
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Report retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Report'
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPError'
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - version
+        - uptime_seconds
+        - environment
+        - services
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, down]
+          description: Overall health status
+        version:
+          type: string
+          description: API version
+          example: v1alpha1
+        uptime_seconds:
+          type: number
+          format: float
+          description: Uptime in seconds since API started
+        environment:
+          type: string
+          description: Deployment environment
+          example: development
+        services:
+          type: object
+          description: Availability status of dependent services
+          properties:
+            saptiva:
+              type: boolean
+            tavily:
+              type: boolean
+            web_search:
+              type: boolean
+            vector_store:
+              type: boolean
+            telemetry:
+              type: boolean
+
+    WebSearchRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          description: Search query
+          minLength: 1
+          maxLength: 500
+          example: "Análisis de mercado fintech en México 2024"
+        allowed_domains:
+          type: array
+          items:
+            type: string
+          description: Whitelist of allowed domains
+          example: ["gob.mx", "forbes.com"]
+        blocked_domains:
+          type: array
+          items:
+            type: string
+          description: Blacklist of blocked domains
+          example: ["spam.com"]
+        max_uses:
+          type: integer
+          minimum: 1
+          maximum: 20
+          default: 6
+          description: Maximum number of sources to fetch
+        max_depth:
+          type: integer
+          minimum: 1
+          maximum: 2
+          default: 2
+          description: Search depth (1=basic, 2=advanced)
+        locale:
+          type: string
+          default: es
+          description: Language/locale for search
+          example: es
+        time_window:
+          type: string
+          nullable: true
+          enum: [day, week, month, year]
+          description: Time window for results
+
+    WebSearchSource:
+      type: object
+      required:
+        - url
+        - title
+        - first_seen_at
+        - source_type
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Source URL
+        title:
+          type: string
+          description: Source title
+        snippet:
+          type: string
+          nullable: true
+          description: Content excerpt
+          maxLength: 500
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Publication date (if available)
+        first_seen_at:
+          type: string
+          format: date-time
+          description: When this source was first fetched
+        source_type:
+          type: string
+          default: WEB
+          description: Type of source
+
+    WebSearchResponse:
+      type: object
+      required:
+        - answer
+        - confidence
+        - sources
+        - diagnostics
+      properties:
+        answer:
+          type: string
+          description: Synthesized answer with citations [1], [2], etc.
+        confidence:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          description: |
+            Confidence score:
+            - 1.0 = Complete, consistent, authoritative
+            - 0.7-0.9 = Good but with gaps
+            - 0.4-0.6 = Partial or mixed quality
+            - 0.0-0.3 = Very limited or unreliable
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebSearchSource'
+          minItems: 0
+          maxItems: 20
+        diagnostics:
+          type: object
+          required:
+            - fetches
+            - elapsed_ms
+          properties:
+            fetches:
+              type: integer
+              description: Number of sources fetched
+            elapsed_ms:
+              type: integer
+              description: Total elapsed time in milliseconds
+
+    ResearchRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+        scope:
+          type: string
+          nullable: true
+        budget:
+          type: number
+          nullable: true
+
+    TaskStatus:
+      type: object
+      required:
+        - task_id
+        - status
+      properties:
+        task_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        details:
+          type: string
+          nullable: true
+
+    Report:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+        report_md:
+          type: string
+          nullable: true
+        sources_bib:
+          type: string
+          nullable: true
+        metrics_json:
+          type: string
+          nullable: true
+
+    HTTPError:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+          description: Error message
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for authentication (future use)
+
+security: []

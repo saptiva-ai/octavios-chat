@@ -360,6 +360,12 @@ plugins/bank-advisor-private/
 bank-advisor/
 bank_advisor/
 
+# Aletheia plugin - ignore sensitive/generated files but keep code
+plugins/private/aletheia/.env
+plugins/private/aletheia/.env.*
+!plugins/private/aletheia/.env.example
+plugins/private/aletheia/sdk/
+
 # Client-specific test data (sensitive)
 tests/data/capital414/
 

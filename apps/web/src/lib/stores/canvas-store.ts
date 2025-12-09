@@ -2,6 +2,21 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { BankChartData, CanvasChartSync } from "@/lib/types";
 import { apiClient } from "@/lib/api-client";
+import type {
+  ResearchReportEvent,
+  ResearchSourceEvent,
+  ResearchEvidenceEvent,
+} from "@/hooks/useDeepResearch";
+
+// Deep Research report data for canvas display
+export interface ResearchReportData {
+  taskId: string;
+  query: string;
+  report: ResearchReportEvent;
+  sources: ResearchSourceEvent[];
+  evidences: ResearchEvidenceEvent[];
+  completedAt: string;
+}
 
 const DEFAULT_CANVAS_WIDTH = 40;
 
@@ -25,6 +40,9 @@ interface CanvasState {
   activeBankChart: BankChartData | null;
   activeMessageId: string | null;
   chartHistory: CanvasChartSync[];
+
+  // 🆕 Deep Research report state
+  activeResearchReport: ResearchReportData | null;
 
   // Current session ID for persistence
   currentSessionId: string | null;
@@ -50,6 +68,10 @@ interface CanvasState {
   addToChartHistory: (sync: CanvasChartSync) => void;
   clearChartHistory: () => void;
 
+  // 🆕 Deep Research methods
+  openResearchReport: (reportData: ResearchReportData) => void;
+  clearResearchReport: () => void;
+
   // MongoDB persistence
   setCurrentSessionId: (sessionId: string | null) => void;
   syncToMongoDB: () => Promise<void>;
@@ -65,6 +87,7 @@ export const useCanvasStore = create<CanvasState>()(
       activeBankChart: null,
       activeMessageId: null,
       chartHistory: [],
+      activeResearchReport: null,
       currentSessionId: null,
       canvasWidthPercent: DEFAULT_CANVAS_WIDTH, // Default to 40% of viewport width
 
@@ -73,6 +96,7 @@ export const useCanvasStore = create<CanvasState>()(
           activeArtifactId: id,
           activeArtifactData: null,
           activeBankChart: null, // Clear chart when setting artifact
+          activeResearchReport: null, // Clear research report
           isSidebarOpen: id ? true : state.isSidebarOpen,
         })),
 
@@ -81,6 +105,7 @@ export const useCanvasStore = create<CanvasState>()(
           activeArtifactId: null,
           activeArtifactData: data,
           activeBankChart: null, // Clear chart when opening artifact
+          activeResearchReport: null, // Clear research report
           isSidebarOpen: true,
         })),
 
@@ -115,6 +140,7 @@ export const useCanvasStore = create<CanvasState>()(
           activeBankChart: null,
           activeMessageId: null,
           chartHistory: [],
+          activeResearchReport: null,
         })),
 
       // Set canvas width (percentage of viewport, constrained to 30-70%)
@@ -202,6 +228,31 @@ export const useCanvasStore = create<CanvasState>()(
           chartHistory: [],
           activeBankChart: null,
           activeMessageId: null,
+        })),
+
+      // 🆕 Open research report in canvas
+      openResearchReport: (reportData) => {
+        set({
+          activeResearchReport: reportData,
+          activeBankChart: null,
+          activeArtifactId: null,
+          activeArtifactData: null,
+          isSidebarOpen: true,
+        });
+
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[Canvas] Opened research report:", {
+            taskId: reportData.taskId,
+            query: reportData.query,
+            sourcesCount: reportData.sources.length,
+          });
+        }
+      },
+
+      // 🆕 Clear research report
+      clearResearchReport: () =>
+        set(() => ({
+          activeResearchReport: null,
         })),
 
       // Set current session ID for persistence

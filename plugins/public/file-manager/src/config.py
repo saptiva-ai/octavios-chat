@@ -1,6 +1,7 @@
 """
 Configuration settings for the File Manager plugin.
 """
+from __future__ import annotations
 
 from functools import lru_cache
 from typing import Optional

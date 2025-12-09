@@ -38,6 +38,7 @@ import {
   legacyKeyToToolId,
   toolIdToLegacyKey,
 } from "@/lib/tool-mapping";
+import { featureFlags as envFeatureFlags } from "@/lib/feature-flags";
 import { CanvasPanel } from "@/components/canvas/canvas-panel";
 import { useCanvas } from "@/context/CanvasContext";
 import { useCanvasStore } from "@/lib/stores/canvas-store";
@@ -140,6 +141,9 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
     (state) => state.setCurrentSessionId,
   );
   const loadFromMongoDB = useCanvasStore((state) => state.loadFromMongoDB);
+  const openResearchReport = useCanvasStore(
+    (state) => state.openResearchReport,
+  );
   const { closeCanvas } = useCanvas();
 
   // DEBUG: Log canvas state in ChatView
@@ -206,7 +210,7 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
     lastReadyFile: lastReadyAuditFile,
   } = useFiles(
     resolvedChatId || currentChatId || undefined,
-    messages.length > 0, // hasMessages: true si ya hay mensajes cargados
+    false, // hasMessages: Disabled to allow file attachments in existing chats
   );
 
   const [nudgeMessage, setNudgeMessage] = React.useState<string | null>(null);
@@ -253,8 +257,25 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
     if (featureFlags?.deep_research_kill_switch) {
       return false;
     }
-    return selectedTools.includes("deep-research");
+    // Allow env flag to force-enable even if toggle persisted as off
+    return (
+      selectedTools.includes("deep-research") || envFeatureFlags.deepResearch
+    );
   }, [selectedTools, featureFlags]);
+
+  // Ensure research/search tools are enabled when feature flags allow it
+  React.useEffect(() => {
+    if (envFeatureFlags.webSearch && !toolsEnabled.web_search) {
+      void setToolEnabled("web_search", true);
+    }
+    if (
+      envFeatureFlags.deepResearch &&
+      !featureFlags?.deep_research_kill_switch &&
+      !toolsEnabled.deep_research
+    ) {
+      void setToolEnabled("deep_research", true);
+    }
+  }, [toolsEnabled, setToolEnabled, featureFlags]);
 
   const handleAddTool = React.useCallback(
     (id: ToolId) => {
@@ -286,6 +307,37 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
     stop: stopResearchStream,
     reset: resetResearchState,
   } = researchState;
+
+  // 🆕 Auto-open Canvas with research report when completed
+  React.useEffect(() => {
+    if (
+      researchPhase === "COMPLETED" &&
+      researchReport &&
+      activeResearch?.taskId
+    ) {
+      openResearchReport({
+        taskId: activeResearch.taskId,
+        query: activeResearch.query,
+        report: researchReport,
+        sources: researchSources,
+        evidences: researchEvidences,
+        completedAt: new Date().toISOString(),
+      });
+
+      logDebug("[ChatView] Deep Research completed, opening Canvas", {
+        taskId: activeResearch.taskId,
+        sourcesCount: researchSources.length,
+        evidencesCount: researchEvidences.length,
+      });
+    }
+  }, [
+    researchPhase,
+    researchReport,
+    activeResearch,
+    researchSources,
+    researchEvidences,
+    openResearchReport,
+  ]);
 
   const startDeepResearchFlow = React.useCallback(
     async (
@@ -1350,6 +1402,13 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
       setIsSending(true);
 
       try {
+        // Hard preference: if Deep Research tool is enabled, route directly to research
+        // to avoid falling back to plain chat when intent classifier is ambiguous.
+        if (deepResearchEnabled) {
+          await startDeepResearchFlow(effectiveMessage, undefined, attachments);
+          return;
+        }
+
         await researchGate(effectiveMessage, {
           deepResearchOn: deepResearchEnabled,
           openWizard: (userText) =>
