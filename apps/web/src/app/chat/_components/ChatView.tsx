@@ -210,7 +210,7 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
     lastReadyFile: lastReadyAuditFile,
   } = useFiles(
     resolvedChatId || currentChatId || undefined,
-    messages.length > 0, // hasMessages: true si ya hay mensajes cargados
+    false, // hasMessages: Disabled to allow file attachments in existing chats
   );
 
   const [nudgeMessage, setNudgeMessage] = React.useState<string | null>(null);

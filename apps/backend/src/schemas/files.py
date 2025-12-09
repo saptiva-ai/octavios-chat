@@ -40,6 +40,7 @@ class FileEventPhase(str, Enum):
     UPLOAD = "upload"
     EXTRACT = "extract"
     CACHE = "cache"
+    EMBEDDING = "embedding"  # RAG processing: model loading and chunking
     COMPLETE = "complete"
 
 

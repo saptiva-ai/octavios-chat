@@ -53,7 +53,12 @@ export interface FileIngestBulkResponse {
 /**
  * SSE Event from /api/files/events/{file_id}
  */
-export type FileEventPhase = "upload" | "extract" | "cache" | "complete";
+export type FileEventPhase =
+  | "upload"
+  | "extract"
+  | "cache"
+  | "embedding"
+  | "complete";
 
 export interface FileEventPayload {
   file_id: string;
