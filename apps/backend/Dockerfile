@@ -133,6 +133,14 @@ RUN apt-get update && apt-get install -y \
 # Copy application code (last for cache optimization)
 COPY . .
 
+# Pre-download embedding model to avoid runtime downloads
+# This prevents the 7+ minute download delay on first container startup
+# Model will be cached in /app/.cache/huggingface (persisted in image)
+ENV HF_HOME=/app/.cache/huggingface
+RUN python -c "from sentence_transformers import SentenceTransformer; \
+    model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2'); \
+    print(f'✓ Embedding model pre-loaded (dim={model.get_sentence_embedding_dimension()})')"
+
 # Create non-root user for security (production only)
 RUN useradd --create-home --shell /bin/bash --uid 1001 api_user && \
     chown -R api_user:api_user /app
