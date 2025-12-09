@@ -85,6 +85,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     cleanup_worker = get_cleanup_worker()
     await cleanup_worker.start()
 
+    # Pre-load embedding model to avoid lazy loading during first request
+    # This prevents the backend from freezing when processing the first file upload
+    logger.info("Pre-loading embedding model...")
+    try:
+        from .services.embedding_service import get_embedding_service
+        embedding_service = get_embedding_service()
+        embedding_service._load_model()  # Force load the model
+        logger.info("Embedding model pre-loaded successfully")
+    except Exception as e:
+        logger.warning("Failed to pre-load embedding model, will load on first use", error=str(e))
+
     logger.info("Starting Copilot OS API", version=app.version)
 
     yield
