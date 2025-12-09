@@ -24,6 +24,8 @@ interface FilesStoreState {
   removeFromChat: (chatId: string, fileId: string) => void;
   clearForChat: (chatId: string) => void;
   clearAll: () => void;
+  // BUG-FIX: Clear all temp and draft attachments after successful message send
+  clearAllTempAttachments: () => void;
 }
 
 export const useFilesStore = create<FilesStoreState>()(
@@ -80,6 +82,25 @@ export const useFilesStore = create<FilesStoreState>()(
         })),
 
       clearAll: () => set({ byChat: {} }),
+
+      // BUG-FIX: Clear all temp-* and draft attachments
+      // Call this after successful message send to prevent orphaned thumbnails
+      clearAllTempAttachments: () =>
+        set((state) => {
+          const cleaned: AttachmentsByChat = {};
+          for (const [chatId, files] of Object.entries(state.byChat)) {
+            // Only keep attachments for real UUID chat IDs
+            // Discard: "draft", "temp-*", "creating-*"
+            const isTemporary =
+              chatId === "draft" ||
+              chatId.startsWith("temp-") ||
+              chatId.startsWith("creating");
+            if (!isTemporary) {
+              cleaned[chatId] = files;
+            }
+          }
+          return { byChat: cleaned };
+        }),
     }),
     {
       name: "files-by-chat", // localStorage key

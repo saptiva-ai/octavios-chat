@@ -188,7 +188,7 @@ services:
 
       # Logging y debug
       - LOG_LEVEL=${LOG_LEVEL:-info}
-      - SAPTIVA_API_KEY=${SAPTIVA_API_KEY}
+      # SAPTIVA_API_KEY is loaded from env_file (../envs/.env)
       - DEBUG=${DEBUG:-false}
 
       # Integraciones externas - Aletheia Deep Research

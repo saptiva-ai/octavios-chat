@@ -73,6 +73,8 @@ interface ChatState {
   updateToolsForChat: (chatId: string, tools: Record<string, boolean>) => void;
   updateCurrentTools: (tools: Record<string, boolean>) => void;
   clearAllData: () => void;
+  // BUG-FIX: Explicit setter for chatNotFound to prevent stale state during transitions
+  setChatNotFound: (notFound: boolean) => void;
 
   // Document review actions
   addFileReviewMessage: (message: ChatMessage) => void;
@@ -494,6 +496,12 @@ export const useChatStore = create<ChatState>()(
 
         updateCurrentTools: (tools: Record<string, boolean>) => {
           set({ toolsEnabled: mergeToolsState(tools) });
+        },
+
+        // BUG-FIX: Explicit setter to clear chatNotFound during transitions
+        // Prevents "Conversación no encontrada" flash when creating new chat
+        setChatNotFound: (notFound: boolean) => {
+          set({ chatNotFound: notFound });
         },
 
         clearAllData: () => {

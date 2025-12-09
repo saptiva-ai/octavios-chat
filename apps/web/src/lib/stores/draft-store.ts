@@ -12,6 +12,7 @@ import { devtools } from "zustand/middleware";
 import { DraftConversation, INITIAL_DRAFT_STATE } from "../conversation-utils";
 import { logAction, logDebug } from "../logger";
 import { createDefaultToolsState, normalizeToolsState } from "../tool-mapping";
+import { useChatStore } from "./chat-store";
 
 const mergeToolsState = (seed?: Record<string, boolean>) => {
   const extraKeys = seed ? Object.keys(seed) : [];
@@ -49,6 +50,11 @@ export const useDraftStore = create<DraftState>()(
         if (state.draft.cleanupTimerId) {
           clearTimeout(state.draft.cleanupTimerId);
         }
+
+        // BUG-FIX: Clear chatNotFound flag when opening new draft
+        // This prevents the "Conversación no encontrada" flash during transitions
+        // (e.g., after deleting a conversation or navigating from a 404)
+        useChatStore.getState().setChatNotFound(false);
 
         // Generate client ID for idempotency
         const cid =

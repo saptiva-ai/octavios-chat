@@ -44,6 +44,7 @@ import { useCanvas } from "@/context/CanvasContext";
 import { useCanvasStore } from "@/lib/stores/canvas-store";
 // Files V1 imports
 import { useFiles } from "../../../hooks/useFiles";
+import { useFilesStore } from "../../../lib/stores/files-store";
 import type { FileAttachment } from "../../../types/files";
 // React Query hooks
 import { useChatMessages } from "../../../hooks/useChatMessages";
@@ -212,6 +213,13 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
     resolvedChatId || currentChatId || undefined,
     false, // hasMessages: Disabled to allow file attachments in existing chats
   );
+
+  // BUG-FIX: Selectors for aggressive attachment cleanup
+  // Used after successful message send to clear all orphaned attachments
+  const clearAllTempAttachments = useFilesStore(
+    (state) => state.clearAllTempAttachments,
+  );
+  const clearForChat = useFilesStore((state) => state.clearForChat);
 
   const [nudgeMessage, setNudgeMessage] = React.useState<string | null>(null);
   const [pendingWizard, setPendingWizard] = React.useState<{
@@ -1031,23 +1039,44 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
             );
 
             if (readyFiles.length > 0) {
-              // 1. Clear using the closure's effectiveChatId (usually matches currentChatId)
-              clearFilesV1Attachments();
+              // BUG-FIX: NUCLEAR CLEANUP - Clear attachments from ALL possible locations
+              // Files can be stored under: resolvedChatId, currentChatId, response.chat_id, "draft", or temp-*
+              // We must clear ALL of them to prevent orphaned thumbnails
 
-              // 2. DEFENSIVE: Explicitly clear for the returned chat ID (UUID)
-              // This handles the case where files were somehow associated with the new UUID
+              // 1. Clear all temp/draft attachments (handles temp-*, creating-*, draft)
+              clearAllTempAttachments();
+
+              // 2. Clear for the response chat_id (the real UUID from backend)
               if (response.chat_id) {
-                clearFilesV1Attachments(response.chat_id);
+                clearForChat(response.chat_id);
               }
 
-              // 3. DEFENSIVE: Explicitly clear "draft" to prevent orphaned files
-              clearFilesV1Attachments("draft");
+              // 3. Clear for resolvedChatId (the ID from URL when file was uploaded)
+              // This is CRITICAL: files are stored under this ID, not response.chat_id
+              if (resolvedChatId && resolvedChatId !== response.chat_id) {
+                clearForChat(resolvedChatId);
+              }
+
+              // 4. Clear for currentChatId (in case it differs from resolvedChatId)
+              if (
+                currentChatId &&
+                currentChatId !== response.chat_id &&
+                currentChatId !== resolvedChatId
+              ) {
+                clearForChat(currentChatId);
+              }
 
               logDebug(
-                "[ChatView] ✅ Cleared file attachments after successful response (Aggressive Clean)",
+                "[ChatView] ✅ Cleared file attachments after successful response (Nuclear Clean)",
                 {
                   clearedCount: readyFiles.length,
-                  targets: ["closure", response.chat_id, "draft"],
+                  clearedIds: [
+                    "temp/*",
+                    response.chat_id,
+                    resolvedChatId,
+                    currentChatId,
+                  ].filter(Boolean),
+                  method: "clearForChat + clearAllTempAttachments",
                 },
               );
             }
@@ -1769,39 +1798,52 @@ export function ChatView({ initialChatId = null }: ChatViewProps) {
     return null;
   }
 
+  // BUG-FIX: Guard against showing "not found" during transitions
+  // Only show error when:
+  // 1. chatNotFound is true (404 from backend)
+  // 2. We have a resolvedChatId (not navigating to /chat)
+  // 3. NOT creating a new conversation (optimistic creation in progress)
+  // 4. NOT in draft mode (user clicked "new chat")
+  // 5. NOT a temp ID (temporary during creation)
+  const shouldShowNotFound =
+    chatNotFound &&
+    resolvedChatId &&
+    !isCreatingConversation &&
+    !isDraftMode() &&
+    !resolvedChatId.startsWith("temp-");
+
   // Chat not found state or welcome banner
-  const welcomeComponent =
-    chatNotFound && resolvedChatId ? (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-center max-w-md mx-auto px-6">
-          <h3 className="text-xl font-semibold text-white mb-3">
-            Conversación no encontrada
-          </h3>
-          <p className="text-saptiva-light/70 mb-6">
-            La conversación{" "}
-            <code className="px-2 py-1 bg-white/10 rounded text-sm">
-              {resolvedChatId}
-            </code>{" "}
-            no existe o no tienes acceso a ella.
-          </p>
-          <button
-            onClick={async () => {
-              const nextId = await handleStartNewChat();
-              if (nextId) {
-                router.replace(`/chat/${nextId}`, { scroll: false });
-              } else {
-                router.replace("/chat", { scroll: false });
-              }
-            }}
-            className="inline-flex items-center justify-center rounded-full bg-saptiva-blue px-6 py-3 text-sm font-semibold text-white hover:bg-saptiva-lightBlue/90 transition-colors"
-          >
-            Iniciar nueva conversación
-          </button>
-        </div>
+  const welcomeComponent = shouldShowNotFound ? (
+    <div className="flex h-full items-center justify-center">
+      <div className="text-center max-w-md mx-auto px-6">
+        <h3 className="text-xl font-semibold text-white mb-3">
+          Conversación no encontrada
+        </h3>
+        <p className="text-saptiva-light/70 mb-6">
+          La conversación{" "}
+          <code className="px-2 py-1 bg-white/10 rounded text-sm">
+            {resolvedChatId}
+          </code>{" "}
+          no existe o no tienes acceso a ella.
+        </p>
+        <button
+          onClick={async () => {
+            const nextId = await handleStartNewChat();
+            if (nextId) {
+              router.replace(`/chat/${nextId}`, { scroll: false });
+            } else {
+              router.replace("/chat", { scroll: false });
+            }
+          }}
+          className="inline-flex items-center justify-center rounded-full bg-saptiva-blue px-6 py-3 text-sm font-semibold text-white hover:bg-saptiva-lightBlue/90 transition-colors"
+        >
+          Iniciar nueva conversación
+        </button>
       </div>
-    ) : (
-      <WelcomeBanner user={user || undefined} />
-    );
+    </div>
+  ) : (
+    <WelcomeBanner user={user || undefined} />
+  );
 
   return (
     <ChatShell
