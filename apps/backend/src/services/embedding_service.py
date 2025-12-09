@@ -52,7 +52,7 @@ import os
 import re
 import hashlib
 import unicodedata
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -135,15 +135,25 @@ class EmbeddingService:
         self._query_cache_size = int(os.getenv("QUERY_EMBEDDING_CACHE_SIZE", "1000"))
         self._query_cache: Dict[str, List[float]] = {}
 
-    def _load_model(self):
+    def _load_model(self, on_loading_start: Optional[Callable[[], None]] = None):
         """
         Load sentence-transformer model (lazy initialization).
 
         This is called automatically on first use.
         Loading takes ~2 seconds and uses ~120 MB RAM.
+
+        Args:
+            on_loading_start: Optional callback to invoke when model loading starts (first time only)
         """
         if self._model is not None:
             return  # Already loaded
+
+        # Notify that model loading is starting (only on first load)
+        if on_loading_start:
+            try:
+                on_loading_start()
+            except Exception as e:
+                logger.warning("Failed to execute on_loading_start callback", error=str(e))
 
         try:
             from sentence_transformers import SentenceTransformer
@@ -458,6 +468,7 @@ class EmbeddingService:
         page: int = 0,
         metadata: Optional[Dict[str, Any]] = None,
         batch_size: int = 32,
+        on_model_loading_start: Optional[Callable[[], None]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Chunk text and generate embeddings in one step.
@@ -469,6 +480,7 @@ class EmbeddingService:
             page: Page number
             metadata: Additional metadata
             batch_size: Batch size for embedding generation
+            on_model_loading_start: Optional callback invoked when model starts loading (first time only)
 
         Returns:
             List of dicts with keys:
@@ -503,6 +515,10 @@ class EmbeddingService:
             return []
 
         # Step 2: Generate embeddings for all chunks
+        # Pass the callback to _load_model before encoding
+        if self._model is None and on_model_loading_start:
+            self._load_model(on_loading_start=on_model_loading_start)
+
         chunk_texts = [c.text for c in chunks]
         embeddings = self.encode(chunk_texts, batch_size=batch_size)
 

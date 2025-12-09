@@ -1,0 +1,44 @@
+task:
+  id: deepresearch_functionality_validation
+  title: "Validación de funcionalidades de Deep Research (Saptiva)"
+  description: >
+    El agente debe probar la herramienta de deep research de Saptiva verificando
+    todas las funcionalidades descritas. Se evaluará qué está implementado, 
+    qué no lo está y cuáles áreas requieren mejoras.
+
+  scope:
+    funcionalidades_esperadas:
+      - "Análisis de una empresa"
+      - "Análisis macroeconómico de un país"
+      - "Análisis de una industria"
+      - "Benchmark: Lista de competidores"
+      - "Investigación de un tema complejo (ej. implementar Triton en HW AMD)"
+
+    criterios_aceptacion:
+      - "Se usan modelos de Saptiva"
+      - "Se genera un reporte con el resultado de la investigación"
+      - "El código está documentado separando búsqueda, planeación y síntesis"
+      - "Existen traces de las consultas y tools usadas"
+      - "Se usa Tavily como motor de búsqueda"
+
+  steps:
+    - id: list_functionalities
+      description: "Revisar documentación y la UI para confirmar todas las funcionalidades disponibles."
+      acceptance_criteria: "Listado completo de las funcionalidades detectadas en el sistema."
+
+    - id: validate_expected_functionalities
+      description: "Probar cada funcionalidad esperada y documentar si está implementada, no implementada o parcial."
+      acceptance_criteria: "Cada funcionalidad tiene un estatus (ok, missing, parcial) con notas de observación."
+
+    - id: validate_acceptance_criteria
+      description: "Validar que se cumplen los criterios de aceptación (modelos, reportes, código, traces, Tavily)."
+      acceptance_criteria: "Cada criterio tiene un estatus validado (sí, no, parcial)."
+
+    - id: identify_improvements
+      description: "Detectar áreas de mejora en UX, performance, calidad de reportes o integración de tools."
+      acceptance_criteria: "Se genera un listado claro de áreas de mejora priorizadas."
+
+    - id: final_report
+      description: "Consolidar resultados en un reporte que muestre: implementado / no implementado / mejoras necesarias."
+      acceptance_criteria: "Reporte entregado con tabla comparativa y conclusiones."
+

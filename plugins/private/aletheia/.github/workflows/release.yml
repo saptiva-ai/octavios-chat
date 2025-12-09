@@ -1,0 +1,369 @@
+name: "📦 Release Pipeline"
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  PYTHON_VERSION: "3.11"
+  FORCE_COLOR: "1"
+  CI: true
+
+jobs:
+  validate:
+    name: "🔎 Validate Tag"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Verify tag matches project version
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          CLEAN_TAG=${TAG#v}
+          if [ "$VERSION" != "$CLEAN_TAG" ]; then
+            echo "Tag $TAG does not match pyproject version $VERSION"
+            exit 1
+          fi
+          echo "Release tag validated: $TAG"
+
+  quality:
+    name: "🧪 Quality Gate"
+    runs-on: ubuntu-latest
+    needs: validate
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          pip install -e .[dev]
+          pip install radon xenon
+
+      - name: Ruff
+        run: ruff check . --output-format=github
+
+      - name: Black
+        run: black --check --diff .
+
+      - name: MyPy
+        run: mypy domain/models --ignore-missing-imports
+
+      - name: Bandit
+        run: bandit -r apps adapters domain ports -x tests
+
+      - name: Safety
+        run: safety check --full-report --ignore-unpinned-requirements
+
+      - name: Xenon
+        run: xenon adapters apps domain ports --max-absolute B --max-modules B --max-average B
+
+      - name: Radon report
+        run: |
+          radon cc adapters apps domain ports -nc --show-complexity --total-average > radon-report.txt
+          radon raw adapters apps domain ports > radon-raw.txt
+
+      - name: Test suite
+        env:
+          SAPTIVA_API_KEY: mock_saptiva_key
+          TAVILY_API_KEY: mock_tavily_key
+          VECTOR_BACKEND: none
+          ENVIRONMENT: release
+          LOCAL_STORAGE_ROOT: ./runs/storage
+        run: pytest -v
+
+      - name: Upload quality artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-quality-artifacts
+          path: |
+            htmlcov/
+            coverage.xml
+            radon-report.txt
+            radon-raw.txt
+            .pytest_cache
+          if-no-files-found: ignore
+
+  package:
+    name: "📦 Build Python Package"
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Build distribution
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build
+          python -m build
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: dist/
+
+  build-image:
+    name: "🐳 Build & Push Image"
+    runs-on: ubuntu-latest
+    needs: quality
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: ${{ github.repository }}
+    outputs:
+      image: ${{ steps.image-info.outputs.image }}
+      tag: ${{ steps.image-info.outputs.tag }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Determine image tags
+        id: image-info
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          CLEAN_TAG=${TAG#v}
+          echo "tag_primary=$TAG" >> $GITHUB_OUTPUT
+          echo "tag_secondary=$CLEAN_TAG" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$TAG" >> $GITHUB_OUTPUT
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.image-info.outputs.tag_primary }}
+            type=raw,value=${{ steps.image-info.outputs.tag_secondary }}
+            type=sha
+          labels: |
+            org.opencontainers.image.version=${{ steps.image-info.outputs.tag_secondary }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.repositoryUrl }}
+
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: production
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.image-info.outputs.image }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ steps.image-info.outputs.tag }}
+          path: sbom.spdx.json
+
+  scan-image:
+    name: "🛡️ Image Scan"
+    runs-on: ubuntu-latest
+    needs: build-image
+    steps:
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ needs.build-image.outputs.image }}@${{ needs.build-image.outputs.digest }}
+          format: sarif
+          output: trivy-release.sarif
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-release.sarif
+
+  deploy-production:
+    name: "🚀 Production Deploy"
+    runs-on: ubuntu-latest
+    needs: [build-image, scan-image]
+    environment:
+      name: production
+      url: http://34.42.214.246/alethia/
+    steps:
+      - name: Deploy to production
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 34.42.214.246
+          username: jf
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          port: 22
+          script: |
+            set -euo pipefail
+
+            DEPLOY_DIR="/home/jf/aletheia-api"
+            BACKUP_DIR="/home/jf/aletheia-backup-$(date +%Y%m%d%H%M%S)"
+            IMAGE_URI="${{ needs.build-image.outputs.image }}"
+
+            if [ -d "$DEPLOY_DIR/.git" ]; then
+              echo "💾 Existing deployment detected, creating backup at $BACKUP_DIR"
+              cp -R "$DEPLOY_DIR" "$BACKUP_DIR"
+            else
+              echo "📥 Cloning repository"
+              git clone https://github.com/${{ github.repository }}.git "$DEPLOY_DIR"
+            fi
+
+            cd "$DEPLOY_DIR"
+            git config --global --add safe.directory "$DEPLOY_DIR"
+            git fetch --depth=1 origin main
+            git checkout main
+            git reset --hard origin/main
+
+            cd infra/docker
+            touch .env
+            sed -i '/^ALETHEIA_IMAGE=/d' .env
+            sed -i '/^ALETHEIA_API_PORT=/d' .env
+            echo "ALETHEIA_IMAGE=$IMAGE_URI" >> .env
+            echo "ALETHEIA_API_PORT=8002" >> .env
+
+            if command -v docker-compose >/dev/null 2>&1; then
+              COMPOSE_CMD="docker-compose"
+            else
+              COMPOSE_CMD="docker compose"
+            fi
+
+            echo "🐳 Using $COMPOSE_CMD"
+            $COMPOSE_CMD -f docker-compose.yml pull aletheia-api || true
+            $COMPOSE_CMD -f docker-compose.yml up -d --remove-orphans
+
+            echo "⌛ Waiting for health check"
+            sleep 25
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8002/health || echo "000")
+
+            if [ "$STATUS" != "200" ]; then
+              echo "❌ Deployment failed, rolling back"
+              $COMPOSE_CMD -f docker-compose.yml down
+              if [ -d "$BACKUP_DIR" ]; then
+                rm -rf "$DEPLOY_DIR"
+                mv "$BACKUP_DIR" "$DEPLOY_DIR"
+                cd "$DEPLOY_DIR/infra/docker"
+                $COMPOSE_CMD -f docker-compose.yml up -d --remove-orphans
+              fi
+              exit 1
+            fi
+
+            echo "✅ Production deployment healthy (HTTP $STATUS)"
+            find /home/jf -maxdepth 1 -type d -name 'aletheia-backup-*' | sort | head -n -2 | xargs -r rm -rf
+
+  release:
+    name: "📢 Publish Release"
+    runs-on: ubuntu-latest
+    needs: [package, build-image, deploy-production]
+    env:
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Aletheia ${{ github.ref_name }}
+          body: |
+            ## 🚀 Aletheia Release ${{ github.ref_name }}
+
+            - Commit: ${{ github.sha }}
+            - Image: ${{ needs.build-image.outputs.image }}
+            - SBOM uploaded as artifact
+            - Deployment: ✅ Completed to production
+
+            Refer to the changelog and linked pull requests for detailed updates.
+          draft: false
+          prerelease: false
+
+      - name: Upload Python dist assets
+        run: |
+          shopt -s nullglob
+          for file in artifacts/python-dist/*; do
+            gh release upload "${{ github.ref_name }}" "$file" --clobber
+          done
+
+      - name: Upload SBOM asset
+        run: |
+          shopt -s nullglob
+          for file in artifacts/sbom-${{ github.ref_name }}/*; do
+            gh release upload "${{ github.ref_name }}" "$file" --clobber
+          done
+
+  summary:
+    name: "📊 Release Summary"
+    runs-on: ubuntu-latest
+    needs: [validate, quality, package, build-image, deploy-production, release]
+    if: always()
+    steps:
+      - name: Publish summary
+        run: |
+          echo "## 📦 Release pipeline summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Tag validation: ${{ needs.validate.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Quality gate: ${{ needs.quality.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Python package: ${{ needs.package.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Image build: ${{ needs.build-image.result }} -> ${{ needs.build-image.outputs.image }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Deploy production: ${{ needs.deploy-production.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Release publication: ${{ needs.release.result }}" >> $GITHUB_STEP_SUMMARY

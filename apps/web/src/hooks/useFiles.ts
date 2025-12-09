@@ -290,6 +290,14 @@ export function useFiles(
               total: fileSize,
               percentage: progress,
             });
+
+            // Show special message for embedding phase (model loading)
+            if (data.phase === "embedding") {
+              toast.loading(
+                `⚙️ Cargando modelo de embeddings (primera vez)...`,
+                { duration: 5000, id: `embedding-${fileId}` },
+              );
+            }
           } catch (err) {
             console.error("[useFiles] Failed to parse progress event", err);
           }

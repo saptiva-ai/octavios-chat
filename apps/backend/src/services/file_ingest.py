@@ -350,6 +350,17 @@ class FileIngestService:
                     file_id=file_id,
                     filename=document.filename
                 )
+                # Emit embedding phase event (includes model loading if first time)
+                await file_event_bus.publish(
+                    file_id,
+                    FileEventPayload(
+                        file_id=file_id,
+                        trace_id=trace_id,
+                        phase=FileEventPhase.EMBEDDING,
+                        pct=75.0,
+                        status=FileStatus.PROCESSING,
+                    ),
+                )
                 processor = create_document_processing_service()
                 await processor.process_document_standalone(str(document.id))
                 logger.info(
@@ -528,6 +539,17 @@ class FileIngestService:
                     "Starting RAG processing (chunking + embeddings)",
                     file_id=file_id,
                     filename=document.filename
+                )
+                # Emit embedding phase event (includes model loading if first time)
+                await file_event_bus.publish(
+                    file_id,
+                    FileEventPayload(
+                        file_id=file_id,
+                        trace_id=trace_id,
+                        phase=FileEventPhase.EMBEDDING,
+                        pct=75.0,
+                        status=FileStatus.PROCESSING,
+                    ),
                 )
                 processor = create_document_processing_service()
                 await processor.process_document_standalone(str(document.id))

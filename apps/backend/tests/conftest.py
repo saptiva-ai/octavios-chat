@@ -19,11 +19,32 @@ print(f"✓ Added {app_path} to PYTHONPATH for tests (import as: from src.module
 
 import pytest
 import pytest_asyncio
-from motor.motor_asyncio import AsyncIOMotorClient
-from beanie import init_beanie
 
-from src.mcp.versioning import versioned_registry
-from src.core.database import Database
+try:
+    from motor.motor_asyncio import AsyncIOMotorClient  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency for unit-only runs
+    AsyncIOMotorClient = None
+
+try:
+    from beanie import init_beanie  # type: ignore
+except ImportError:  # pragma: no cover
+    init_beanie = None
+
+try:
+    from src.mcp.versioning import versioned_registry
+except Exception:  # pragma: no cover - optional for lightweight unit runs
+    class _DummyRegistry:
+        def __init__(self):
+            self._tools = {}
+            self._latest = {}
+            self._deprecated = {}
+
+    versioned_registry = _DummyRegistry()
+
+try:
+    from src.core.database import Database
+except Exception:  # pragma: no cover - optional for unit-only runs
+    Database = None
 
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
@@ -31,7 +52,7 @@ async def initialize_database():
     """Initialize database connection for all tests (skip if MONGODB_URL not set)."""
     import os
     mongodb_url = os.getenv("MONGODB_URL")
-    if mongodb_url:
+    if mongodb_url and AsyncIOMotorClient and init_beanie and Database:
         try:
             await Database.connect_to_mongo()
             yield

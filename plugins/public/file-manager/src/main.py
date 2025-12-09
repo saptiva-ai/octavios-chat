@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .routers import download, health, metadata, upload
+from .routers import context, download, health, metadata, upload
 from .services.minio_client import init_minio_client, close_minio_client
 from .services.redis_client import init_redis_client, close_redis_client
 
@@ -87,6 +87,7 @@ app.include_router(health.router, tags=["Health"])
 app.include_router(upload.router, tags=["Upload"])
 app.include_router(download.router, tags=["Download"])
 app.include_router(metadata.router, tags=["Metadata"])
+app.include_router(context.router, tags=["Context"])
 
 
 @app.get("/")

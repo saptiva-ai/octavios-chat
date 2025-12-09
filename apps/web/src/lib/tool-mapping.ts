@@ -8,6 +8,8 @@ type ToolKey =
   | "create_artifact"
   | "bank-advisor";
 
+import { featureFlags } from "./feature-flags";
+
 const LEGACY_KEY_TO_TOOL_ID_MAP: Record<ToolKey, ToolId> = {
   web_search: "web-search",
   deep_research: "deep-research",
@@ -40,10 +42,14 @@ export function toolIdToLegacyKey(id: ToolId): ToolKey | undefined {
 export function createDefaultToolsState(
   extraToolKeys: string[] = [],
 ): Record<string, boolean> {
+  const defaultState: Partial<Record<ToolKey, boolean>> = {
+    web_search: featureFlags.webSearch,
+    deep_research: featureFlags.deepResearch,
+  };
   const baseKeys = [...KNOWN_TOOL_KEYS, ...extraToolKeys];
   return baseKeys.reduce<Record<string, boolean>>((acc, key) => {
     if (!(key in acc)) {
-      acc[key] = false;
+      acc[key] = defaultState[key as ToolKey] ?? false;
     }
     return acc;
   }, {});

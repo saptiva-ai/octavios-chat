@@ -255,6 +255,7 @@ dev:
 	$(AT)echo "  $(BLUE)Frontend:$(NC)     http://localhost:3000"
 	$(AT)echo "  $(BLUE)Backend:$(NC)      http://localhost:8000"
 	$(AT)echo "  $(BLUE)File Manager:$(NC) http://localhost:8001"
+	$(AT)echo "  $(BLUE)Aletheia:$(NC)     http://localhost:8003"
 	$(AT)echo ""
 ifneq ($(QUIET),1)
 	$(AT)sleep 5
@@ -596,9 +597,11 @@ scripts.audit: scripts.security.security-audit
 
 logs-api: logs S=backend
 logs-web: logs S=web
+logs-aletheia: logs S=aletheia
 shell-api: shell S=backend
 shell-web: shell S=web
 shell-db: shell S=db
+shell-aletheia: shell S=aletheia
 test-api: test.api
 test-web: test.web
 test-mcp: test.mcp
