@@ -186,12 +186,9 @@ services:
       - JWT_REFRESH_TOKEN_EXPIRE_DAYS=${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-7}
       - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
 
-      # CORS y Hosts permitidos
-      - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:3000"]}
-      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-["localhost","127.0.0.1","web","api","backend"]}
-
       # Logging y debug
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      - SAPTIVA_API_KEY=${SAPTIVA_API_KEY}
       - DEBUG=${DEBUG:-false}
 
       # Integraciones externas - Aletheia Deep Research
